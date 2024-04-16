@@ -1,0 +1,12 @@
+dist/*
+build/*
+.DS_Store
+verbis/verbis
+credentials.json
+.build.env
+.eval.env
+*.gguf
+.python-version
+OME
+arxiv_papers/*
+macapp/out/*

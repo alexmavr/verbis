@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  /* background: transparent; */
+  scroll-behavior: smooth;
+}
+
+/* For WebKit browsers */
+::-webkit-scrollbar {
+  width: 8px; /* Vertical scrollbar width */
+  height: 8px; /* Horizontal scrollbar height */
+}
+
+::-webkit-scrollbar-track {
+  background: transparent; /* Track background */
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2); /* Thumb color */
+  border-radius: 4px; /* Roundness of the scrollbar thumb */
+}
+
+/* For Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+.drag {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+spinner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.7);
+  font-size: 24px;
+  color: black;
+}
+
+@keyframes blink {
+  from,
+  to {
+    color: transparent;
+  }
+  50% {
+    color: black;
+  }
+}
+
+.loading-spinner {
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #fff;
+  width: 24px;
+  height: 24px;
+  margin: auto;
+  animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes colorCycle {
+  0% {
+    fill: #7183F4;
+  }
+  33% {
+    fill: #A68BF8;
+  }
+  66% {
+    fill: #EC72F9;
+  }
+  100% {
+    fill: #7183F4;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    transform-origin: center;
+  }
+  50% {
+    transform: scale(0.9);
+    transform-origin: center;
+  }
+}
+
+.verbis-loading .triangle1 {
+  animation: colorCycle 1.5s infinite, pulse 1.5s infinite;
+}
+
+.verbis-loading .triangle2 {
+  animation: colorCycle 1.5s infinite 0.5s, pulse 1.5s infinite 0.5s;
+  /* delay = 2s / 3 */
+}
+.verbis-loading .triangle3 {
+  animation: colorCycle 1.5s infinite 1s, pulse 1.5s infinite 1s;
+  /* delay = (2s / 3) * 2 */
+}

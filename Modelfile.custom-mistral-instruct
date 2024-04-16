@@ -1,0 +1,13 @@
+FROM mistral:instruct
+
+# https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2#instruction-format
+TEMPLATE """[INST] {{ .System }} {{ .Prompt }} [/INST]"""
+
+PARAMETER stop "[INST]"
+PARAMETER stop "[/INST]"
+PARAMETER stop "<s>"
+PARAMETER stop "</s>"
+
+PARAMETER temperature 0.8
+PARAMETER top_k 60
+PARAMETER top_p 0.5
