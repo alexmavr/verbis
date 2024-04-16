@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -59,7 +60,7 @@ func main() {
 		Args []string
 	}{
 		{"ollama", []string{"serve"}},
-		{"redis-server", []string{}},
+		{"redis-stack-server", []string{}},
 	}
 
 	// Start subprocesses
@@ -77,6 +78,22 @@ func main() {
 		log.Fatalf("Failed to pull model: %s\n", err)
 	}
 
+	err = pullModel("mxbai-embed-large", false)
+	if err != nil {
+		log.Fatalf("Failed to pull model: %s\n", err)
+	}
+
+	err = waitForRedis(ctx, redisClient)
+	if err != nil {
+		log.Fatalf("Failed to wait for redis: %s\n", err)
+	}
+
+	// Create index for vector search
+	err = createVectorIndex(ctx, redisClient, "lamoidVectorIndex")
+	if err != nil {
+		log.Fatalf("Failed to create vector index: %s\n", err)
+	}
+
 	// Perform a test generation with ollama to first pull the model
 	resp, err := generateFromModel("What is the capital of France?")
 	if err != nil {
@@ -91,6 +108,7 @@ func main() {
 
 	// Start HTTP server
 	router := setupRouter()
+	log.Print("Starting server on port 8081")
 	log.Fatal(http.ListenAndServe(":8081", router))
 }
 
@@ -160,7 +178,18 @@ func handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 func googleSync(w http.ResponseWriter, r *http.Request) {
-	connectors.GoogleSync()
+	chunks := connectors.GoogleSync()
+	for _, chunk := range chunks {
+		resp, err := EmbedFromModel(chunk)
+		if err != nil {
+			log.Printf("Failed to get embeddings: %s\n", err)
+			continue
+		}
+		embedding := resp.Embedding
+
+		// Add the embedding to the vector index
+		addVector(r.Context(), redisClient, "lamoidVector:"+chunk, embedding)
+	}
 }
 
 type PullRequestPayload struct {
@@ -226,6 +255,23 @@ func pullModel(name string, stream bool) error {
 	return nil
 }
 
+func waitForRedis(ctx context.Context, redisClient *redis.Client) error {
+	// Poll the Redis client every 5 seconds until the context is cancelled
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled while waiting for Redis: %v", ctx.Err())
+		case <-time.After(2 * time.Second): // Check every 2 seconds
+			_, err := redisClient.Ping(ctx).Result()
+			if err == nil {
+				fmt.Println("Redis is now running.")
+				return nil
+			}
+			log.Printf("Waiting for Redis to become healthy: %v", err)
+		}
+	}
+}
+
 func waitForOllama(ctx context.Context) error {
 	ollama_url := "http://localhost:11434"
 
@@ -246,6 +292,68 @@ func waitForOllama(ctx context.Context) error {
 			return fmt.Errorf("Context cancelled during wait: %w", ctx.Err())
 		}
 	}
+}
+
+// Struct to define the request payload
+type EmbedRequestPayload struct {
+	Model  string `json:"model"`
+	Prompt string `json:"prompt"`
+}
+
+// Struct to define the API response format
+type EmbedApiResponse struct {
+	Embedding []float32 `json:"embedding"`
+}
+
+// Function to call ollama model
+func EmbedFromModel(prompt string) (*EmbedApiResponse, error) {
+	// URL of the API endpoint
+	url := "http://localhost:11434/api/embeddings"
+
+	// Create the payload
+	payload := EmbedRequestPayload{
+		Model:  "mxbai-embed-large",
+		Prompt: prompt,
+	}
+
+	// Marshal the payload into JSON
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a new HTTP request
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, err
+	}
+
+	// Set the appropriate headers
+	req.Header.Set("Content-Type", "application/json")
+
+	// Make the HTTP request using the default client
+	client := &http.Client{}
+	response, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+
+	// Read the response body
+	responseData, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("Response: %v", string(responseData))
+
+	// Unmarshal JSON data into ApiResponse struct
+	var apiResponse EmbedApiResponse
+	if err := json.Unmarshal(responseData, &apiResponse); err != nil {
+		return nil, err
+	}
+
+	// Return the structured response
+	return &apiResponse, nil
 }
 
 // Struct to define the request payload
@@ -330,8 +438,17 @@ func handlePrompt(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Call Ollama embeddings model to get embeddings for the prompt
+	resp, err := EmbedFromModel(prompt)
+	if err != nil {
+		http.Error(w, "Failed to get embeddings", http.StatusInternalServerError)
+		return
+	}
+
+	embeddings := resp.Embedding
+	log.Printf("Embeddings: %v", embeddings)
 
 	// Perform vector similarity search on redis and get list of most relevant results
+	vectorSearch(r.Context(), redisClient, "lamoidVectorIndex", embeddings)
 
 	// Use ollama LLM model to rerank the results, pick the top 5
 
@@ -340,4 +457,48 @@ func handlePrompt(w http.ResponseWriter, r *http.Request) {
 	// Return the completion from the LLM model
 
 	w.WriteHeader(http.StatusOK)
+}
+
+// Function to create a vector index
+func createVectorIndex(ctx context.Context, client *redis.Client, indexName string) error {
+	err := client.Do(ctx, "FT.CREATE", indexName, "ON", "HASH", "PREFIX", 1, "myVector:", "SCHEMA", "vector", "VECTOR", "FLAT", "6", "TYPE", "FLOAT32", "DIM", "4", "DISTANCE_METRIC", "L2").Err()
+	if err != nil {
+		if strings.Contains(err.Error(), "Index already exists") {
+			return nil
+		}
+		return fmt.Errorf("failed to create vector index: %v", err)
+	}
+	return nil
+}
+
+// Helper function to convert float32 slice to byte slice
+func float32SliceToByteSlice(floats []float32) []byte {
+	buf := new(bytes.Buffer)
+	err := binary.Write(buf, binary.LittleEndian, floats)
+	if err != nil {
+		log.Fatal("binary.Write failed:", err)
+	}
+	return buf.Bytes()
+}
+
+// Function to add a vector to Redis
+func addVector(ctx context.Context, client *redis.Client, key string, vector []float32) {
+	// Assuming vector is already in the correct binary format
+	byteVector := float32SliceToByteSlice(vector) // Convert vector to byte slice
+	err := client.HSet(ctx, key, "vector", byteVector).Err()
+	if err != nil {
+		log.Fatalf("Failed to add vector: %v", err)
+	}
+}
+
+// Function to perform a KNN vector search
+func vectorSearch(ctx context.Context, client *redis.Client, indexName string, vector []float32) {
+	byteVector := float32SliceToByteSlice(vector) // Convert vector to byte slice
+	results, err := client.Do(ctx, "FT.SEARCH", indexName, "=>[KNN 3 @vector $vec]", "PARAMS", 2, "vec", byteVector).Result()
+	if err != nil {
+		log.Fatalf("Failed to search vector: %v", err)
+	}
+	for _, result := range results.([]interface{}) {
+		fmt.Println(result) // Each result might be another slice or a map depending on your query and response
+	}
 }
