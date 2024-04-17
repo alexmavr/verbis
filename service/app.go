@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,21 +15,23 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/gorilla/mux"
+	"github.com/weaviate/weaviate-go-client/v4/weaviate"
+	"github.com/weaviate/weaviate-go-client/v4/weaviate/graphql"
+	"github.com/weaviate/weaviate/entities/models"
 
 	"github.com/epochlabs-ai/lamoid/service/connectors"
 )
 
 var (
-	redisClient *redis.Client
-	httpClient  = &http.Client{Timeout: 10 * time.Second}
+	httpClient = &http.Client{Timeout: 10 * time.Second}
 )
 
-func init() {
-	// Initialize Redis client
-	redisClient = redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+func getWeaviateClient() *weaviate.Client {
+	// Initialize Weaviate client
+	return weaviate.New(weaviate.Config{
+		Host:   "localhost:8088",
+		Scheme: "http",
 	})
 }
 
@@ -55,18 +56,21 @@ func main() {
 		}
 	}()
 
+	// Weaviate flags
+	os.Setenv("PERSISTENCE_DATA_PATH", "/tmp/lamoid")
+	os.Setenv("AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED", "true")
 	commands := []struct {
 		Name string
 		Args []string
 	}{
 		{"ollama", []string{"serve"}},
-		{"redis-stack-server", []string{}},
+		{"../dist/weaviate", []string{"--host", "0.0.0.0", "--port", "8088", "--scheme", "http"}},
 	}
 
 	// Start subprocesses
 	startSubprocesses(ctx, commands)
 
-	// TODO: start background sync process to sync data from external sources to redis
+	// TODO: start background sync process to sync data from external sources
 
 	err := waitForOllama(ctx)
 	if err != nil {
@@ -83,16 +87,8 @@ func main() {
 		log.Fatalf("Failed to pull model: %s\n", err)
 	}
 
-	err = waitForRedis(ctx, redisClient)
-	if err != nil {
-		log.Fatalf("Failed to wait for redis: %s\n", err)
-	}
-
 	// Create index for vector search
-	err = createVectorIndex(ctx, redisClient, "lamoidVectorIndex")
-	if err != nil {
-		log.Fatalf("Failed to create vector index: %s\n", err)
-	}
+	createWeaviateSchema(getWeaviateClient())
 
 	// Perform a test generation with ollama to first pull the model
 	resp, err := generateFromModel("What is the capital of France?")
@@ -179,7 +175,9 @@ func handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 func googleSync(w http.ResponseWriter, r *http.Request) {
 	chunks := connectors.GoogleSync()
+	log.Printf("Synced %d chunks from Google\n", len(chunks))
 	for _, chunk := range chunks {
+		log.Print(chunk)
 		resp, err := EmbedFromModel(chunk)
 		if err != nil {
 			log.Printf("Failed to get embeddings: %s\n", err)
@@ -188,7 +186,7 @@ func googleSync(w http.ResponseWriter, r *http.Request) {
 		embedding := resp.Embedding
 
 		// Add the embedding to the vector index
-		addVector(r.Context(), redisClient, "lamoidVector:"+chunk, embedding)
+		addVector(context.Background(), getWeaviateClient(), chunk, embedding)
 	}
 }
 
@@ -255,23 +253,6 @@ func pullModel(name string, stream bool) error {
 	return nil
 }
 
-func waitForRedis(ctx context.Context, redisClient *redis.Client) error {
-	// Poll the Redis client every 5 seconds until the context is cancelled
-	for {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("context cancelled while waiting for Redis: %v", ctx.Err())
-		case <-time.After(2 * time.Second): // Check every 2 seconds
-			_, err := redisClient.Ping(ctx).Result()
-			if err == nil {
-				fmt.Println("Redis is now running.")
-				return nil
-			}
-			log.Printf("Waiting for Redis to become healthy: %v", err)
-		}
-	}
-}
-
 func waitForOllama(ctx context.Context) error {
 	ollama_url := "http://localhost:11434"
 
@@ -289,7 +270,7 @@ func waitForOllama(ctx context.Context) error {
 			log.Printf("Waited 5 sec")
 			continue
 		case <-ctx.Done():
-			return fmt.Errorf("Context cancelled during wait: %w", ctx.Err())
+			return fmt.Errorf("context cancelled during wait: %w", ctx.Err())
 		}
 	}
 }
@@ -344,7 +325,6 @@ func EmbedFromModel(prompt string) (*EmbedApiResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("Response: %v", string(responseData))
 
 	// Unmarshal JSON data into ApiResponse struct
 	var apiResponse EmbedApiResponse
@@ -436,6 +416,7 @@ func handlePrompt(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Missing prompt query parameter", http.StatusBadRequest)
 		return
 	}
+	log.Printf("Prompt: %s", prompt)
 
 	// Call Ollama embeddings model to get embeddings for the prompt
 	resp, err := EmbedFromModel(prompt)
@@ -445,10 +426,16 @@ func handlePrompt(w http.ResponseWriter, r *http.Request) {
 	}
 
 	embeddings := resp.Embedding
-	log.Printf("Embeddings: %v", embeddings)
+	log.Printf("Performing vector search")
 
-	// Perform vector similarity search on redis and get list of most relevant results
-	vectorSearch(r.Context(), redisClient, "lamoidVectorIndex", embeddings)
+	// Perform vector similarity search and get list of most relevant results
+	searchResults, err := vectorSearch(context.Background(), getWeaviateClient(), embeddings)
+	if err != nil {
+		http.Error(w, "Failed to search for vectors", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Search results: %v", searchResults)
 
 	// Use ollama LLM model to rerank the results, pick the top 5
 
@@ -459,46 +446,71 @@ func handlePrompt(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// Function to create a vector index
-func createVectorIndex(ctx context.Context, client *redis.Client, indexName string) error {
-	err := client.Do(ctx, "FT.CREATE", indexName, "ON", "HASH", "PREFIX", 1, "myVector:", "SCHEMA", "vector", "VECTOR", "FLAT", "6", "TYPE", "FLOAT32", "DIM", "4", "DISTANCE_METRIC", "L2").Err()
+// Add a vector to Weaviate
+func addVector(ctx context.Context, client *weaviate.Client, chunk string, vector []float32) error {
+	w, err := client.Data().Creator().WithClassName("Chunk").WithProperties(map[string]interface{}{
+		"chunk": chunk,
+	}).WithVector(vector).Do(ctx)
 	if err != nil {
-		if strings.Contains(err.Error(), "Index already exists") {
-			return nil
-		}
-		return fmt.Errorf("failed to create vector index: %v", err)
+		return err
 	}
+
+	// the returned value is a wrapped object
+	b, err := json.MarshalIndent(w.Object, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(b))
 	return nil
 }
 
-// Helper function to convert float32 slice to byte slice
-func float32SliceToByteSlice(floats []float32) []byte {
-	buf := new(bytes.Buffer)
-	err := binary.Write(buf, binary.LittleEndian, floats)
+// Search for a vector in Weaviate
+func vectorSearch(ctx context.Context, client *weaviate.Client, vector []float32) ([]string, error) {
+
+	respAll, _ := client.GraphQL().Get().WithClassName("Chunk").WithFields(graphql.Field{Name: "chunk"}).Do(ctx)
+	fmt.Println("XXXXXXX")
+	fmt.Println(respAll.Data)
+	fmt.Println("XXXXXXX")
+	fmt.Println(len(vector))
+	fmt.Println("YYYY")
+
+	nearVector := client.GraphQL().NearVectorArgBuilder().WithVector(vector)
+
+	resp, err := client.GraphQL().
+		Get().
+		WithClassName("Chunk").
+		WithNearVector(nearVector).
+		WithLimit(5).
+		WithFields(graphql.Field{Name: "chunk"}).
+		Do(ctx)
 	if err != nil {
-		log.Fatal("binary.Write failed:", err)
+		return nil, err
 	}
-	return buf.Bytes()
+
+	get := resp.Data["Get"].(map[string]interface{})
+	chunks := get["Chunk"].([]interface{})
+	fmt.Println(chunks)
+
+	res := []string{}
+	for _, chunk := range chunks {
+		res = append(res, chunk.(string))
+	}
+
+	return res, nil
 }
 
-// Function to add a vector to Redis
-func addVector(ctx context.Context, client *redis.Client, key string, vector []float32) {
-	// Assuming vector is already in the correct binary format
-	byteVector := float32SliceToByteSlice(vector) // Convert vector to byte slice
-	err := client.HSet(ctx, key, "vector", byteVector).Err()
-	if err != nil {
-		log.Fatalf("Failed to add vector: %v", err)
+// Create Weaviate schema for vector storage
+func createWeaviateSchema(client *weaviate.Client) error {
+	class := &models.Class{
+		Class:      "Chunk",
+		Vectorizer: "none",
 	}
-}
 
-// Function to perform a KNN vector search
-func vectorSearch(ctx context.Context, client *redis.Client, indexName string, vector []float32) {
-	byteVector := float32SliceToByteSlice(vector) // Convert vector to byte slice
-	results, err := client.Do(ctx, "FT.SEARCH", indexName, "=>[KNN 3 @vector $vec]", "PARAMS", 2, "vec", byteVector).Result()
+	// Create the class in Weaviate
+	err := client.Schema().ClassCreator().WithClass(class).Do(context.Background())
 	if err != nil {
-		log.Fatalf("Failed to search vector: %v", err)
+		return fmt.Errorf("failed to create Weaviate class: %v", err)
 	}
-	for _, result := range results.([]interface{}) {
-		fmt.Println(result) // Each result might be another slice or a map depending on your query and response
-	}
+
+	return nil
 }
