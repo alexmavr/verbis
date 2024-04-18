@@ -492,8 +492,11 @@ func vectorSearch(ctx context.Context, client *weaviate.Client, vector []float32
 	fmt.Println(chunks)
 
 	res := []string{}
-	for _, chunk := range chunks {
-		res = append(res, chunk.(string))
+	for _, chunkMap := range chunks {
+		c := chunkMap.(map[string]interface{})
+		for _, v := range c {
+			res = append(res, v.(string))
+		}
 	}
 
 	return res, nil
