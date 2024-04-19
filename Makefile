@@ -1,12 +1,49 @@
-.PHONY: build service
+.PHONY: build service lamoid weaviate
+
+WEAVIATE_VERSION := v1.24.9
+OLLAMA_VERSION := v0.1.32
+DIST_DIR := ./dist
+TMP_DIR := /tmp/weaviate-installation
+ZIP_FILE := weaviate-$(WEAVIATE_VERSION)-darwin-all.zip
+OLLAMA_BIN := ollama-darwin
+OLLAMA_URL := https://github.com/ollama/ollama/releases/download/$(OLLAMA_VERSION)/$(OLLAMA_BIN)
 
 all: macapp
 
-service:
-	pushd service && go build . && popd
-
-macapp: service ollama
-	pushd macapp && npm install && npm make && popd
-
 ollama:
-	// fetch latest ollama binary
+	# Ensure the distribution directory exists
+	mkdir -p $(DIST_DIR)
+
+	# Download the Ollama binary from GitHub
+	curl -L $(OLLAMA_URL) -o $(DIST_DIR)/ollama
+
+	# Make the binary executable
+	chmod +x $(DIST_DIR)/ollama
+
+weaviate:
+	# Ensure dist directory exists
+	mkdir -p $(DIST_DIR)
+
+	# Create a temporary directory for installation
+	mkdir -p $(TMP_DIR)
+
+	# Download the Weaviate zip file into the temporary directory
+	curl -L https://github.com/weaviate/weaviate/releases/download/$(WEAVIATE_VERSION)/$(ZIP_FILE) -o $(TMP_DIR)/$(ZIP_FILE)
+
+	# Unzip the downloaded file
+	unzip $(TMP_DIR)/$(ZIP_FILE) -d $(TMP_DIR)
+
+	# Move the weaviate binary to the dist directory
+	mv $(TMP_DIR)/weaviate $(DIST_DIR)/weaviate
+
+	# Remove the temporary directory and the zip file
+	rm -rf $(TMP_DIR)
+
+lamoid:
+	# Ensure dist directory exists
+	mkdir -p $(DIST_DIR)
+
+	pushd lamoid && go build -o ../$(DIST_DIR)/lamoid . && popd
+
+macapp: lamoid ollama weaviate
+	pushd macapp && npm install && npm run package && popd

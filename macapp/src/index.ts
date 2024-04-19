@@ -1,12 +1,11 @@
 import { spawn, ChildProcess } from 'child_process'
-import { app, autoUpdater, dialog, Tray, Menu, BrowserWindow, MenuItemConstructorOptions, nativeTheme } from 'electron'
+import { app, dialog, Tray, Menu, BrowserWindow, MenuItemConstructorOptions, nativeTheme } from 'electron'
 import Store from 'electron-store'
 import winston from 'winston'
 import 'winston-daily-rotate-file'
 import * as path from 'path'
 
 import { v4 as uuidv4 } from 'uuid'
-import { installed } from './install'
 
 require('@electron/remote/main').initialize()
 
@@ -24,7 +23,7 @@ const logger = winston.createLogger({
   transports: [
     new winston.transports.Console(),
     new winston.transports.File({
-      filename: path.join(app.getPath('home'), '.ollama', 'logs', 'server.log'),
+      filename: path.join(app.getPath('home'), '.lamoid', 'logs', 'server.log'),
       maxsize: 1024 * 1024 * 20,
       maxFiles: 5,
     }),
@@ -105,40 +104,26 @@ function updateTrayIcon() {
 }
 
 function updateTray() {
-  const updateItems: MenuItemConstructorOptions[] = [
-    { label: 'An update is available', enabled: false },
-    {
-      label: 'Restart to update',
-      click: () => autoUpdater.quitAndInstall(),
-    },
-    { type: 'separator' },
-  ]
-
   const menu = Menu.buildFromTemplate([
-    ...(updateAvailable ? updateItems : []),
-    { role: 'quit', label: 'Quit Ollama', accelerator: 'Command+Q' },
+    { role: 'quit', label: 'Quit Lamoid', accelerator: 'Command+Q' },
   ])
 
   if (!tray) {
     tray = new Tray(trayIconPath())
   }
 
-  tray.setToolTip(updateAvailable ? 'An update is available' : 'Ollama')
   tray.setContextMenu(menu)
   tray.setImage(trayIconPath())
-
-  nativeTheme.off('updated', updateTrayIcon)
-  nativeTheme.on('updated', updateTrayIcon)
 }
 
 let proc: ChildProcess = null
 
 function server() {
   const binary = app.isPackaged
-    ? path.join(process.resourcesPath, 'ollama')
-    : path.resolve(process.cwd(), '..', 'ollama')
+    ? path.join(process.resourcesPath, 'lamoid')
+    : path.resolve(process.cwd(), '..', 'lamoid')
 
-  proc = spawn(binary, ['serve'])
+  proc = spawn(binary, [])
 
   proc.stdout.on('data', data => {
     logger.info(data.toString().trim())
@@ -161,60 +146,7 @@ app.on('before-quit', () => {
     proc.kill('SIGINT') // send SIGINT signal to the server, which also stops any loaded llms
   }
 })
-
-const updateURL = `https://ollama.ai/api/update?os=${process.platform}&arch=${
-  process.arch
-}&version=${app.getVersion()}&id=${id()}`
-
-let latest = ''
-async function isNewReleaseAvailable() {
-  try {
-    const response = await fetch(updateURL)
-
-    if (!response.ok) {
-      return false
-    }
-
-    if (response.status === 204) {
-      return false
-    }
-
-    const data = await response.json()
-
-    const url = data?.url
-    if (!url) {
-      return false
-    }
-
-    if (latest === url) {
-      return false
-    }
-
-    latest = url
-
-    return true
-  } catch (error) {
-    logger.error(`update check failed - ${error}`)
-    return false
-  }
-}
-
-async function checkUpdate() {
-  const available = await isNewReleaseAvailable()
-  if (available) {
-    logger.info('checking for update')
-    autoUpdater.checkForUpdates()
-  }
-}
-
 function init() {
-  if (app.isPackaged) {
-    checkUpdate()
-    setInterval(() => {
-      checkUpdate()
-    }, 60 * 60 * 1000)
-  }
-
   updateTray()
 
   if (process.platform === 'darwin') {
@@ -223,7 +155,7 @@ function init() {
         const chosen = dialog.showMessageBoxSync({
           type: 'question',
           buttons: ['Move to Applications', 'Do Not Move'],
-          message: 'Ollama works best when run from the Applications directory.',
+          message: 'Lamoid works best when run from the Applications directory.',
           defaultId: 0,
           cancelId: 1,
         })
@@ -237,7 +169,7 @@ function init() {
                     type: 'info',
                     message: 'Cannot move to Applications directory',
                     detail:
-                      'Another version of Ollama is currently running from your Applications directory. Close it first and try again.',
+                      'Another version of Lamoid is currently running from your Applications directory. Close it first and try again.',
                   })
                 }
                 return true
@@ -254,7 +186,7 @@ function init() {
 
   server()
 
-  if (store.get('first-time-run') && installed()) {
+  if (store.get('first-time-run') ) {
     if (process.platform === 'darwin') {
       app.dock.hide()
     }
@@ -267,36 +199,3 @@ function init() {
   app.setLoginItemSettings({ openAtLogin: true })
   firstRunWindow()
 }
-
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
-})
-
-function id(): string {
-  const id = store.get('id') as string
-
-  if (id) {
-    return id
-  }
-
-  const uuid = uuidv4()
-  store.set('id', uuid)
-  return uuid
-}
-
-autoUpdater.setFeedURL({ url: updateURL })
-
-autoUpdater.on('error', e => {
-  logger.error(`update check failed - ${e.message}`)
-  console.error(`update check failed - ${e.message}`)
-})
-
-autoUpdater.on('update-downloaded', () => {
-  updateAvailable = true
-  updateTray()
-})

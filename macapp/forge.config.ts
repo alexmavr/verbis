@@ -18,6 +18,7 @@ const config: ForgeConfig = {
     extraResource: [
       '../dist/lamoid',
       '../dist/ollama',
+      '../dist/weaviate',
 //      path.join(__dirname, './assets/iconTemplate.png'),
     ],
     ...(process.env.SIGN
@@ -34,7 +35,7 @@ const config: ForgeConfig = {
         }
       : {}),
     osxUniversal: {
-      x64ArchFiles: '**/lamoid',
+      x64ArchFiles: '**/*',
     },
   },
   rebuildConfig: {},

@@ -20,7 +20,7 @@ import (
 	"github.com/weaviate/weaviate-go-client/v4/weaviate/graphql"
 	"github.com/weaviate/weaviate/entities/models"
 
-	"github.com/epochlabs-ai/lamoid/service/connectors"
+	"github.com/epochlabs-ai/lamoid/lamoid/connectors"
 )
 
 var (

@@ -1,4 +1,4 @@
-module github.com/epochlabs-ai/lamoid/service
+module github.com/epochlabs-ai/lamoid/lamoid
 
 go 1.22.2
 
