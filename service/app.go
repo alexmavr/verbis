@@ -42,17 +42,26 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	router := setupRouter()
+	server := http.Server{
+		Addr:    ":8081",
+		Handler: router,
+	}
+
 	// Cancel context when sigChan receives a signal
 	defer func() {
 		signal.Stop(sigChan)
 		cancel()
+		close(sigChan)
 	}()
 
 	go func() {
 		select {
 		case <-sigChan:
 			cancel()
+			server.Close()
 		case <-ctx.Done():
+			server.Close()
 		}
 	}()
 
@@ -77,12 +86,12 @@ func main() {
 		log.Fatalf("Failed to wait for ollama: %s\n", err)
 	}
 
-	err = pullModel("llama2", false)
+	err = pullModel("llama3", false)
 	if err != nil {
 		log.Fatalf("Failed to pull model: %s\n", err)
 	}
 
-	err = pullModel("mxbai-embed-large", false)
+	err = pullModel("all-minilm", false)
 	if err != nil {
 		log.Fatalf("Failed to pull model: %s\n", err)
 	}
@@ -103,9 +112,8 @@ func main() {
 	}
 
 	// Start HTTP server
-	router := setupRouter()
 	log.Print("Starting server on port 8081")
-	log.Fatal(http.ListenAndServe(":8081", router))
+	log.Fatal(server.ListenAndServe())
 }
 
 func startSubprocesses(ctx context.Context, commands []struct {
@@ -293,7 +301,7 @@ func EmbedFromModel(prompt string) (*EmbedApiResponse, error) {
 
 	// Create the payload
 	payload := EmbedRequestPayload{
-		Model:  "mxbai-embed-large",
+		Model:  "all-minilm",
 		Prompt: prompt,
 	}
 
@@ -365,7 +373,7 @@ func generateFromModel(prompt string) (*ApiResponse, error) {
 
 	// Create the payload
 	payload := RequestPayload{
-		Model:  "llama2",
+		Model:  "llama3",
 		Prompt: prompt,
 		Stream: false,
 	}
@@ -435,20 +443,53 @@ func handlePrompt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Search results: %v", searchResults)
-
-	// Use ollama LLM model to rerank the results, pick the top 5
-
-	// Use ollama LLM model with the top 5 results as context, and the prompt
+	// TODO: Use ollama LLM model to rerank the results, pick the top 5
 
 	// Return the completion from the LLM model
+	llmPrompt := MakePrompt(searchResults, prompt)
+	log.Printf("LLM Prompt: %s", llmPrompt)
+	genResp, err := generateFromModel(llmPrompt)
+	if err != nil {
+		http.Error(w, "Failed to generate response", http.StatusInternalServerError)
 
+	}
+	log.Printf("Response: %s", genResp.Response)
+
+	b, err := json.Marshal(genResp.Response)
+	if err != nil {
+		http.Error(w, "Failed to marshal search results", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	w.Write(b)
+}
+
+// Promptsage?
+func MakePrompt(dataChunks []string, query string) string {
+	// Create a builder to efficiently concatenate strings
+	var builder strings.Builder
+
+	// Append introduction to guide the model's focus
+	builder.WriteString("Based on the following data:\n\n")
+
+	// Loop through each data chunk and append it followed by a newline
+	for _, chunk := range dataChunks {
+		builder.WriteString(chunk + "\n\n")
+	}
+
+	// Append the user query with an instruction
+	builder.WriteString("Answer this question based on the data provided above: ")
+	builder.WriteString(query)
+
+	// Return the final combined prompt
+	return builder.String()
 }
 
 // Add a vector to Weaviate
 func addVector(ctx context.Context, client *weaviate.Client, chunk string, vector []float32) error {
-	w, err := client.Data().Creator().WithClassName("Chunk").WithProperties(map[string]interface{}{
+	w, err := client.Data().Creator().WithClassName("WeavChunk").WithProperties(map[string]interface{}{
 		"chunk": chunk,
 	}).WithVector(vector).Do(ctx)
 	if err != nil {
@@ -466,10 +507,9 @@ func addVector(ctx context.Context, client *weaviate.Client, chunk string, vecto
 
 // Search for a vector in Weaviate
 func vectorSearch(ctx context.Context, client *weaviate.Client, vector []float32) ([]string, error) {
-
-	respAll, _ := client.GraphQL().Get().WithClassName("Chunk").WithFields(graphql.Field{Name: "chunk"}).Do(ctx)
-	fmt.Println("XXXXXXX")
-	fmt.Println(respAll.Data)
+	///	respAll, _ := client.GraphQL().Get().WithClassName("Chunk").WithFields(graphql.Field{Name: "chunk"}).Do(ctx)
+	///	fmt.Println("XXXXXXX")
+	///	fmt.Println(respAll.Data)
 	fmt.Println("XXXXXXX")
 	fmt.Println(len(vector))
 	fmt.Println("YYYY")
@@ -478,7 +518,7 @@ func vectorSearch(ctx context.Context, client *weaviate.Client, vector []float32
 
 	resp, err := client.GraphQL().
 		Get().
-		WithClassName("Chunk").
+		WithClassName("WeavChunk").
 		WithNearVector(nearVector).
 		WithLimit(5).
 		WithFields(graphql.Field{Name: "chunk"}).
@@ -488,7 +528,7 @@ func vectorSearch(ctx context.Context, client *weaviate.Client, vector []float32
 	}
 
 	get := resp.Data["Get"].(map[string]interface{})
-	chunks := get["Chunk"].([]interface{})
+	chunks := get["WeavChunk"].([]interface{})
 	fmt.Println(chunks)
 
 	res := []string{}
@@ -505,7 +545,7 @@ func vectorSearch(ctx context.Context, client *weaviate.Client, vector []float32
 // Create Weaviate schema for vector storage
 func createWeaviateSchema(client *weaviate.Client) error {
 	class := &models.Class{
-		Class:      "Chunk",
+		Class:      "WeavChunk",
 		Vectorizer: "none",
 	}
 
