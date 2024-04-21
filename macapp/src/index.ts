@@ -9,10 +9,6 @@ import { v4 as uuidv4 } from 'uuid'
 
 require('@electron/remote/main').initialize()
 
-if (require('electron-squirrel-startup')) {
-  app.quit()
-}
-
 const store = new Store()
 
 let welcomeWindow: BrowserWindow | null = null
@@ -32,24 +28,24 @@ const logger = winston.createLogger({
 })
 
 app.on('ready', () => {
-  const gotTheLock = app.requestSingleInstanceLock()
-  if (!gotTheLock) {
-    app.exit(0)
-    return
-  }
+  //const gotTheLock = app.requestSingleInstanceLock()
+  //if (!gotTheLock) {
+  //  app.exit(0)
+  //  return
+  //}
 
-  app.on('second-instance', () => {
-    if (app.hasSingleInstanceLock()) {
-      app.releaseSingleInstanceLock()
-    }
-
-    if (proc) {
-      proc.off('exit', restart)
-      proc.kill()
-    }
-
-    app.exit(0)
-  })
+//  app.on('second-instance', () => {
+//    if (app.hasSingleInstanceLock()) {
+//      app.releaseSingleInstanceLock()
+//    }
+//
+//    if (proc) {
+//      proc.off('exit', restart)
+//      proc.kill()
+//    }
+//
+//    app.exit(0)
+//  })
 
   app.focus({ steal: true })
 
@@ -97,13 +93,8 @@ function trayIconPath() {
     : path.join(assetPath, 'iconTemplate.png')
 }
 
-function updateTrayIcon() {
-  if (tray) {
-    tray.setImage(trayIconPath())
-  }
-}
-
 function updateTray() {
+  // For some reason it hangs on first run 
   const menu = Menu.buildFromTemplate([
     { role: 'quit', label: 'Quit Lamoid', accelerator: 'Command+Q' },
   ])
@@ -133,7 +124,10 @@ function server() {
     logger.error(data.toString().trim())
   })
 
-  proc.on('exit', restart)
+  proc.on('exit', (code) => {
+    logger.error(`Server process exited with code ${code}`);
+    restart();
+  });
 }
 
 function restart() {
@@ -146,11 +140,14 @@ app.on('before-quit', () => {
     proc.kill('SIGINT') // send SIGINT signal to the server, which also stops any loaded llms
   }
 })
+
 function init() {
-  updateTray()
+ logger.info('Starting Lamoid')
+ //updateTray()
 
   if (process.platform === 'darwin') {
     if (app.isPackaged) {
+      logger.info('In packaged')
       if (!app.isInApplicationsFolder()) {
         const chosen = dialog.showMessageBoxSync({
           type: 'question',
@@ -186,16 +183,7 @@ function init() {
 
   server()
 
-  if (store.get('first-time-run') ) {
-    if (process.platform === 'darwin') {
-      app.dock.hide()
-    }
-
-    app.setLoginItemSettings({ openAtLogin: app.getLoginItemSettings().openAtLogin })
-    return
-  }
-
-  // This is the first run or the CLI is no longer installed
-  app.setLoginItemSettings({ openAtLogin: true })
+  logger.info('Running first window')
   firstRunWindow()
+  logger.info('First window ran')
 }

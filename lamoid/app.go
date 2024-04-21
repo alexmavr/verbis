@@ -72,8 +72,8 @@ func main() {
 		Name string
 		Args []string
 	}{
-		{"ollama", []string{"serve"}},
-		{"../dist/weaviate", []string{"--host", "0.0.0.0", "--port", "8088", "--scheme", "http"}},
+		{"./ollama", []string{"serve"}},
+		{"./weaviate", []string{"--host", "0.0.0.0", "--port", "8088", "--scheme", "http"}},
 	}
 
 	// Start subprocesses

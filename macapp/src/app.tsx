@@ -36,7 +36,7 @@ export default function () {
                 onClick={() => setStep(Step.GOOGLE_INIT)}
                 className='no-drag rounded-dm mx-auto my-8 w-[40%] rounded-md bg-black px-4 py-2 text-sm text-white hover:brightness-110'
               >
-                Next
+                Google sync
               </button>
             </div>
             <div className='mx-auto'>
