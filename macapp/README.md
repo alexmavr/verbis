@@ -7,7 +7,7 @@ This app builds upon Lamoid to provide a desktop experience for running models.
 First, build the `lamoid` binary:
 
 ```
-cd ..
+cd <PROJECT_ROOT>/lamoid
 go build .
 ```
 
