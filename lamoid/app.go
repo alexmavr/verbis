@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -24,7 +25,15 @@ import (
 )
 
 var (
-	httpClient = &http.Client{Timeout: 10 * time.Second}
+	httpClient        = &http.Client{Timeout: 10 * time.Second}
+	weaviateClassName = "LamoidChunk"
+	_fields           = []graphql.Field{
+		{Name: "chunk"},
+		{Name: "sourceURL"},
+		{Name: "sourceName"},
+		{Name: "updatedAt"},
+		{Name: "createdAt"},
+	}
 )
 
 func getWeaviateClient() *weaviate.Client {
@@ -97,7 +106,7 @@ func main() {
 	}
 
 	// Create index for vector search
-	createWeaviateSchema(getWeaviateClient())
+	createWeaviateSchema(ctx, getWeaviateClient())
 
 	// Perform a test generation with ollama to first pull the model
 	resp, err := generateFromModel("What is the capital of France?")
@@ -182,19 +191,28 @@ func handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 func googleSync(w http.ResponseWriter, r *http.Request) {
-	chunks := connectors.GoogleSync()
+	chunks := connectors.GoogleSync(r.Context())
 	log.Printf("Synced %d chunks from Google\n", len(chunks))
+
+	chunkItems := []AddVectorItem{}
 	for _, chunk := range chunks {
-		log.Print(chunk)
-		resp, err := EmbedFromModel(chunk)
+		log.Printf("Processing chunk: %s\n", chunk.SourceURL)
+		resp, err := EmbedFromModel(chunk.Text)
 		if err != nil {
 			log.Printf("Failed to get embeddings: %s\n", err)
 			continue
 		}
 		embedding := resp.Embedding
 
-		// Add the embedding to the vector index
-		addVector(context.Background(), getWeaviateClient(), chunk, embedding)
+		chunkItems = append(chunkItems, AddVectorItem{
+			Chunk:  chunk,
+			Vector: embedding,
+		})
+	}
+
+	err := addVectors(context.Background(), getWeaviateClient(), chunkItems)
+	if err != nil {
+		log.Fatalf("Failed to add vectors: %s\n", err)
 	}
 }
 
@@ -346,9 +364,10 @@ func EmbedFromModel(prompt string) (*EmbedApiResponse, error) {
 
 // Struct to define the request payload
 type RequestPayload struct {
-	Model  string `json:"model"`
-	Prompt string `json:"prompt"`
-	Stream bool   `json:"stream"`
+	Model     string `json:"model"`
+	Prompt    string `json:"prompt"`
+	Stream    bool   `json:"stream"`
+	KeepAlive string `json:"keep_alive"`
 }
 
 // Struct to define the API response format
@@ -373,9 +392,10 @@ func generateFromModel(prompt string) (*ApiResponse, error) {
 
 	// Create the payload
 	payload := RequestPayload{
-		Model:  "llama3",
-		Prompt: prompt,
-		Stream: false,
+		Model:     "llama3",
+		Prompt:    prompt,
+		Stream:    false,
+		KeepAlive: "20m",
 	}
 
 	// Marshal the payload into JSON
@@ -488,54 +508,76 @@ func MakePrompt(dataChunks []string, query string) string {
 }
 
 // Add a vector to Weaviate
-func addVector(ctx context.Context, client *weaviate.Client, chunk string, vector []float32) error {
-	w, err := client.Data().Creator().WithClassName("WeavChunk").WithProperties(map[string]interface{}{
-		"chunk": chunk,
-	}).WithVector(vector).Do(ctx)
-	if err != nil {
-		return err
+type AddVectorItem struct {
+	connectors.Chunk
+	Vector []float32
+}
+
+func cleanWhitespace(text string) string {
+	// Trim leading and trailing whitespace
+	text = strings.TrimSpace(text)
+
+	// Replace internal sequences of whitespace with a single space
+	spacePattern := regexp.MustCompile(`\s+`)
+	return spacePattern.ReplaceAllString(text, " ")
+}
+
+func addVectors(ctx context.Context, client *weaviate.Client, items []AddVectorItem) error {
+	log.Printf("Adding %d vectors to vector store", len(items))
+	objects := []*models.Object{}
+	for _, item := range items {
+		objects = append(objects, &models.Object{
+			Class: weaviateClassName,
+			Properties: map[string]string{
+				"chunk":      cleanWhitespace(item.Chunk.Text),
+				"sourceURL":  item.Chunk.SourceURL,
+				"sourceName": item.Chunk.SourceName,
+				"createdAt":  item.Chunk.CreatedAt.String(),
+				"updatedAt":  item.Chunk.UpdatedAt.String(),
+			},
+			Vector: item.Vector,
+		})
 	}
 
-	// the returned value is a wrapped object
-	b, err := json.MarshalIndent(w.Object, "", "  ")
-	if err != nil {
-		return err
-	}
-	fmt.Println(string(b))
-	return nil
+	_, err := client.Batch().ObjectsBatcher().WithObjects(objects...).Do(ctx)
+	return err
 }
 
 // Search for a vector in Weaviate
 func vectorSearch(ctx context.Context, client *weaviate.Client, vector []float32) ([]string, error) {
-	///	respAll, _ := client.GraphQL().Get().WithClassName("Chunk").WithFields(graphql.Field{Name: "chunk"}).Do(ctx)
-	///	fmt.Println("XXXXXXX")
-	///	fmt.Println(respAll.Data)
-	fmt.Println("XXXXXXX")
-	fmt.Println(len(vector))
-	fmt.Println("YYYY")
+	fmt.Println("Query vector length: ", len(vector))
+
+	all, _ := client.GraphQL().Get().WithClassName(weaviateClassName).Do(ctx)
+	log.Print(all.Data)
 
 	nearVector := client.GraphQL().NearVectorArgBuilder().WithVector(vector)
 
 	resp, err := client.GraphQL().
 		Get().
-		WithClassName("WeavChunk").
+		WithClassName(weaviateClassName).
 		WithNearVector(nearVector).
 		WithLimit(5).
-		WithFields(graphql.Field{Name: "chunk"}).
+		WithFields(_fields...).
 		Do(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	get := resp.Data["Get"].(map[string]interface{})
-	chunks := get["WeavChunk"].([]interface{})
-	fmt.Println(chunks)
+	log.Print(resp)
+	log.Print(resp.Data)
+	log.Print(resp.Data["Get"])
 
 	res := []string{}
-	for _, chunkMap := range chunks {
-		c := chunkMap.(map[string]interface{})
-		for _, v := range c {
-			res = append(res, v.(string))
+	if resp.Data["Get"] != nil {
+		get := resp.Data["Get"].(map[string]interface{})
+		chunks := get[weaviateClassName].([]interface{})
+		fmt.Println(chunks)
+
+		for _, chunkMap := range chunks {
+			c := chunkMap.(map[string]interface{})
+			for _, v := range c {
+				res = append(res, v.(string))
+			}
 		}
 	}
 
@@ -543,14 +585,17 @@ func vectorSearch(ctx context.Context, client *weaviate.Client, vector []float32
 }
 
 // Create Weaviate schema for vector storage
-func createWeaviateSchema(client *weaviate.Client) error {
+func createWeaviateSchema(ctx context.Context, client *weaviate.Client) error {
+	// attempt to delete the class, don't fail if it doesn't exist
+	client.Schema().ClassDeleter().WithClassName(weaviateClassName).Do(ctx)
+
 	class := &models.Class{
-		Class:      "WeavChunk",
+		Class:      weaviateClassName,
 		Vectorizer: "none",
 	}
 
 	// Create the class in Weaviate
-	err := client.Schema().ClassCreator().WithClass(class).Do(context.Background())
+	err := client.Schema().ClassCreator().WithClass(class).Do(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create Weaviate class: %v", err)
 	}

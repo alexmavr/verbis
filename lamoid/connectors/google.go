@@ -4,17 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
+	"time"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 
 	//   "google.golang.org/api/calendar/v3"
-	"google.golang.org/api/drive/v3"
 	//    "google.golang.org/api/gmail/v1"
+	"google.golang.org/api/drive/v3"
+	"google.golang.org/api/option"
+
 	"github.com/zalando/go-keyring"
 )
 
@@ -22,15 +26,16 @@ const (
 	credentialPath = "../Resources/credentials.json"
 	tokenKey       = "user-google-oauth-token"
 	keyringService = "LamoidApp"
+	MaxChunkSize   = 10000 // Maximum number of characters in a chunk
 )
 
-func getClient(config *oauth2.Config) (*http.Client, error) {
+func getClient(ctx context.Context, config *oauth2.Config) (*http.Client, error) {
 	// Token from Keychain
 	tok, err := tokenFromKeychain()
 	if err != nil {
 		return nil, err
 	}
-	return config.Client(context.Background(), tok), nil
+	return config.Client(ctx, tok), nil
 }
 
 func requestOauthWeb(config *oauth2.Config) error {
@@ -63,13 +68,20 @@ func saveTokenToKeychain(token *oauth2.Token) {
 	}
 }
 
+var scopes []string = []string{
+	drive.DriveMetadataReadonlyScope,
+	drive.DriveReadonlyScope,
+}
+
 func GoogleInitialConfig() {
 	b, err := os.ReadFile(credentialPath)
 	if err != nil {
 		log.Fatalf("Unable to read client secret file: %v", err)
 	}
 
-	config, err := google.ConfigFromJSON(b, drive.DriveMetadataReadonlyScope)
+	config, err := google.ConfigFromJSON(b,
+		scopes...,
+	)
 	if err != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}
@@ -91,7 +103,7 @@ func GoogleAuthCallback(authCode string) {
 	if err != nil {
 		log.Fatalf("Unable to read client secret file: %v", err)
 	}
-	config, err := google.ConfigFromJSON(b, drive.DriveMetadataReadonlyScope)
+	config, err := google.ConfigFromJSON(b, scopes...)
 	if err != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}
@@ -111,22 +123,22 @@ func GoogleAuthCallback(authCode string) {
 	// authorization code is shown in the browser URL
 }
 
-func GoogleSync() []string {
+func GoogleSync(ctx context.Context) []Chunk {
 	b, err := os.ReadFile(credentialPath)
 	if err != nil {
 		log.Fatalf("Unable to read client secret file: %v", err)
 	}
-	config, err := google.ConfigFromJSON(b, drive.DriveMetadataReadonlyScope)
+	config, err := google.ConfigFromJSON(b, scopes...)
 	if err != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}
 
-	client, err := getClient(config)
+	client, err := getClient(ctx, config)
 	if err != nil {
 		log.Fatalf("Unable to get client: %v", err)
 	}
 
-	srv, err := drive.New(client)
+	srv, err := drive.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
 		log.Fatalf("Unable to retrieve Drive client: %v", err)
 	}
@@ -134,18 +146,96 @@ func GoogleSync() []string {
 	return listFiles(srv)
 }
 
-func listFiles(service *drive.Service) []string {
-	r, err := service.Files.List().PageSize(10).Fields("nextPageToken, files(id, name)").Do()
+type Chunk struct {
+	Text       string
+	SourceURL  string
+	SourceName string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+var lastSyncTime time.Time = time.UnixMicro(0)
+
+func listFiles(service *drive.Service) []Chunk {
+	r, err := service.Files.List().
+		PageSize(10).
+		Fields("nextPageToken, files(id, name, webViewLink, createdTime, modifiedTime, mimeType)").
+		Q("modifiedTime > '" + lastSyncTime.Format(time.RFC3339) + "'").
+		Do()
 	if err != nil {
 		log.Fatalf("Unable to retrieve files: %v", err)
 	}
-	if len(r.Files) == 0 {
-		return []string{}
+	var chunks []Chunk
+	for _, file := range r.Files {
+		var content string
+		if file.MimeType == "application/vnd.google-apps.document" {
+			content, err = exportFile(service, file.Id, "text/plain")
+		} else if file.MimeType == "application/vnd.google-apps.spreadsheet" {
+			content, err = exportFile(service, file.Id, "application/csv")
+		} else {
+			//content, err = downloadFile(service, file.Id)
+			log.Printf("binary file found: %s with mimeType: %s", file.Name, file.MimeType)
+		}
+		if err != nil {
+			log.Printf("Error processing file %s: %v", file.Name, err)
+			continue
+		}
+
+		log.Printf("File: %s, %s, %s", file.Name, file.CreatedTime, file.ModifiedTime)
+		createdAt, err := time.Parse(time.RFC3339, file.CreatedTime)
+		if err != nil {
+			log.Printf("Error parsing created time %s: %v", file.CreatedTime, err)
+			createdAt = time.Now()
+		}
+
+		updatedAt, err := time.Parse(time.RFC3339, file.ModifiedTime)
+		if err != nil {
+			log.Printf("Error parsing modified time %s: %v", file.ModifiedTime, err)
+			updatedAt = time.Now()
+		}
+
+		// Split contents into chunks of MaxChunkSize characters
+		for i := 0; i < len(content); i += MaxChunkSize {
+			end := i + 1000
+			if end > len(content) {
+				end = len(content)
+			}
+			chunk := Chunk{
+				Text:       content[i:end],
+				SourceURL:  file.WebViewLink,
+				SourceName: "Google Drive",
+				CreatedAt:  createdAt,
+				UpdatedAt:  updatedAt,
+			}
+			chunks = append(chunks, chunk)
+		}
 	}
-	fmt.Println("Files:")
-	res := []string{}
-	for _, i := range r.Files {
-		res = append(res, fmt.Sprintf("%s (%s)\n", i.Name, i.Id))
+	lastSyncTime = time.Now() // Update last sync time after retrieving files
+	return chunks
+}
+
+func downloadFile(service *drive.Service, fileId string) (string, error) {
+	resp, err := service.Files.Get(fileId).Download()
+	if err != nil {
+		return "", err
 	}
-	return res
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func exportFile(service *drive.Service, fileId string, mimeType string) (string, error) {
+	resp, err := service.Files.Export(fileId, mimeType).Download()
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
