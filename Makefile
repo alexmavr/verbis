@@ -1,4 +1,4 @@
-.PHONY: build service lamoid weaviate
+.PHONY: build lamoid 
 
 WEAVIATE_VERSION := v1.24.9
 OLLAMA_VERSION := v0.1.32
@@ -10,7 +10,7 @@ OLLAMA_URL := https://github.com/ollama/ollama/releases/download/$(OLLAMA_VERSIO
 
 all: macapp
 
-ollama:
+dist/ollama:
 	# Ensure the distribution directory exists
 	mkdir -p $(DIST_DIR)
 
@@ -20,7 +20,7 @@ ollama:
 	# Make the binary executable
 	chmod +x $(DIST_DIR)/ollama
 
-weaviate:
+dist/weaviate:
 	# Ensure dist directory exists
 	mkdir -p $(DIST_DIR)
 
@@ -45,5 +45,5 @@ lamoid:
 
 	pushd lamoid && go build -o ../$(DIST_DIR)/lamoid . && popd
 
-macapp: lamoid ollama weaviate
+macapp: lamoid dist/ollama dist/weaviate
 	pushd macapp && npm install && npm run package && popd

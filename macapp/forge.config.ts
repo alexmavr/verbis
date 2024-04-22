@@ -19,6 +19,7 @@ const config: ForgeConfig = {
       '../dist/lamoid',
       '../dist/ollama',
       '../dist/weaviate',
+      '../dist/credentials.json',
 //      path.join(__dirname, './assets/iconTemplate.png'),
     ],
     ...(process.env.SIGN

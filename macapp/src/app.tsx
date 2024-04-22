@@ -1,10 +1,8 @@
 import { useState } from 'react'
-import copy from 'copy-to-clipboard'
-import { CheckIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline'
 import Store from 'electron-store'
 import { getCurrentWindow, app } from '@electron/remote'
 
-import { google_init, google_sync, prompt } from './install'
+import { google_init, google_sync, generate } from './client'
 import LamoidIcon from './lamoid.svg'
 
 const store = new Store()
@@ -18,14 +16,16 @@ enum Step {
 
 export default function () {
   const [step, setStep] = useState<Step>(Step.WELCOME)
-  const [commandCopied, setCommandCopied] = useState<boolean>(false)
-
-  const command = 'ollama run llama2'
+  const [promptText, setPromptText] = useState(''); // State to store input from the textbox
+  const [promptResponse, setPromptResponse] = useState(''); // State to store the prompt response
 
   return (
     <div className='drag'>
       <div className='mx-auto flex min-h-screen w-full flex-col justify-between bg-white px-4 pt-16'>
         {step === Step.WELCOME && (
+          // TODO: Wait for all processes to start successfully, show spinner
+          // Block on a /health endpoint
+
           <>
             <div className='mx-auto text-center'>
               <h1 className='mb-6 mt-4 text-2xl tracking-tight text-gray-900'>Welcome to Lamoid</h1>
@@ -104,14 +104,22 @@ export default function () {
             <div className='mx-auto flex flex-col space-y-20 text-center'>
               <h1 className='mt-4 text-2xl tracking-tight text-gray-900'>Prompt to your heart's desire</h1>
               <div className='flex flex-col'>
+                <input
+                  type="text"
+                  value={promptText}
+                  onChange={e => setPromptText(e.target.value)}
+                  placeholder="Enter your prompt"
+                  className="text-center w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                />
                 <div className='group relative flex items-center'>
                   <button
                     onClick={async () => {
                       try {
-                        await prompt("nikolas")
-                        setStep(Step.GOOGLE_SYNC)
+                        const response = await generate(promptText)
+                        console.log('Prompt response:', response)
+                        setPromptResponse(response); // Store the response to state
                       } catch (e) {
-                        console.error('could not install: ', e)
+                        console.error('could not prompt: ', e)
                       } finally {
                         getCurrentWindow().show()
                         getCurrentWindow().focus()
@@ -121,6 +129,11 @@ export default function () {
                   >
                     Prompt
                   </button>
+                  {promptResponse && (
+                    <div className="mt-4 text-sm text-gray-600">
+                      Response: {promptResponse}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

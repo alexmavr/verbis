@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	credentialPath = "credentials.json"
+	credentialPath = "../Resources/credentials.json"
 	tokenKey       = "user-google-oauth-token"
 	keyringService = "LamoidApp"
 )

@@ -72,6 +72,7 @@
     "@electron/remote": "^2.0.10",
     "@heroicons/react": "^2.0.18",
     "@segment/analytics-node": "^1.0.0",
+    "axios": "^1.6.8",
     "copy-to-clipboard": "^3.3.3",
     "electron-squirrel-startup": "^1.0.0",
     "electron-store": "^8.1.0",
