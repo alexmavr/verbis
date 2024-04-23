@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Store from 'electron-store'
 import { getCurrentWindow, app } from '@electron/remote'
+import axios from 'axios'
 
 import { google_init, google_sync, generate } from './client'
 import LamoidIcon from './lamoid.svg'
@@ -18,26 +19,45 @@ export default function () {
   const [step, setStep] = useState<Step>(Step.WELCOME)
   const [promptText, setPromptText] = useState(''); // State to store input from the textbox
   const [promptResponse, setPromptResponse] = useState(''); // State to store the prompt response
+  const [loading, setLoading] = useState(true); // State for the spinner
+
+  useEffect(() => {
+    const checkHealth = async () => {
+      try {
+        await axios.get('http://localhost:8081/health');
+        setLoading(false); // Turn off spinner on successful response
+      } catch (error) {
+        console.error('Error checking health: ', error);
+        setTimeout(checkHealth, 3000); // Retry after 3 seconds if the request fails
+      }
+    };
+
+    checkHealth();
+  }, []);
+
 
   return (
     <div className='drag'>
       <div className='mx-auto flex min-h-screen w-full flex-col justify-between bg-white px-4 pt-16'>
         {step === Step.WELCOME && (
-          // TODO: Wait for all processes to start successfully, show spinner
-          // Block on a /health endpoint
-
           <>
             <div className='mx-auto text-center'>
               <h1 className='mb-6 mt-4 text-2xl tracking-tight text-gray-900'>Welcome to Lamoid</h1>
-              <p className='mx-auto w-[65%] text-sm text-gray-400'>
-                Let's get you up and running.
-              </p>
-              <button
-                onClick={() => setStep(Step.GOOGLE_INIT)}
-                className='no-drag rounded-dm mx-auto my-8 w-[40%] rounded-md bg-black px-4 py-2 text-sm text-white hover:brightness-110'
-              >
-                Google sync
-              </button>
+              {loading ? (
+                <div className="spinner">Lamoid is still starting...</div> // Display spinner while loading
+              ) : (
+                <>
+                  <p className='mx-auto w-[65%] text-sm text-gray-400'>
+                    Let's get you up and running.
+                  </p>
+                  <button
+                    onClick={() => setStep(Step.GOOGLE_INIT)}
+                    className='no-drag rounded-dm mx-auto my-8 w-[40%] rounded-md bg-black px-4 py-2 text-sm text-white hover:brightness-110'
+                  >
+                    Google sync
+                  </button>
+                </>
+              )}
             </div>
             <div className='mx-auto'>
               <LamoidIcon />

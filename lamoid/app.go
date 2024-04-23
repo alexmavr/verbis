@@ -165,8 +165,15 @@ func setupRouter() *mux.Router {
 	r.HandleFunc("/google/callback", handleGoogleCallback).Methods("GET")
 	r.HandleFunc("/google/sync", googleSync).Methods("GET")
 	r.HandleFunc("/prompt", handlePrompt).Methods("GET")
+	r.HandleFunc("/health", health).Methods("GET")
 
 	return r
+}
+
+func health(w http.ResponseWriter, r *http.Request) {
+	// TODO: check for health of subprocesses - not needed for first boot
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
 }
 
 func googleInit(w http.ResponseWriter, r *http.Request) {
