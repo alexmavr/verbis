@@ -29,6 +29,9 @@ const (
 	MaxChunkSize   = 10000 // Maximum number of characters in a chunk
 )
 
+type GoogleConnector struct {
+}
+
 func getClient(ctx context.Context, config *oauth2.Config) (*http.Client, error) {
 	// Token from Keychain
 	tok, err := tokenFromKeychain()
@@ -73,74 +76,77 @@ var scopes []string = []string{
 	drive.DriveReadonlyScope,
 }
 
-func GoogleInitialConfig() {
+func (g *GoogleConnector) Init(ctx context.Context) error {
 	b, err := os.ReadFile(credentialPath)
 	if err != nil {
-		log.Fatalf("Unable to read client secret file: %v", err)
+		return fmt.Errorf("unable to read client secret file: %v", err)
 	}
 
 	config, err := google.ConfigFromJSON(b,
 		scopes...,
 	)
 	if err != nil {
-		log.Fatalf("Unable to parse client secret file to config: %v", err)
+		return fmt.Errorf("unable to parse client secret file to config: %v", err)
 	}
 	_, err = tokenFromKeychain()
 	if err == nil {
 		// TODO: check for expiry of refresh token
 		log.Print("Token found in keychain.")
-		return
+		return nil
 	}
 	log.Print("No token found in keychain. Getting token from web.")
 	err = requestOauthWeb(config)
 	if err != nil {
 		log.Printf("Unable to request token from web: %v", err)
 	}
+	return nil
 }
 
-func GoogleAuthCallback(authCode string) {
+func (g *GoogleConnector) AuthCallback(ctx context.Context, authCode string) error {
 	b, err := os.ReadFile(credentialPath)
 	if err != nil {
-		log.Fatalf("Unable to read client secret file: %v", err)
+		return fmt.Errorf("unable to read client secret file: %v", err)
 	}
 	config, err := google.ConfigFromJSON(b, scopes...)
 	if err != nil {
-		log.Fatalf("Unable to parse client secret file to config: %v", err)
+		return fmt.Errorf("unable to parse client secret file to config: %v", err)
 	}
 
 	log.Printf("Auth code: %s", authCode)
 
 	config.RedirectURL = "http://127.0.0.1:8081/google/callback"
 	log.Printf("Config: %v", config)
-	tok, err := config.Exchange(oauth2.NoContext, authCode)
+	tok, err := config.Exchange(ctx, authCode)
 	if err != nil {
-		log.Fatalf("Unable to retrieve token from web: %v", err)
+		return fmt.Errorf("unable to retrieve token from web: %v", err)
 	}
 
 	saveTokenToKeychain(tok)
 
 	// TODO: redirect to a "done" page - don't just render it because the
 	// authorization code is shown in the browser URL
+	return nil
 }
 
-func GoogleSync(ctx context.Context) []Chunk {
+func (g *GoogleConnector) Sync(ctx context.Context) ([]Chunk, error) {
+	res := []Chunk{}
 	b, err := os.ReadFile(credentialPath)
 	if err != nil {
-		log.Fatalf("Unable to read client secret file: %v", err)
+		return res, fmt.Errorf("unable to read client secret file: %v", err)
 	}
 	config, err := google.ConfigFromJSON(b, scopes...)
 	if err != nil {
-		log.Fatalf("Unable to parse client secret file to config: %v", err)
+		return res, fmt.Errorf("unable to parse client secret file to config: %v", err)
 	}
 
 	client, err := getClient(ctx, config)
 	if err != nil {
-		log.Fatalf("Unable to get client: %v", err)
+		return res, fmt.Errorf("unable to get client: %v", err)
 	}
 
 	srv, err := drive.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
-		log.Fatalf("Unable to retrieve Drive client: %v", err)
+		return res, fmt.Errorf("unable to retrieve Drive client: %v", err)
 	}
 
 	return listFiles(srv)
@@ -148,16 +154,17 @@ func GoogleSync(ctx context.Context) []Chunk {
 
 var lastSyncTime time.Time = time.UnixMicro(0)
 
-func listFiles(service *drive.Service) []Chunk {
+func listFiles(service *drive.Service) ([]Chunk, error) {
+	var chunks []Chunk
 	r, err := service.Files.List().
 		PageSize(10).
 		Fields("nextPageToken, files(id, name, webViewLink, createdTime, modifiedTime, mimeType)").
 		Q("modifiedTime > '" + lastSyncTime.Format(time.RFC3339) + "'").
 		Do()
 	if err != nil {
-		log.Fatalf("Unable to retrieve files: %v", err)
+		return chunks, fmt.Errorf("unable to retrieve files: %v", err)
 	}
-	var chunks []Chunk
+
 	for _, file := range r.Files {
 		var content string
 		if file.MimeType == "application/vnd.google-apps.document" {
@@ -193,17 +200,19 @@ func listFiles(service *drive.Service) []Chunk {
 				end = len(content)
 			}
 			chunk := Chunk{
-				Text:       content[i:end],
-				SourceURL:  file.WebViewLink,
-				SourceName: "Google Drive",
-				CreatedAt:  createdAt,
-				UpdatedAt:  updatedAt,
+				Text: content[i:end],
+				Document: Document{
+					SourceURL:  file.WebViewLink,
+					SourceName: "Google Drive",
+					CreatedAt:  createdAt,
+					UpdatedAt:  updatedAt,
+				},
 			}
 			chunks = append(chunks, chunk)
 		}
 	}
 	lastSyncTime = time.Now() // Update last sync time after retrieving files
-	return chunks
+	return chunks, nil
 }
 
 // TODO: download PDFs and parse with unstructured

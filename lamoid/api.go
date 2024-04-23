@@ -29,6 +29,7 @@ var (
 		{Name: "updatedAt"},
 		{Name: "createdAt"},
 	}
+	GoogleConnector = connectors.GoogleConnector{}
 )
 
 func getWeaviateClient() *weaviate.Client {
@@ -57,7 +58,12 @@ func health(w http.ResponseWriter, r *http.Request) {
 }
 
 func googleInit(w http.ResponseWriter, r *http.Request) {
-	connectors.GoogleInitialConfig()
+	err := GoogleConnector.Init(r.Context())
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to perform initial auth with google: " + err.Error()))
+		return
+	}
 }
 
 func handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
@@ -69,16 +75,25 @@ func handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := queryParts.Get("error")
-	if err != "" {
-		log.Printf("Error in Google callback: %s\n", err)
+	errStr := queryParts.Get("error")
+	if errStr != "" {
+		log.Printf("Error in Google callback: %s\n", errStr)
 	}
 
-	connectors.GoogleAuthCallback(code)
+	err := GoogleConnector.AuthCallback(r.Context(), code)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to authenticate with Google: " + err.Error()))
+	}
 }
 
 func googleSync(w http.ResponseWriter, r *http.Request) {
-	chunks := connectors.GoogleSync(r.Context())
+	chunks, err := GoogleConnector.Sync(r.Context())
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to sync with Google: " + err.Error()))
+		return
+	}
 	log.Printf("Synced %d chunks from Google\n", len(chunks))
 
 	chunkItems := []AddVectorItem{}
@@ -97,7 +112,7 @@ func googleSync(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	err := addVectors(context.Background(), getWeaviateClient(), chunkItems)
+	err = addVectors(context.Background(), getWeaviateClient(), chunkItems)
 	if err != nil {
 		log.Fatalf("Failed to add vectors: %s\n", err)
 	}
@@ -435,10 +450,10 @@ func addVectors(ctx context.Context, client *weaviate.Client, items []AddVectorI
 			Class: weaviateClassName,
 			Properties: map[string]string{
 				"chunk":      cleanWhitespace(item.Chunk.Text),
-				"sourceURL":  item.Chunk.SourceURL,
-				"sourceName": item.Chunk.SourceName,
-				"createdAt":  item.Chunk.CreatedAt.String(),
-				"updatedAt":  item.Chunk.UpdatedAt.String(),
+				"sourceURL":  item.Chunk.Document.SourceURL,
+				"sourceName": item.Chunk.Document.SourceName,
+				"createdAt":  item.Chunk.Document.CreatedAt.String(),
+				"updatedAt":  item.Chunk.Document.UpdatedAt.String(),
 			},
 			Vector: item.Vector,
 		})
