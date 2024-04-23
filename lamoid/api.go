@@ -48,6 +48,8 @@ func setupRouter() *mux.Router {
 	r.HandleFunc("/prompt", handlePrompt).Methods("POST")
 	r.HandleFunc("/health", health).Methods("GET")
 
+	r.HandleFunc("/connectors", connectorsList).Methods("GET")
+
 	return r
 }
 
@@ -55,6 +57,19 @@ func health(w http.ResponseWriter, r *http.Request) {
 	// TODO: check for health of subprocesses - not needed for first boot
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
+}
+
+func connectorsList(w http.ResponseWriter, r *http.Request) {
+	status := GoogleConnector.Status(r.Context())
+
+	b, err := json.Marshal(status)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to marshal status: " + err.Error()))
+		return
+	}
+
+	w.Write(b)
 }
 
 func googleInit(w http.ResponseWriter, r *http.Request) {

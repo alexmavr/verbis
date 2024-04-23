@@ -32,6 +32,20 @@ const (
 type GoogleConnector struct {
 }
 
+func (g *GoogleConnector) Name() string {
+	return "Google Drive"
+}
+
+func (g *GoogleConnector) Status(ctx context.Context) ConnectorStatus {
+	return ConnectorStatus{
+		Name:         g.Name(),
+		AuthValid:    true,
+		LastSync:     lastSyncTime,
+		NumDocuments: 0,
+		NumChunks:    0,
+	}
+}
+
 func getClient(ctx context.Context, config *oauth2.Config) (*http.Client, error) {
 	// Token from Keychain
 	tok, err := tokenFromKeychain()
