@@ -32,14 +32,18 @@ export async function google_sync() {
   }
 }
 
-export async function generate(promptText: string): Promise<string> {
+export async function generate(promptText: string, history: { role: string; content: string; }[] = []): Promise<string> {
   try {
-    const response = await axios.get('http://localhost:8081/prompt', {
-      params: { prompt: promptText }
-    });
+    const payload = {
+      prompt: promptText,
+      history: history.length > 0 ? history : []
+    };
+
+    const response = await axios.post('http://localhost:8081/prompt', payload);
     console.log('Prompt Response:', response.data);
-    // Assuming response.data is an object with a 'Response' field
-    return response.data;
+
+    // Assuming the server returns the response text directly
+    return response.data; // Adjust this according to your server's response structure
   } catch (error) {
     console.error('Error when sending prompt:', error);
     throw new Error(`Failed to retrieve data: ${error.message}`);

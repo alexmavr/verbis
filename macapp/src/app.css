@@ -23,7 +23,7 @@ body {
   animation: 1s blink step-end infinite;
 }
 
-.spinner {
+spinner {
   display: flex;
   justify-content: center;
   align-items: center;
@@ -36,6 +36,36 @@ body {
   font-size: 24px;
   color: black;
 }
+
+.conversation-container {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #ccc;
+  padding: 10px;
+  margin-top: 20px;
+}
+
+.message {
+  padding: 5px;
+  margin-bottom: 5px;
+  border-radius: 10px;
+  max-width: 80%;
+}
+
+.user {
+  align-self: flex-end;
+  background-color: #dcf8c6;
+}
+
+.assistant {
+  align-self: flex-start;
+  background-color: #ebebeb;
+}
+
+.message-content {
+  padding: 10px;
+}
+
 
 @keyframes blink {
   from,

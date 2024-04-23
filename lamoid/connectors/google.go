@@ -146,14 +146,6 @@ func GoogleSync(ctx context.Context) []Chunk {
 	return listFiles(srv)
 }
 
-type Chunk struct {
-	Text       string
-	SourceURL  string
-	SourceName string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
-}
-
 var lastSyncTime time.Time = time.UnixMicro(0)
 
 func listFiles(service *drive.Service) []Chunk {
@@ -214,6 +206,7 @@ func listFiles(service *drive.Service) []Chunk {
 	return chunks
 }
 
+// TODO: download PDFs and parse with unstructured
 func downloadFile(service *drive.Service, fileId string) (string, error) {
 	resp, err := service.Files.Get(fileId).Download()
 	if err != nil {

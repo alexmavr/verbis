@@ -20,6 +20,7 @@ export default function () {
   const [promptText, setPromptText] = useState(''); // State to store input from the textbox
   const [promptResponse, setPromptResponse] = useState(''); // State to store the prompt response
   const [loading, setLoading] = useState(true); // State for the spinner
+  const [conversation, setConversation] = useState([]);
 
   useEffect(() => {
     const checkHealth = async () => {
@@ -35,6 +36,41 @@ export default function () {
     checkHealth();
   }, []);
 
+  // Function to handle the prompting action
+  const triggerPrompt = async () => {
+    if (!promptText.trim()) return; // Do nothing if the prompt is empty
+
+    // Transform conversation history to the expected format
+    const history = conversation.map(item => ({
+      role: item.role,
+      content: item.content
+    }));
+
+    try {
+      const response = await generate(promptText, history);
+      // Assuming that response is just the assistant's text, adjust if it's structured differently
+      setConversation(conv => [
+        ...conv,
+        { role: 'user', content: promptText },
+        { role: 'assistant', content: response }
+      ]);
+      setPromptText(''); // Clear the input field after sending the prompt
+    } catch (e) {
+      console.error('Error during prompt generation: ', e);
+      // You might want to handle this error in the UI as well
+    } finally {
+      getCurrentWindow().show();
+      getCurrentWindow().focus();
+    }
+  };
+
+  const renderConversation = () => {
+    return conversation.map((item, index) => (
+      <div key={index} className={`message ${item.role}`}>
+        <div className="message-content">{item.content}</div>
+      </div>
+    ));
+  };
 
   return (
     <div className='drag'>
@@ -44,7 +80,7 @@ export default function () {
             <div className='mx-auto text-center'>
               <h1 className='mb-6 mt-4 text-2xl tracking-tight text-gray-900'>Welcome to Lamoid</h1>
               {loading ? (
-                <div className="spinner">Lamoid is still starting...</div> // Display spinner while loading
+                <div className="spinner">Lamoid is still starting...</div>
               ) : (
                 <>
                   <p className='mx-auto w-[65%] text-sm text-gray-400'>
@@ -129,31 +165,24 @@ export default function () {
                   value={promptText}
                   onChange={e => setPromptText(e.target.value)}
                   placeholder="Enter your prompt"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      triggerPrompt();
+                    }
+                  }}
                   className="text-center w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
                 />
                 <div className='group relative flex items-center'>
                   <button
-                    onClick={async () => {
-                      try {
-                        const response = await generate(promptText)
-                        console.log('Prompt response:', response)
-                        setPromptResponse(response); // Store the response to state
-                      } catch (e) {
-                        console.error('could not prompt: ', e)
-                      } finally {
-                        getCurrentWindow().show()
-                        getCurrentWindow().focus()
-                      }
-                    }}
+                    onClick={triggerPrompt}
                     className='no-drag rounded-dm mx-auto w-[60%] rounded-md bg-black px-4 py-2 text-sm text-white hover:brightness-110'
                   >
                     Prompt
                   </button>
-                  {promptResponse && (
-                    <div className="mt-4 text-sm text-gray-600">
-                      Response: {promptResponse}
-                    </div>
-                  )}
+                  <div className='conversation-container'>
+                    {renderConversation()}
+                  </div>
                 </div>
               </div>
             </div>

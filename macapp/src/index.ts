@@ -28,24 +28,24 @@ const logger = winston.createLogger({
 })
 
 app.on('ready', () => {
-  //const gotTheLock = app.requestSingleInstanceLock()
-  //if (!gotTheLock) {
-  //  app.exit(0)
-  //  return
-  //}
+  const gotTheLock = app.requestSingleInstanceLock()
+  if (!gotTheLock) {
+    app.exit(0)
+    return
+  }
 
-//  app.on('second-instance', () => {
-//    if (app.hasSingleInstanceLock()) {
-//      app.releaseSingleInstanceLock()
-//    }
-//
-//    if (proc) {
-//      proc.off('exit', restart)
-//      proc.kill()
-//    }
-//
-//    app.exit(0)
-//  })
+  app.on('second-instance', () => {
+    if (app.hasSingleInstanceLock()) {
+      app.releaseSingleInstanceLock()
+    }
+
+    if (proc) {
+      proc.off('exit', restart)
+      proc.kill()
+    }
+
+    app.exit(0)
+  })
 
   app.focus({ steal: true })
 
@@ -57,7 +57,7 @@ function firstRunWindow() {
   welcomeWindow = new BrowserWindow({
     width: 800,
     height: 1000,
-    frame: false,
+    frame: true,
     fullscreenable: true,
     resizable: true,
     movable: true,
@@ -67,7 +67,7 @@ function firstRunWindow() {
       contextIsolation: false,
     },
   })
-  welcomeWindow.webContents.openDevTools();
+  welcomeWindow.webContents.openDevTools(); // TODO: this is debug only
 
   require('@electron/remote/main').enable(welcomeWindow.webContents)
 
