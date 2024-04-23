@@ -66,6 +66,28 @@ spinner {
   padding: 10px;
 }
 
+.prompt-section {
+  display: flex;
+  justify-content: space-between; /* Adjust as needed */
+  align-items: center;
+}
+
+.prompt-input {
+  flex-grow: 1; /* Input takes up available space */
+  margin-right: 10px; /* Spacing between input and button */
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.prompt-button {
+  padding: 10px 20px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
 
 @keyframes blink {
   from,

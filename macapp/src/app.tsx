@@ -159,7 +159,20 @@ export default function () {
           <>
             <div className='mx-auto flex flex-col space-y-20 text-center'>
               <h1 className='mt-4 text-2xl tracking-tight text-gray-900'>Prompt to your heart's desire</h1>
-              <div className='flex flex-col'>
+
+              {/* Conversation history */}
+              {conversation.length > 0 && (
+                <div className='conversation-container'>
+                  {conversation.map((item, index) => (
+                    <div key={index} className={`message ${item.role}`}>
+                      <div className="message-content">{item.content}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Prompt input and button */}
+              <div className='prompt-section'>
                 <input
                   type="text"
                   value={promptText}
@@ -171,19 +184,14 @@ export default function () {
                       triggerPrompt();
                     }
                   }}
-                  className="text-center w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                  className="prompt-input"
                 />
-                <div className='group relative flex items-center'>
-                  <button
-                    onClick={triggerPrompt}
-                    className='no-drag rounded-dm mx-auto w-[60%] rounded-md bg-black px-4 py-2 text-sm text-white hover:brightness-110'
-                  >
-                    Prompt
-                  </button>
-                  <div className='conversation-container'>
-                    {renderConversation()}
-                  </div>
-                </div>
+                <button
+                  onClick={triggerPrompt}
+                  className='prompt-button'
+                >
+                  Prompt
+                </button>
               </div>
             </div>
           </>
