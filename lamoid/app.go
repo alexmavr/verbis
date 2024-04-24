@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -10,10 +13,14 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/epochlabs-ai/lamoid/lamoid/store"
+	"github.com/epochlabs-ai/lamoid/lamoid/types"
 )
 
 var (
-	httpClient = &http.Client{Timeout: 10 * time.Second}
+	httpClient          = &http.Client{Timeout: 10 * time.Second}
+	generationModelName = "phi3"
 )
 
 func main() {
@@ -67,7 +74,7 @@ func main() {
 		log.Fatalf("Failed to wait for ollama: %s\n", err)
 	}
 
-	err = pullModel("llama3", false)
+	err = pullModel(generationModelName, false)
 	if err != nil {
 		log.Fatalf("Failed to pull model: %s\n", err)
 	}
@@ -78,10 +85,12 @@ func main() {
 	}
 
 	// Create index for vector search
-	createWeaviateSchema(ctx, getWeaviateClient())
+	weavClient := store.GetWeaviateClient()
+	store.CreateChunkClass(ctx, weavClient)
+	store.CreateConnectorStateClass(ctx, weavClient)
 
 	// Perform a test generation with ollama to load the model in memory
-	resp, err := chatWithModel("What is the capital of France?", []HistoryItem{})
+	resp, err := chatWithModel("What is the capital of France? Respond in one word only", []types.HistoryItem{})
 	if err != nil {
 		log.Fatalf("Failed to generate response: %s\n", err)
 	}
@@ -128,4 +137,63 @@ func startSubprocesses(ctx context.Context, commands []struct {
 			}
 		}(cmdConfig)
 	}
+}
+
+// Function to call ollama model
+func chatWithModel(prompt string, history []types.HistoryItem) (*ApiResponse, error) {
+	// URL of the API endpoint
+	url := "http://localhost:11434/api/chat"
+
+	messages := append(history, types.HistoryItem{
+		Role:    "user",
+		Content: prompt,
+	})
+
+	// TODO: pass history
+	// Create the payload
+	payload := RequestPayload{
+		Model:     generationModelName,
+		Messages:  messages,
+		Stream:    false,
+		KeepAlive: "20m",
+	}
+
+	// Marshal the payload into JSON
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a new HTTP request
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, err
+	}
+
+	// Set the appropriate headers
+	req.Header.Set("Content-Type", "application/json")
+
+	// Make the HTTP request using the default client
+	client := &http.Client{}
+	response, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+
+	// Read the response body
+	responseData, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("Response: %v", string(responseData))
+
+	// Unmarshal JSON data into ApiResponse struct
+	var apiResponse ApiResponse
+	if err := json.Unmarshal(responseData, &apiResponse); err != nil {
+		return nil, err
+	}
+
+	// Return the structured response
+	return &apiResponse, nil
 }

@@ -8,37 +8,19 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/weaviate/weaviate-go-client/v4/weaviate"
-	"github.com/weaviate/weaviate-go-client/v4/weaviate/graphql"
-	"github.com/weaviate/weaviate/entities/models"
 
 	"github.com/epochlabs-ai/lamoid/lamoid/connectors"
+	"github.com/epochlabs-ai/lamoid/lamoid/store"
+	"github.com/epochlabs-ai/lamoid/lamoid/types"
 )
 
 var (
-	weaviateClassName = "LamoidChunk"
-	_fields           = []graphql.Field{
-		{Name: "chunk"},
-		{Name: "sourceURL"},
-		{Name: "sourceName"},
-		{Name: "updatedAt"},
-		{Name: "createdAt"},
-	}
 	GoogleConnector = connectors.GoogleConnector{}
 )
-
-func getWeaviateClient() *weaviate.Client {
-	// Initialize Weaviate client
-	return weaviate.New(weaviate.Config{
-		Host:   "localhost:8088",
-		Scheme: "http",
-	})
-}
 
 func setupRouter() *mux.Router {
 	r := mux.NewRouter()
@@ -49,6 +31,7 @@ func setupRouter() *mux.Router {
 	r.HandleFunc("/health", health).Methods("GET")
 
 	r.HandleFunc("/connectors", connectorsList).Methods("GET")
+	r.HandleFunc("/mock", mockConnectorState).Methods("GET")
 
 	return r
 }
@@ -59,8 +42,30 @@ func health(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
 }
 
+func mockConnectorState(w http.ResponseWriter, r *http.Request) {
+	state := &types.ConnectorState{
+		Name:         "Google Drive",
+		Syncing:      true,
+		LastSync:     time.Now(),
+		NumDocuments: 15,
+		NumChunks:    1005,
+	}
+
+	err := store.UpdateConnectorState(context.Background(), store.GetWeaviateClient(), state)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to update state: " + err.Error()))
+		return
+	}
+}
+
 func connectorsList(w http.ResponseWriter, r *http.Request) {
-	status := GoogleConnector.Status(r.Context())
+	status, err := GoogleConnector.Status(r.Context())
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to get status: " + err.Error()))
+		return
+	}
 
 	b, err := json.Marshal(status)
 	if err != nil {
@@ -111,7 +116,7 @@ func googleSync(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("Synced %d chunks from Google\n", len(chunks))
 
-	chunkItems := []AddVectorItem{}
+	chunkItems := []types.AddVectorItem{}
 	for _, chunk := range chunks {
 		log.Printf("Processing chunk: %s\n", chunk.SourceURL)
 		resp, err := EmbedFromModel(chunk.Text)
@@ -121,13 +126,13 @@ func googleSync(w http.ResponseWriter, r *http.Request) {
 		}
 		embedding := resp.Embedding
 
-		chunkItems = append(chunkItems, AddVectorItem{
+		chunkItems = append(chunkItems, types.AddVectorItem{
 			Chunk:  chunk,
 			Vector: embedding,
 		})
 	}
 
-	err = addVectors(context.Background(), getWeaviateClient(), chunkItems)
+	err = store.AddVectors(context.Background(), store.GetWeaviateClient(), chunkItems)
 	if err != nil {
 		log.Fatalf("Failed to add vectors: %s\n", err)
 	}
@@ -281,94 +286,30 @@ func EmbedFromModel(prompt string) (*EmbedApiResponse, error) {
 
 // Struct to define the request payload
 type RequestPayload struct {
-	Model     string        `json:"model"`
-	Messages  []HistoryItem `json:"messages"`
-	Stream    bool          `json:"stream"`
-	KeepAlive string        `json:"keep_alive"`
+	Model     string              `json:"model"`
+	Messages  []types.HistoryItem `json:"messages"`
+	Stream    bool                `json:"stream"`
+	KeepAlive string              `json:"keep_alive"`
 }
 
 // Struct to define the API response format
 type ApiResponse struct {
-	Model              string      `json:"model"`
-	CreatedAt          time.Time   `json:"created_at"`
-	Message            HistoryItem `json:"message"`
-	Done               bool        `json:"done"`
-	Context            []int       `json:"context"`
-	TotalDuration      int64       `json:"total_duration"`
-	LoadDuration       int64       `json:"load_duration"`
-	PromptEvalCount    int         `json:"prompt_eval_count"`
-	PromptEvalDuration int64       `json:"prompt_eval_duration"`
-	EvalCount          int         `json:"eval_count"`
-	EvalDuration       int64       `json:"eval_duration"`
-}
-
-// Function to call ollama model
-func chatWithModel(prompt string, history []HistoryItem) (*ApiResponse, error) {
-	// URL of the API endpoint
-	url := "http://localhost:11434/api/chat"
-
-	messages := append(history, HistoryItem{
-		Role:    "user",
-		Content: prompt,
-	})
-
-	// TODO: pass history
-	// Create the payload
-	payload := RequestPayload{
-		Model:     "llama3",
-		Messages:  messages,
-		Stream:    false,
-		KeepAlive: "20m",
-	}
-
-	// Marshal the payload into JSON
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a new HTTP request
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, err
-	}
-
-	// Set the appropriate headers
-	req.Header.Set("Content-Type", "application/json")
-
-	// Make the HTTP request using the default client
-	client := &http.Client{}
-	response, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer response.Body.Close()
-
-	// Read the response body
-	responseData, err := io.ReadAll(response.Body)
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("Response: %v", string(responseData))
-
-	// Unmarshal JSON data into ApiResponse struct
-	var apiResponse ApiResponse
-	if err := json.Unmarshal(responseData, &apiResponse); err != nil {
-		return nil, err
-	}
-
-	// Return the structured response
-	return &apiResponse, nil
-}
-
-type HistoryItem struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Model              string            `json:"model"`
+	CreatedAt          time.Time         `json:"created_at"`
+	Message            types.HistoryItem `json:"message"`
+	Done               bool              `json:"done"`
+	Context            []int             `json:"context"`
+	TotalDuration      int64             `json:"total_duration"`
+	LoadDuration       int64             `json:"load_duration"`
+	PromptEvalCount    int               `json:"prompt_eval_count"`
+	PromptEvalDuration int64             `json:"prompt_eval_duration"`
+	EvalCount          int               `json:"eval_count"`
+	EvalDuration       int64             `json:"eval_duration"`
 }
 
 type PromptRequest struct {
-	Prompt  string        `json:"prompt"`
-	History []HistoryItem `json:"history"`
+	Prompt  string              `json:"prompt"`
+	History []types.HistoryItem `json:"history"`
 }
 
 func handlePrompt(w http.ResponseWriter, r *http.Request) {
@@ -392,7 +333,7 @@ func handlePrompt(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Performing vector search")
 
 	// Perform vector similarity search and get list of most relevant results
-	searchResults, err := vectorSearch(context.Background(), getWeaviateClient(), embeddings)
+	searchResults, err := store.VectorSearch(context.Background(), store.GetWeaviateClient(), embeddings)
 	if err != nil {
 		http.Error(w, "Failed to search for vectors", http.StatusInternalServerError)
 		return
@@ -440,100 +381,4 @@ func MakePrompt(dataChunks []string, query string) string {
 
 	// Return the final combined prompt
 	return builder.String()
-}
-
-// Add a vector to Weaviate
-type AddVectorItem struct {
-	connectors.Chunk
-	Vector []float32
-}
-
-func cleanWhitespace(text string) string {
-	// Trim leading and trailing whitespace
-	text = strings.TrimSpace(text)
-
-	// Replace internal sequences of whitespace with a single space
-	spacePattern := regexp.MustCompile(`\s+`)
-	return spacePattern.ReplaceAllString(text, " ")
-}
-
-func addVectors(ctx context.Context, client *weaviate.Client, items []AddVectorItem) error {
-	log.Printf("Adding %d vectors to vector store", len(items))
-	objects := []*models.Object{}
-	for _, item := range items {
-		objects = append(objects, &models.Object{
-			Class: weaviateClassName,
-			Properties: map[string]string{
-				"chunk":      cleanWhitespace(item.Chunk.Text),
-				"sourceURL":  item.Chunk.Document.SourceURL,
-				"sourceName": item.Chunk.Document.SourceName,
-				"createdAt":  item.Chunk.Document.CreatedAt.String(),
-				"updatedAt":  item.Chunk.Document.UpdatedAt.String(),
-			},
-			Vector: item.Vector,
-		})
-	}
-
-	_, err := client.Batch().ObjectsBatcher().WithObjects(objects...).Do(ctx)
-	return err
-}
-
-// Search for a vector in Weaviate
-func vectorSearch(ctx context.Context, client *weaviate.Client, vector []float32) ([]string, error) {
-	fmt.Println("Query vector length: ", len(vector))
-
-	all, _ := client.GraphQL().Get().WithClassName(weaviateClassName).Do(ctx)
-	log.Print(all.Data)
-
-	nearVector := client.GraphQL().NearVectorArgBuilder().WithVector(vector)
-
-	resp, err := client.GraphQL().
-		Get().
-		WithClassName(weaviateClassName).
-		WithNearVector(nearVector).
-		WithLimit(5).
-		WithFields(_fields...).
-		Do(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	log.Print(resp)
-	log.Print(resp.Data)
-	log.Print(resp.Data["Get"])
-
-	res := []string{}
-	if resp.Data["Get"] != nil {
-		get := resp.Data["Get"].(map[string]interface{})
-		chunks := get[weaviateClassName].([]interface{})
-		fmt.Println(chunks)
-
-		for _, chunkMap := range chunks {
-			c := chunkMap.(map[string]interface{})
-			for _, v := range c {
-				res = append(res, v.(string))
-			}
-		}
-	}
-
-	return res, nil
-}
-
-// Create Weaviate schema for vector storage
-func createWeaviateSchema(ctx context.Context, client *weaviate.Client) error {
-	// attempt to delete the class, don't fail if it doesn't exist
-	client.Schema().ClassDeleter().WithClassName(weaviateClassName).Do(ctx)
-
-	class := &models.Class{
-		Class:      weaviateClassName,
-		Vectorizer: "none",
-	}
-
-	// Create the class in Weaviate
-	err := client.Schema().ClassCreator().WithClass(class).Do(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to create Weaviate class: %v", err)
-	}
-
-	return nil
 }

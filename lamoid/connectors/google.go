@@ -16,10 +16,12 @@ import (
 
 	//   "google.golang.org/api/calendar/v3"
 	//    "google.golang.org/api/gmail/v1"
+	"github.com/zalando/go-keyring"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
 
-	"github.com/zalando/go-keyring"
+	"github.com/epochlabs-ai/lamoid/lamoid/store"
+	"github.com/epochlabs-ai/lamoid/lamoid/types"
 )
 
 const (
@@ -36,14 +38,8 @@ func (g *GoogleConnector) Name() string {
 	return "Google Drive"
 }
 
-func (g *GoogleConnector) Status(ctx context.Context) ConnectorStatus {
-	return ConnectorStatus{
-		Name:         g.Name(),
-		AuthValid:    true,
-		LastSync:     lastSyncTime,
-		NumDocuments: 0,
-		NumChunks:    0,
-	}
+func (g *GoogleConnector) Status(ctx context.Context) (*types.ConnectorState, error) {
+	return store.GetConnectorState(ctx, store.GetWeaviateClient(), g.Name())
 }
 
 func getClient(ctx context.Context, config *oauth2.Config) (*http.Client, error) {
@@ -142,8 +138,8 @@ func (g *GoogleConnector) AuthCallback(ctx context.Context, authCode string) err
 	return nil
 }
 
-func (g *GoogleConnector) Sync(ctx context.Context) ([]Chunk, error) {
-	res := []Chunk{}
+func (g *GoogleConnector) Sync(ctx context.Context) ([]types.Chunk, error) {
+	res := []types.Chunk{}
 	b, err := os.ReadFile(credentialPath)
 	if err != nil {
 		return res, fmt.Errorf("unable to read client secret file: %v", err)
@@ -168,8 +164,8 @@ func (g *GoogleConnector) Sync(ctx context.Context) ([]Chunk, error) {
 
 var lastSyncTime time.Time = time.UnixMicro(0)
 
-func listFiles(service *drive.Service) ([]Chunk, error) {
-	var chunks []Chunk
+func listFiles(service *drive.Service) ([]types.Chunk, error) {
+	var chunks []types.Chunk
 	r, err := service.Files.List().
 		PageSize(10).
 		Fields("nextPageToken, files(id, name, webViewLink, createdTime, modifiedTime, mimeType)").
@@ -213,9 +209,9 @@ func listFiles(service *drive.Service) ([]Chunk, error) {
 			if end > len(content) {
 				end = len(content)
 			}
-			chunk := Chunk{
+			chunk := types.Chunk{
 				Text: content[i:end],
-				Document: Document{
+				Document: types.Document{
 					SourceURL:  file.WebViewLink,
 					SourceName: "Google Drive",
 					CreatedAt:  createdAt,
