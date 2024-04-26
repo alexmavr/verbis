@@ -3,7 +3,7 @@ import Store from 'electron-store'
 import { getCurrentWindow, app } from '@electron/remote'
 import axios from 'axios'
 
-import { google_init, google_sync, generate } from './client'
+import { google_init, google_sync, generate, google_auth_setup } from './client'
 import LamoidIcon from './lamoid.svg'
 
 const store = new Store()
@@ -109,6 +109,7 @@ export default function () {
                   onClick={async () => {
                     try {
                       await google_init()
+                      await google_auth_setup()
                       setStep(Step.GOOGLE_SYNC)
                     } catch (e) {
                       console.error('could not install: ', e)

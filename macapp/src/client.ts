@@ -1,18 +1,14 @@
 import * as fs from 'fs'
-import { exec as cbExec } from 'child_process'
 import * as path from 'path'
 import { promisify } from 'util'
 import axios from 'axios';
 
-
 const app = process && process.type === 'renderer' ? require('@electron/remote').app : require('electron').app
 const lamoid = app.isPackaged ? path.join(process.resourcesPath, 'ollama') : path.resolve(process.cwd(), '..', 'lamoid')
-const exec = promisify(cbExec)
-const symlinkPath = '/usr/local/bin/ollama'
 
 export async function google_init() {
   try {
-    const response = await axios.get('http://localhost:8081/google/init');
+    const response = await axios.get('http://localhost:8081/connectors/google/init');
     console.log('Google Init Response:', response.data);
     // Additional logic based on response
   } catch (error) {
@@ -21,13 +17,25 @@ export async function google_init() {
   }
 }
 
-export async function google_sync() {
+export async function google_auth_setup() {
   try {
-    const response = await axios.get('http://localhost:8081/google/sync');
-    console.log('Google Init Response:', response.data);
+    const response = await axios.get('http://localhost:8081/connectors/google/auth_setup');
+    console.log('Google Auth Setup Response:', response.data);
     // Additional logic based on response
   } catch (error) {
-    console.error('Error in Google Init:', error);
+    console.error('Error in Google Auth Setup:', error);
+    throw error; // Rethrow or handle as needed
+  }
+}
+
+
+export async function google_sync() {
+  try {
+    const response = await axios.get('http://localhost:8081/sync/force');
+    console.log('Force Sync Response:', response.data);
+    // Additional logic based on response
+  } catch (error) {
+    console.error('Error in Force Sync:', error);
     throw error; // Rethrow or handle as needed
   }
 }

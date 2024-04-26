@@ -30,7 +30,14 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	router := setupRouter()
+	// Start syncer as separate goroutine
+	syncer := NewSyncer()
+	go syncer.Run(ctx)
+	api := API{
+		Syncer: syncer,
+	}
+
+	router := api.SetupRouter()
 	server := http.Server{
 		Addr:    ":8081",
 		Handler: router,

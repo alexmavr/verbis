@@ -143,6 +143,10 @@ func CreateConnectorStateClass(ctx context.Context, client *weaviate.Client) err
 				DataType: []string{"boolean"},
 			},
 			{
+				Name:     "auth_valid",
+				DataType: []string{"boolean"},
+			},
+			{
 				Name:     "lastSync",
 				DataType: []string{"date"},
 			},
@@ -159,6 +163,60 @@ func CreateConnectorStateClass(ctx context.Context, client *weaviate.Client) err
 
 	// Create the class in Weaviate
 	return client.Schema().ClassCreator().WithClass(class).Do(ctx)
+}
+
+func LockConnector(ctx context.Context, client *weaviate.Client, name string) error {
+	state, err := GetConnectorState(ctx, client, name)
+	if err != nil {
+		return err
+	}
+
+	if state == nil {
+		return fmt.Errorf("connector state not found")
+	}
+
+	// Wait until the state is not syncing
+	for state.Syncing {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled")
+		case <-time.After(5 * time.Second):
+			state, err = GetConnectorState(ctx, client, name)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	state.Syncing = true
+	return UpdateConnectorState(ctx, client, state)
+}
+
+func UnlockConnector(ctx context.Context, client *weaviate.Client, name string) error {
+	state, err := GetConnectorState(ctx, client, name)
+	if err != nil {
+		return err
+	}
+
+	if state == nil {
+		return fmt.Errorf("connector state not found")
+	}
+
+	// Wait until the state is syncing
+	for !state.Syncing {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled")
+		case <-time.After(5 * time.Second):
+			state, err = GetConnectorState(ctx, client, name)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	state.Syncing = false
+	return UpdateConnectorState(ctx, client, state)
 }
 
 // Add or update the connector state in Weaviate
@@ -179,11 +237,12 @@ func UpdateConnectorState(ctx context.Context, client *weaviate.Client, state *t
 		return err
 	}
 
-	if resp.Data["Get"] == nil {
+	if resp.Data["Get"] == nil || len(resp.Data["Get"].(map[string]interface{})[stateClassName].([]interface{})) == 0 {
 		log.Print("Creating new connector state")
 		_, err := client.Data().Creator().WithClassName(stateClassName).WithProperties(map[string]interface{}{
 			"name":         state.Name,
 			"syncing":      state.Syncing,
+			"auth_valid":   state.AuthValid,
 			"lastSync":     state.LastSync,
 			"numDocuments": state.NumDocuments,
 			"numChunks":    state.NumChunks,
@@ -206,6 +265,7 @@ func UpdateConnectorState(ctx context.Context, client *weaviate.Client, state *t
 					WithProperties(map[string]interface{}{
 			"name":         state.Name,
 			"syncing":      state.Syncing,
+			"auth_valid":   state.AuthValid,
 			"lastSync":     state.LastSync,
 			"numDocuments": state.NumDocuments,
 			"numChunks":    state.NumChunks,
@@ -216,6 +276,7 @@ func UpdateConnectorState(ctx context.Context, client *weaviate.Client, state *t
 }
 
 // Retrieve the connector state from Weaviate
+// Does not return AuthValid as it can be inferred from the presence of a token
 func GetConnectorState(ctx context.Context, client *weaviate.Client, name string) (*types.ConnectorState, error) {
 	where := filters.Where().
 		WithPath([]string{"name"}).
@@ -228,6 +289,7 @@ func GetConnectorState(ctx context.Context, client *weaviate.Client, name string
 			[]graphql.Field{
 				{Name: "name"},
 				{Name: "syncing"},
+				{Name: "auth_valid"},
 				{Name: "lastSync"},
 				{Name: "numDocuments"},
 				{Name: "numChunks"},
@@ -262,6 +324,7 @@ func GetConnectorState(ctx context.Context, client *weaviate.Client, name string
 	return &types.ConnectorState{
 		Name:         c["name"].(string),
 		Syncing:      c["syncing"].(bool),
+		AuthValid:    c["auth_valid"].(bool),
 		LastSync:     lastSync,
 		NumDocuments: int(c["numDocuments"].(float64)),
 		NumChunks:    int(c["numChunks"].(float64)),

@@ -39,7 +39,16 @@ func (g *GoogleConnector) Name() string {
 }
 
 func (g *GoogleConnector) Status(ctx context.Context) (*types.ConnectorState, error) {
-	return store.GetConnectorState(ctx, store.GetWeaviateClient(), g.Name())
+	state, err := store.GetConnectorState(ctx, store.GetWeaviateClient(), g.Name())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get connector state: %v", err)
+	}
+
+	if state == nil {
+		// No stored state, only happens if sync() is called before init()
+		return nil, fmt.Errorf("connector state not found")
+	}
+	return state, nil
 }
 
 func getClient(ctx context.Context, config *oauth2.Config) (*http.Client, error) {
@@ -52,7 +61,7 @@ func getClient(ctx context.Context, config *oauth2.Config) (*http.Client, error)
 }
 
 func requestOauthWeb(config *oauth2.Config) error {
-	config.RedirectURL = "http://127.0.0.1:8081/google/callback"
+	config.RedirectURL = "http://127.0.0.1:8081/connectors/google/callback"
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Printf("Your browser has been opened to visit:\n%v\n", authURL)
 
@@ -87,6 +96,33 @@ var scopes []string = []string{
 }
 
 func (g *GoogleConnector) Init(ctx context.Context) error {
+	log.Printf("Initializing connector %s", g.Name())
+	state, err := store.GetConnectorState(ctx, store.GetWeaviateClient(), g.Name())
+	if err != nil {
+		return fmt.Errorf("failed to get connector state: %v", err)
+	}
+
+	if state == nil {
+		state = &types.ConnectorState{
+			Name: g.Name(),
+		}
+	}
+
+	state.Syncing = false
+	token, err := tokenFromKeychain()
+	state.AuthValid = (err == nil && token != nil) // TODO: check for expiry of refresh token
+	log.Printf("token: %v, err: %v", token, err)
+	log.Printf("AuthValid: %v", state.AuthValid)
+
+	err = store.UpdateConnectorState(ctx, store.GetWeaviateClient(), state)
+	if err != nil {
+		return fmt.Errorf("failed to set connector state: %v", err)
+	}
+	log.Printf("Initialized connector %s", g.Name())
+	return nil
+}
+
+func (g *GoogleConnector) AuthSetup(ctx context.Context) error {
 	b, err := os.ReadFile(credentialPath)
 	if err != nil {
 		return fmt.Errorf("unable to read client secret file: %v", err)
@@ -124,7 +160,7 @@ func (g *GoogleConnector) AuthCallback(ctx context.Context, authCode string) err
 
 	log.Printf("Auth code: %s", authCode)
 
-	config.RedirectURL = "http://127.0.0.1:8081/google/callback"
+	config.RedirectURL = "http://127.0.0.1:8081/connectors/google/callback"
 	log.Printf("Config: %v", config)
 	tok, err := config.Exchange(ctx, authCode)
 	if err != nil {

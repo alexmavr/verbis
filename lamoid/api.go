@@ -18,31 +18,34 @@ import (
 	"github.com/epochlabs-ai/lamoid/lamoid/types"
 )
 
-var (
-	GoogleConnector = connectors.GoogleConnector{}
-)
+type API struct {
+	Syncer *Syncer
+}
 
-func setupRouter() *mux.Router {
+func (a *API) SetupRouter() *mux.Router {
 	r := mux.NewRouter()
-	r.HandleFunc("/google/init", googleInit).Methods("GET")
-	r.HandleFunc("/google/callback", handleGoogleCallback).Methods("GET")
-	r.HandleFunc("/google/sync", googleSync).Methods("GET")
-	r.HandleFunc("/prompt", handlePrompt).Methods("POST")
-	r.HandleFunc("/health", health).Methods("GET")
+	r.HandleFunc("/connectors", a.connectorsList).Methods("GET")
+	r.HandleFunc("/connectors/{name}/init", a.connectorInit).Methods("GET")
+	r.HandleFunc("/connectors/{name}/auth_setup", a.connectorAuthSetup).Methods("GET")
+	r.HandleFunc("/connectors/{name}/callback", a.handleConnectorCallback).Methods("GET")
+	r.HandleFunc("/prompt", a.handlePrompt).Methods("POST")
+	r.HandleFunc("/health", a.health).Methods("GET")
 
-	r.HandleFunc("/connectors", connectorsList).Methods("GET")
-	r.HandleFunc("/mock", mockConnectorState).Methods("GET")
+	r.HandleFunc("/sync/force", a.forceSync).Methods("GET")
+
+	r.HandleFunc("/mock", a.mockConnectorState).Methods("GET")
 
 	return r
 }
 
-func health(w http.ResponseWriter, r *http.Request) {
+func (a *API) health(w http.ResponseWriter, r *http.Request) {
 	// TODO: check for health of subprocesses - not needed for first boot
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
 }
 
-func mockConnectorState(w http.ResponseWriter, r *http.Request) {
+// only for debug/dev purposes
+func (a *API) mockConnectorState(w http.ResponseWriter, r *http.Request) {
 	state := &types.ConnectorState{
 		Name:         "Google Drive",
 		Syncing:      true,
@@ -59,26 +62,71 @@ func mockConnectorState(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func connectorsList(w http.ResponseWriter, r *http.Request) {
-	status, err := GoogleConnector.Status(r.Context())
+func (a *API) connectorsList(w http.ResponseWriter, r *http.Request) {
+	states, err := a.Syncer.GetConnectorStates(r.Context())
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Failed to get status: " + err.Error()))
+		w.Write([]byte("Failed to list connectors: " + err.Error()))
 		return
 	}
 
-	b, err := json.Marshal(status)
+	b, err := json.Marshal(states)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Failed to marshal status: " + err.Error()))
+		w.Write([]byte("Failed to marshal connectors: " + err.Error()))
 		return
 	}
 
 	w.Write(b)
 }
 
-func googleInit(w http.ResponseWriter, r *http.Request) {
-	err := GoogleConnector.Init(r.Context())
+func (a *API) connectorInit(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	connectorName, ok := vars["name"]
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("No connector name provided"))
+		return
+	}
+
+	conn, ok := connectors.AllConnectors[connectorName]
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Unknown connector name"))
+		return
+	}
+
+	err := conn.Init(r.Context())
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to init connector: " + err.Error()))
+		return
+	}
+
+	err = a.Syncer.AddConnector(conn)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to add connector: " + err.Error()))
+		return
+	}
+}
+
+func (a *API) connectorAuthSetup(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	connectorName, ok := vars["name"]
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("No connector name provided"))
+		return
+	}
+
+	conn, ok := connectors.AllConnectors[connectorName]
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Unknown connector name"))
+		return
+	}
+	err := conn.AuthSetup(r.Context())
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to perform initial auth with google: " + err.Error()))
@@ -86,8 +134,9 @@ func googleInit(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleConnectorCallback(w http.ResponseWriter, r *http.Request) {
 	queryParts := r.URL.Query()
+	// Google returns it as "code"
 	code := queryParts.Get("code")
 	if code == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -100,41 +149,33 @@ func handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error in Google callback: %s\n", errStr)
 	}
 
-	err := GoogleConnector.AuthCallback(r.Context(), code)
+	vars := mux.Vars(r)
+	connectorName, ok := vars["name"]
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("No connector name provided"))
+		return
+	}
+
+	conn, ok := connectors.AllConnectors[connectorName]
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Unknown connector name"))
+		return
+	}
+
+	err := conn.AuthCallback(r.Context(), code)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to authenticate with Google: " + err.Error()))
 	}
 }
 
-func googleSync(w http.ResponseWriter, r *http.Request) {
-	chunks, err := GoogleConnector.Sync(r.Context())
+func (a *API) forceSync(w http.ResponseWriter, r *http.Request) {
+	err := a.Syncer.SyncNow(r.Context())
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Failed to sync with Google: " + err.Error()))
-		return
-	}
-	log.Printf("Synced %d chunks from Google\n", len(chunks))
-
-	chunkItems := []types.AddVectorItem{}
-	for _, chunk := range chunks {
-		log.Printf("Processing chunk: %s\n", chunk.SourceURL)
-		resp, err := EmbedFromModel(chunk.Text)
-		if err != nil {
-			log.Printf("Failed to get embeddings: %s\n", err)
-			continue
-		}
-		embedding := resp.Embedding
-
-		chunkItems = append(chunkItems, types.AddVectorItem{
-			Chunk:  chunk,
-			Vector: embedding,
-		})
-	}
-
-	err = store.AddVectors(context.Background(), store.GetWeaviateClient(), chunkItems)
-	if err != nil {
-		log.Fatalf("Failed to add vectors: %s\n", err)
+		w.Write([]byte("Failed to sync: " + err.Error()))
 	}
 }
 
@@ -312,7 +353,7 @@ type PromptRequest struct {
 	History []types.HistoryItem `json:"history"`
 }
 
-func handlePrompt(w http.ResponseWriter, r *http.Request) {
+func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	var promptReq PromptRequest
 	defer r.Body.Close()
 	err := json.NewDecoder(r.Body).Decode(&promptReq)
