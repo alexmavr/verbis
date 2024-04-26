@@ -28,13 +28,16 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
+	// Main context attacked to application runtime, everything in the
+	// background should terminate when cancelled
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Start syncer as separate goroutine
 	syncer := NewSyncer()
 	go syncer.Run(ctx)
 	api := API{
-		Syncer: syncer,
+		Syncer:  syncer,
+		Context: ctx,
 	}
 
 	router := api.SetupRouter()

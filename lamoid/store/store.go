@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"regexp"
-	"strings"
 	"time"
 
 	"github.com/weaviate/weaviate-go-client/v4/weaviate"
@@ -37,15 +35,6 @@ func GetWeaviateClient() *weaviate.Client {
 	})
 }
 
-func cleanWhitespace(text string) string {
-	// Trim leading and trailing whitespace
-	text = strings.TrimSpace(text)
-
-	// Replace internal sequences of whitespace with a single space
-	spacePattern := regexp.MustCompile(`\s+`)
-	return spacePattern.ReplaceAllString(text, " ")
-}
-
 func AddVectors(ctx context.Context, client *weaviate.Client, items []types.AddVectorItem) error {
 	log.Printf("Adding %d vectors to vector store", len(items))
 	objects := []*models.Object{}
@@ -53,7 +42,7 @@ func AddVectors(ctx context.Context, client *weaviate.Client, items []types.AddV
 		objects = append(objects, &models.Object{
 			Class: chunkClassName,
 			Properties: map[string]string{
-				"chunk":      cleanWhitespace(item.Chunk.Text),
+				"chunk":      item.Chunk.Text,
 				"sourceURL":  item.Chunk.Document.SourceURL,
 				"sourceName": item.Chunk.Document.SourceName,
 				"createdAt":  item.Chunk.Document.CreatedAt.String(),
@@ -200,19 +189,6 @@ func UnlockConnector(ctx context.Context, client *weaviate.Client, name string) 
 
 	if state == nil {
 		return fmt.Errorf("connector state not found")
-	}
-
-	// Wait until the state is syncing
-	for !state.Syncing {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("context cancelled")
-		case <-time.After(5 * time.Second):
-			state, err = GetConnectorState(ctx, client, name)
-			if err != nil {
-				return err
-			}
-		}
 	}
 
 	state.Syncing = false

@@ -122,6 +122,10 @@ func (g *GoogleConnector) Init(ctx context.Context) error {
 	return nil
 }
 
+func (g *GoogleConnector) UpdateConnectorState(ctx context.Context, state *types.ConnectorState) error {
+	return store.UpdateConnectorState(ctx, store.GetWeaviateClient(), state)
+}
+
 func (g *GoogleConnector) AuthSetup(ctx context.Context) error {
 	b, err := os.ReadFile(credentialPath)
 	if err != nil {
@@ -174,91 +178,115 @@ func (g *GoogleConnector) AuthCallback(ctx context.Context, authCode string) err
 	return nil
 }
 
-func (g *GoogleConnector) Sync(ctx context.Context) ([]types.Chunk, error) {
-	res := []types.Chunk{}
+func (g *GoogleConnector) Sync(ctx context.Context, lastSync time.Time, resChan chan types.Chunk, errChan chan error) {
+	defer close(errChan)
+	defer close(resChan)
+
 	b, err := os.ReadFile(credentialPath)
 	if err != nil {
-		return res, fmt.Errorf("unable to read client secret file: %v", err)
+		errChan <- fmt.Errorf("unable to read client secret file: %v", err)
+		return
 	}
 	config, err := google.ConfigFromJSON(b, scopes...)
 	if err != nil {
-		return res, fmt.Errorf("unable to parse client secret file to config: %v", err)
+		errChan <- fmt.Errorf("unable to parse client secret file to config: %v", err)
+		return
 	}
 
 	client, err := getClient(ctx, config)
 	if err != nil {
-		return res, fmt.Errorf("unable to get client: %v", err)
+		errChan <- fmt.Errorf("unable to get client: %v", err)
+		return
 	}
 
 	srv, err := drive.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
-		return res, fmt.Errorf("unable to retrieve Drive client: %v", err)
+		errChan <- fmt.Errorf("unable to retrieve Drive client: %v", err)
+		return
 	}
 
-	return listFiles(srv)
+	err = listFiles(srv, lastSync, resChan)
+	if err != nil {
+		errChan <- fmt.Errorf("unable to list files: %v", err)
+	}
 }
 
-var lastSyncTime time.Time = time.UnixMicro(0)
-
-func listFiles(service *drive.Service) ([]types.Chunk, error) {
-	var chunks []types.Chunk
-	r, err := service.Files.List().
-		PageSize(10).
-		Fields("nextPageToken, files(id, name, webViewLink, createdTime, modifiedTime, mimeType)").
-		Q("modifiedTime > '" + lastSyncTime.Format(time.RFC3339) + "'").
-		Do()
-	if err != nil {
-		return chunks, fmt.Errorf("unable to retrieve files: %v", err)
-	}
-
-	for _, file := range r.Files {
-		var content string
-		if file.MimeType == "application/vnd.google-apps.document" {
-			content, err = exportFile(service, file.Id, "text/plain")
-		} else if file.MimeType == "application/vnd.google-apps.spreadsheet" {
-			content, err = exportFile(service, file.Id, "application/csv")
-		} else {
-			//content, err = downloadFile(service, file.Id)
-			log.Printf("binary file found: %s with mimeType: %s", file.Name, file.MimeType)
+func listFiles(service *drive.Service, lastSync time.Time, resChan chan types.Chunk) error {
+	pageToken := ""
+	for {
+		q := service.Files.List().
+			PageSize(10).
+			Fields("nextPageToken, files(id, name, webViewLink, createdTime, modifiedTime, mimeType)")
+		if !lastSync.IsZero() {
+			q = q.Q("modifiedTime > '" + lastSync.Format(time.RFC3339) + "'")
 		}
+		if pageToken != "" {
+			q = q.PageToken(pageToken)
+		}
+		r, err := q.Do()
 		if err != nil {
-			log.Printf("Error processing file %s: %v", file.Name, err)
-			continue
+			return fmt.Errorf("unable to retrieve files: %v", err)
 		}
 
-		log.Printf("File: %s, %s, %s", file.Name, file.CreatedTime, file.ModifiedTime)
-		createdAt, err := time.Parse(time.RFC3339, file.CreatedTime)
-		if err != nil {
-			log.Printf("Error parsing created time %s: %v", file.CreatedTime, err)
-			createdAt = time.Now()
-		}
-
-		updatedAt, err := time.Parse(time.RFC3339, file.ModifiedTime)
-		if err != nil {
-			log.Printf("Error parsing modified time %s: %v", file.ModifiedTime, err)
-			updatedAt = time.Now()
-		}
-
-		// Split contents into chunks of MaxChunkSize characters
-		for i := 0; i < len(content); i += MaxChunkSize {
-			end := i + 1000
-			if end > len(content) {
-				end = len(content)
+		for _, file := range r.Files {
+			var content string
+			if file.MimeType == "application/vnd.google-apps.document" {
+				content, err = exportFile(service, file.Id, "text/plain")
+			} else if file.MimeType == "application/vnd.google-apps.spreadsheet" {
+				content, err = exportFile(service, file.Id, "application/csv")
+			} else {
+				//content, err = downloadFile(service, file.Id)
+				log.Printf("binary file found: %s with mimeType: %s", file.Name, file.MimeType)
 			}
-			chunk := types.Chunk{
-				Text: content[i:end],
-				Document: types.Document{
-					SourceURL:  file.WebViewLink,
-					SourceName: "Google Drive",
-					CreatedAt:  createdAt,
-					UpdatedAt:  updatedAt,
-				},
+			if err != nil {
+				log.Printf("Error processing file %s: %v", file.Name, err)
+				continue
 			}
-			chunks = append(chunks, chunk)
+
+			log.Printf("Document: %s, %s, %s", file.Name, file.CreatedTime, file.ModifiedTime)
+			createdAt, err := time.Parse(time.RFC3339, file.CreatedTime)
+			if err != nil {
+				log.Printf("Error parsing created time %s: %v", file.CreatedTime, err)
+				createdAt = time.Now()
+			}
+
+			updatedAt, err := time.Parse(time.RFC3339, file.ModifiedTime)
+			if err != nil {
+				log.Printf("Error parsing modified time %s: %v", file.ModifiedTime, err)
+				updatedAt = time.Now()
+			}
+
+			numChunks := 0
+			// TODO: process documents as well
+
+			// Split contents into chunks of MaxChunkSize characters
+			for i := 0; i < len(content); i += MaxChunkSize {
+				end := i + 1000
+				if end > len(content) {
+					end = len(content)
+				}
+
+				chunk := types.Chunk{
+					Text: content[i:end],
+					Document: types.Document{
+						SourceURL:  file.WebViewLink,
+						SourceName: "Google Drive",
+						CreatedAt:  createdAt,
+						UpdatedAt:  updatedAt,
+					},
+				}
+				numChunks += 1
+				log.Printf("Processing chunk %d of document %s", numChunks, file.Name)
+				resChan <- chunk
+			}
+		}
+
+		pageToken = r.NextPageToken
+		if pageToken == "" {
+			break
 		}
 	}
-	lastSyncTime = time.Now() // Update last sync time after retrieving files
-	return chunks, nil
+	return nil
 }
 
 // TODO: download PDFs and parse with unstructured

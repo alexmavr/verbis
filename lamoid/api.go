@@ -19,7 +19,8 @@ import (
 )
 
 type API struct {
-	Syncer *Syncer
+	Syncer  *Syncer
+	Context context.Context
 }
 
 func (a *API) SetupRouter() *mux.Router {
@@ -172,7 +173,7 @@ func (a *API) handleConnectorCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) forceSync(w http.ResponseWriter, r *http.Request) {
-	err := a.Syncer.SyncNow(r.Context())
+	err := a.Syncer.SyncNow(a.Context)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to sync: " + err.Error()))
