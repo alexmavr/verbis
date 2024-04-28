@@ -261,7 +261,7 @@ func listFiles(service *drive.Service, lastSync time.Time, resChan chan types.Ch
 
 			// Split contents into chunks of MaxChunkSize characters
 			for i := 0; i < len(content); i += MaxChunkSize {
-				end := i + 1000
+				end := i + MaxChunkSize
 				if end > len(content) {
 					end = len(content)
 				}
@@ -269,6 +269,7 @@ func listFiles(service *drive.Service, lastSync time.Time, resChan chan types.Ch
 				chunk := types.Chunk{
 					Text: content[i:end],
 					Document: types.Document{
+						Name:       file.Name,
 						SourceURL:  file.WebViewLink,
 						SourceName: "Google Drive",
 						CreatedAt:  createdAt,

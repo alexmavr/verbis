@@ -17,14 +17,6 @@ import (
 var (
 	chunkClassName = "LamoidChunk"
 	stateClassName = "ConnectorState"
-
-	_chunk_fields = []graphql.Field{
-		{Name: "chunk"},
-		{Name: "sourceURL"},
-		{Name: "sourceName"},
-		{Name: "updatedAt"},
-		{Name: "createdAt"},
-	}
 )
 
 func GetWeaviateClient() *weaviate.Client {
@@ -43,6 +35,7 @@ func AddVectors(ctx context.Context, client *weaviate.Client, items []types.AddV
 			Class: chunkClassName,
 			Properties: map[string]string{
 				"chunk":      item.Chunk.Text,
+				"docName":    item.Chunk.Document.Name,
 				"sourceURL":  item.Chunk.Document.SourceURL,
 				"sourceName": item.Chunk.Document.SourceName,
 				"createdAt":  item.Chunk.Document.CreatedAt.String(),
@@ -57,28 +50,43 @@ func AddVectors(ctx context.Context, client *weaviate.Client, items []types.AddV
 }
 
 // Search for a vector in Weaviate
-func VectorSearch(ctx context.Context, client *weaviate.Client, vector []float32) ([]string, error) {
+func HybridSearch(ctx context.Context, client *weaviate.Client, query string, vector []float32) ([]*types.Chunk, error) {
 	fmt.Println("Query vector length: ", len(vector))
 
-	all, _ := client.GraphQL().Get().WithClassName(chunkClassName).Do(ctx)
-	log.Print(all.Data)
+	_chunk_fields := []graphql.Field{
+		{Name: "chunk"},
+		{Name: "docName"},
+		{Name: "sourceURL"},
+		{Name: "sourceName"},
+		{Name: "updatedAt"},
+		{Name: "createdAt"},
+		{Name: "_additional", Fields: []graphql.Field{
+			{Name: "score"},
+			{Name: "explainScore"},
+		}},
+	}
 
-	nearVector := client.GraphQL().NearVectorArgBuilder().WithVector(vector)
+	hybrid := client.GraphQL().HybridArgumentBuilder().
+		WithQuery(query).
+		WithVector(vector).
+		WithProperties([]string{"chunk", "docName^2"}).
+		WithAlpha(0.8).
+		WithFusionType(graphql.RelativeScore)
 
 	resp, err := client.GraphQL().
 		Get().
 		WithClassName(chunkClassName).
-		WithNearVector(nearVector).
-		WithLimit(5).
+		WithHybrid(hybrid).
+		WithLimit(10).
 		WithFields(_chunk_fields...).
+		//		WithAutocut(1).
 		Do(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	log.Print(resp.Data["Get"])
-
-	res := []string{}
+	res := []*types.Chunk{}
 	if resp.Data["Get"] != nil {
 		get := resp.Data["Get"].(map[string]interface{})
 		chunks := get[chunkClassName].([]interface{})
@@ -86,9 +94,16 @@ func VectorSearch(ctx context.Context, client *weaviate.Client, vector []float32
 
 		for _, chunkMap := range chunks {
 			c := chunkMap.(map[string]interface{})
-			for _, v := range c {
-				res = append(res, v.(string))
-			}
+			res = append(res, &types.Chunk{
+				Document: types.Document{
+					Name:       c["docName"].(string),
+					SourceURL:  c["sourceURL"].(string),
+					SourceName: c["sourceName"].(string),
+					CreatedAt:  time.Now(),
+					UpdatedAt:  time.Now(),
+				},
+				Text: c["chunk"].(string),
+			})
 		}
 	}
 
@@ -96,9 +111,11 @@ func VectorSearch(ctx context.Context, client *weaviate.Client, vector []float32
 }
 
 // Create Weaviate schema for vector storage
-func CreateChunkClass(ctx context.Context, client *weaviate.Client) error {
+func CreateChunkClass(ctx context.Context, client *weaviate.Client, force bool) error {
 	// DEBUG: attempt to delete the class, don't fail if it doesn't exist
-	client.Schema().ClassDeleter().WithClassName(chunkClassName).Do(ctx)
+	if force {
+		client.Schema().ClassDeleter().WithClassName(chunkClassName).Do(ctx)
+	}
 
 	class := &models.Class{
 		Class:      chunkClassName,
@@ -115,9 +132,11 @@ func CreateChunkClass(ctx context.Context, client *weaviate.Client) error {
 }
 
 // Create a Weaviate class schema for the connector state
-func CreateConnectorStateClass(ctx context.Context, client *weaviate.Client) error {
+func CreateConnectorStateClass(ctx context.Context, client *weaviate.Client, force bool) error {
 	// DEBUG: attempt to delete the class, don't fail if it doesn't exist
-	client.Schema().ClassDeleter().WithClassName(stateClassName).Do(ctx)
+	if force {
+		client.Schema().ClassDeleter().WithClassName(stateClassName).Do(ctx)
+	}
 
 	class := &models.Class{
 		Class:      stateClassName,

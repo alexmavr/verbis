@@ -40,7 +40,8 @@ func (a *API) SetupRouter() *mux.Router {
 }
 
 func (a *API) health(w http.ResponseWriter, r *http.Request) {
-	// TODO: check for health of subprocesses - not needed for first boot
+	// TODO: check for health of subprocesses
+	// TODO: return state of syncs and model downloads, to be used during init
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
 }
@@ -283,7 +284,7 @@ func EmbedFromModel(prompt string) (*EmbedApiResponse, error) {
 
 	// Create the payload
 	payload := EmbedRequestPayload{
-		Model:  "all-minilm",
+		Model:  embeddingsModelName,
 		Prompt: prompt,
 	}
 
@@ -332,6 +333,7 @@ type RequestPayload struct {
 	Messages  []types.HistoryItem `json:"messages"`
 	Stream    bool                `json:"stream"`
 	KeepAlive string              `json:"keep_alive"`
+	Format    string              `json:"format"`
 }
 
 // Struct to define the API response format
@@ -375,20 +377,33 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Performing vector search")
 
 	// Perform vector similarity search and get list of most relevant results
-	searchResults, err := store.VectorSearch(context.Background(), store.GetWeaviateClient(), embeddings)
+	searchResults, err := store.HybridSearch(
+		context.Background(),
+		store.GetWeaviateClient(),
+		promptReq.Prompt,
+		embeddings,
+	)
 	if err != nil {
 		http.Error(w, "Failed to search for vectors", http.StatusInternalServerError)
 		return
 	}
 
-	// TODO: Use ollama LLM model to rerank the results, pick the top 5
+	// Rerank the results
+	rerankedChunks, err := Rerank(searchResults, promptReq.Prompt)
+	if err != nil {
+		log.Printf("Failed to rerank search results: %s", err)
+		http.Error(w, "Failed to rerank search results", http.StatusInternalServerError)
+		return
+	}
 
 	// Return the completion from the LLM model
-	llmPrompt := MakePrompt(searchResults, promptReq.Prompt)
+	llmPrompt := MakePrompt(rerankedChunks, promptReq.Prompt)
 	log.Printf("LLM Prompt: %s", llmPrompt)
 	genResp, err := chatWithModel(llmPrompt, promptReq.History)
 	if err != nil {
+		log.Printf("Failed to generate response: %s", err)
 		http.Error(w, "Failed to generate response", http.StatusInternalServerError)
+		return
 
 	}
 	log.Printf("Response: %s", genResp.Message.Content)
@@ -404,22 +419,67 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	w.Write(b)
 }
 
-// Promptsage?
-func MakePrompt(dataChunks []string, query string) string {
+func Rerank(chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
+	// TODO: reranking currently fails to consistently return the expected JSON output
+	return chunks, nil
+
+	var builder strings.Builder
+
+	builder.WriteString(` You are a language model designed to evaluate the relevance of documents
+	to a user query. You will respond with a single JSON array with the IDs of
+	the documents in the order of relevance. If you are unable to determine the
+	relevance of a document, you should not include it in the response.
+	For example, if given chunks from 7 documents, only 4 of which are over 0.5
+	relevance score, and where 5 > 2 > 3 > 1 in relevance, you should return
+	this example output: [5, 2, 3, 1].
+	`)
+
+	// Loop through each data chunk and append it followed by a newline
+	for i, chunk := range chunks {
+		builder.WriteString(fmt.Sprintf("\n========== Document ID: %d ==========\n", i))
+		builder.WriteString(fmt.Sprintf("Document Name: %s\n", chunk.SourceName))
+		builder.WriteString(fmt.Sprintf("Document URL: %s\n", chunk.SourceURL))
+		builder.WriteString(fmt.Sprintf("Raw text: %s\n", chunk.Text))
+	}
+
+	// Append the user query with an instruction
+	builder.WriteString("The user query that these documents must be relevant to answering is:")
+	builder.WriteString(query)
+
+	// Return the final combined prompt
+	finalPrompt := builder.String()
+
+	rerankedIds, err := rerankModel(finalPrompt)
+	if err != nil {
+		return nil, err
+	}
+
+	resChunks := []*types.Chunk{}
+	for _, id := range rerankedIds {
+		resChunks = append(resChunks, chunks[id])
+	}
+
+	return resChunks, nil
+}
+
+// TODO: function calling?
+func MakePrompt(chunks []*types.Chunk, query string) string {
 	// Create a builder to efficiently concatenate strings
 	var builder strings.Builder
 
 	// Append introduction to guide the model's focus
-	builder.WriteString("Based on the following data:\n\n")
+	builder.WriteString("You are a personal chat assistant and you have to answer the following user query: ")
+	builder.WriteString(query)
+	builder.WriteString(`\n You may only use information from the following
+	documents to answer the user query. If none of them are relevant say you don't know.`)
 
 	// Loop through each data chunk and append it followed by a newline
-	for _, chunk := range dataChunks {
-		builder.WriteString(chunk + "\n\n")
+	for i, chunk := range chunks {
+		builder.WriteString(fmt.Sprintf("\n========== Document %d ==========\n", i))
+		builder.WriteString(fmt.Sprintf("Document Name: %s\n", chunk.Name))
+		builder.WriteString(fmt.Sprintf("Document URL: %s\n", chunk.SourceURL))
+		builder.WriteString(fmt.Sprintf("Raw text: %s\n", chunk.Text))
 	}
-
-	// Append the user query with an instruction
-	builder.WriteString("Answer this question based on the data provided above: ")
-	builder.WriteString(query)
 
 	// Return the final combined prompt
 	return builder.String()

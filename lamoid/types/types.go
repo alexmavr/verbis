@@ -27,9 +27,14 @@ type ConnectorState struct {
 type Chunk struct {
 	Document
 	Text string
+
+	// The following fields are only filled in when the chunk is a search result
+	Score        float32
+	ExplainScore string
 }
 
 type Document struct {
+	Name       string
 	SourceURL  string
 	SourceName string
 	CreatedAt  time.Time

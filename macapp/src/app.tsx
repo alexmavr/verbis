@@ -11,14 +11,12 @@ const store = new Store()
 enum Step {
   WELCOME = 0,
   GOOGLE_INIT,
-  GOOGLE_SYNC,
   PROMPT,
 }
 
 export default function () {
   const [step, setStep] = useState<Step>(Step.WELCOME)
   const [promptText, setPromptText] = useState(''); // State to store input from the textbox
-  const [promptResponse, setPromptResponse] = useState(''); // State to store the prompt response
   const [loading, setLoading] = useState(true); // State for the spinner
   const [conversation, setConversation] = useState([]);
 
@@ -110,7 +108,7 @@ export default function () {
                     try {
                       await google_init()
                       await google_auth_setup()
-                      setStep(Step.GOOGLE_SYNC)
+                      setStep(Step.PROMPT)
                     } catch (e) {
                       console.error('could not install: ', e)
                     } finally {
@@ -125,33 +123,6 @@ export default function () {
                 <p className='mx-auto my-4 w-[70%] text-xs text-gray-400'>
                   Your browser will open to configure the OAuth credentials.
                 </p>
-              </div>
-            </div>
-          </>
-        )}
-        {step === Step.GOOGLE_SYNC && (
-          <>
-            <div className='mx-auto flex flex-col space-y-20 text-center'>
-              <h1 className='mt-4 text-2xl tracking-tight text-gray-900'>Sync data from your google account</h1>
-              <div className='flex flex-col'>
-                <div className='group relative flex items-center'>
-                  <button
-                    onClick={async () => {
-                      try {
-                        await google_sync()
-                        setStep(Step.PROMPT)
-                      } catch (e) {
-                        console.error('could not install: ', e)
-                      } finally {
-                        getCurrentWindow().show()
-                        getCurrentWindow().focus()
-                      }
-                    }}
-                    className='no-drag rounded-dm mx-auto w-[60%] rounded-md bg-black px-4 py-2 text-sm text-white hover:brightness-110'
-                  >
-                    Sync from Google
-                  </button>
-                </div>
               </div>
             </div>
           </>

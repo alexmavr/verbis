@@ -80,14 +80,6 @@ func cleanWhitespace(text string) string {
 	return strings.TrimSpace(text)
 }
 
-func printBytes(s string) {
-	fmt.Printf("Byte representation of '%s':\n", s)
-	for i := 0; i < len(s); i++ {
-		fmt.Printf("%d ", s[i])
-	}
-	fmt.Println()
-}
-
 func chunkAdder(ctx context.Context, c types.Connector, chunkChan chan types.Chunk, doneChan chan struct{}) {
 	// TODO: hold buffer and add vectors in batches
 	for chunk := range chunkChan {
@@ -95,11 +87,7 @@ func chunkAdder(ctx context.Context, c types.Connector, chunkChan chan types.Chu
 		saneChunk := cleanWhitespace(chunk.Text)
 		log.Printf("Sanitized chunk to length %d\n", len(saneChunk))
 		if len(saneChunk) < 50 {
-			log.Printf("Warning: short chunk: %s\n", saneChunk)
-			printBytes(saneChunk)
-		}
-		if len(saneChunk) == 0 {
-			log.Printf("Chunk with only whitespace was detected, skipping\n")
+			log.Printf("Skipping short chunk: %s\n", saneChunk)
 			continue
 		}
 		resp, err := EmbedFromModel(saneChunk)
@@ -177,6 +165,7 @@ func (s *Syncer) SyncNow(ctx context.Context) error {
 			errChan := make(chan error)         // closed by Sync
 			doneChan := make(chan struct{})     // closed by chunkAdder
 
+			// TODO: rewrite as sync waitgroup
 			go chunkAdder(ctx, c, chunkChan, doneChan)
 			go c.Sync(ctx, state.LastSync, chunkChan, errChan)
 
