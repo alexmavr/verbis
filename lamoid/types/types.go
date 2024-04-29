@@ -29,7 +29,7 @@ type Chunk struct {
 	Text string
 
 	// The following fields are only filled in when the chunk is a search result
-	Score        float32
+	Score        float64
 	ExplainScore string
 }
 

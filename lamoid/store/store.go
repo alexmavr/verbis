@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 
 	"github.com/weaviate/weaviate-go-client/v4/weaviate"
@@ -94,6 +95,16 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 
 		for _, chunkMap := range chunks {
 			c := chunkMap.(map[string]interface{})
+			addl := c["_additional"].(map[string]interface{})
+			scoreStr := addl["score"].(string)
+			log.Printf("ScoreStr: %s\n", scoreStr)
+			score, err := strconv.ParseFloat(scoreStr, 64)
+			if err != nil {
+				log.Printf("Failed to parse score: %s\n", err)
+				continue
+			}
+			log.Printf("Score: %f\n", score)
+
 			res = append(res, &types.Chunk{
 				Document: types.Document{
 					Name:       c["docName"].(string),
@@ -102,7 +113,8 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 					CreatedAt:  time.Now(),
 					UpdatedAt:  time.Now(),
 				},
-				Text: c["chunk"].(string),
+				Text:  c["chunk"].(string),
+				Score: score,
 			})
 		}
 	}

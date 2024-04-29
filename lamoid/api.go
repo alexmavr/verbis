@@ -8,6 +8,9 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -16,6 +19,10 @@ import (
 	"github.com/epochlabs-ai/lamoid/lamoid/connectors"
 	"github.com/epochlabs-ai/lamoid/lamoid/store"
 	"github.com/epochlabs-ai/lamoid/lamoid/types"
+)
+
+var (
+	PromptLogFile = ".lamoid/logs/prompt.log" // Relative to home
 )
 
 type API struct {
@@ -396,9 +403,15 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return the completion from the LLM model
 	llmPrompt := MakePrompt(rerankedChunks, promptReq.Prompt)
 	log.Printf("LLM Prompt: %s", llmPrompt)
+	err = WritePromptLog(llmPrompt)
+	if err != nil {
+		log.Printf("Failed to write prompt to log: %s", err)
+		http.Error(w, "Failed to write prompt to log", http.StatusInternalServerError)
+		return
+	}
+
 	genResp, err := chatWithModel(llmPrompt, promptReq.History)
 	if err != nil {
 		log.Printf("Failed to generate response: %s", err)
@@ -420,9 +433,33 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 }
 
 func Rerank(chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
+	// TODO: implement reranking via LLM model, right now this is a gamble on
+	// vector score relevance
+
+	// Skip chunks with a very low score
+	//minScore := 0.4
+
+	// Sort chunks by score
+	sort.Slice(chunks, func(i, j int) bool {
+		return chunks[i].Score > chunks[j].Score
+	})
+
+	//for _, chunk := range chunks {
+	//	if chunk.Score > minScore {
+	//		new_chunks = append(new_chunks, chunk)
+	//	}
+	//}
+
+	// Keep only top two results by score
+	if len(chunks) > 2 {
+		chunks = chunks[:2]
+	}
+
 	// TODO: reranking currently fails to consistently return the expected JSON output
 	return chunks, nil
+}
 
+func rerankLLM(chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
 	var builder strings.Builder
 
 	builder.WriteString(` You are a language model designed to evaluate the relevance of documents
@@ -483,4 +520,21 @@ func MakePrompt(chunks []*types.Chunk, query string) string {
 
 	// Return the final combined prompt
 	return builder.String()
+}
+
+func WritePromptLog(prompt string) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("unable to get user home directory: %w", err)
+	}
+	path := filepath.Join(home, PromptLogFile)
+	// Open the file for writing, creating it if it doesn't exist
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+
+	// Write the prompt to the file
+	_, err = file.WriteString("\n===\n" + prompt + "\n")
+	return err
 }

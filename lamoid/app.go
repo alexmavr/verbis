@@ -20,8 +20,9 @@ import (
 
 var (
 	httpClient          = &http.Client{Timeout: 10 * time.Second}
-	generationModelName = "llama3"
+	generationModelName = "mistral"
 	embeddingsModelName = "nomic-embed-text"
+	clean               = false
 )
 
 func main() {
@@ -94,9 +95,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to pull model: %s\n", err)
 	}
-
-	// TODO: manage in application config
-	clean := true
 
 	// Create indices for vector search
 	weavClient := store.GetWeaviateClient()
