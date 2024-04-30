@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -22,10 +23,11 @@ import (
 
 	"github.com/epochlabs-ai/lamoid/lamoid/store"
 	"github.com/epochlabs-ai/lamoid/lamoid/types"
+	"github.com/epochlabs-ai/lamoid/lamoid/util"
 )
 
 const (
-	credentialPath = "../Resources/credentials.json"
+	credentialFile = "credentials.json"
 	tokenKey       = "user-google-oauth-token"
 	keyringService = "LamoidApp"
 	MaxChunkSize   = 10000 // Maximum number of characters in a chunk
@@ -96,6 +98,7 @@ var scopes []string = []string{
 }
 
 func (g *GoogleConnector) Init(ctx context.Context) error {
+
 	log.Printf("Initializing connector %s", g.Name())
 	state, err := store.GetConnectorState(ctx, store.GetWeaviateClient(), g.Name())
 	if err != nil {
@@ -126,17 +129,22 @@ func (g *GoogleConnector) UpdateConnectorState(ctx context.Context, state *types
 	return store.UpdateConnectorState(ctx, store.GetWeaviateClient(), state)
 }
 
-func (g *GoogleConnector) AuthSetup(ctx context.Context) error {
-	b, err := os.ReadFile(credentialPath)
+func get_config_from_json() (*oauth2.Config, error) {
+	path, err := util.GetDistPath()
 	if err != nil {
-		return fmt.Errorf("unable to read client secret file: %v", err)
+		return nil, fmt.Errorf("failed to get dist path: %v", err)
 	}
-
-	config, err := google.ConfigFromJSON(b,
-		scopes...,
-	)
+	b, err := os.ReadFile(filepath.Join(path, credentialFile))
 	if err != nil {
-		return fmt.Errorf("unable to parse client secret file to config: %v", err)
+		return nil, fmt.Errorf("unable to read client secret file: %v", err)
+	}
+	return google.ConfigFromJSON(b, scopes...)
+}
+
+func (g *GoogleConnector) AuthSetup(ctx context.Context) error {
+	config, err := get_config_from_json()
+	if err != nil {
+		return fmt.Errorf("unable to get google config: %s", err)
 	}
 	_, err = tokenFromKeychain()
 	if err == nil {
@@ -153,16 +161,10 @@ func (g *GoogleConnector) AuthSetup(ctx context.Context) error {
 }
 
 func (g *GoogleConnector) AuthCallback(ctx context.Context, authCode string) error {
-	b, err := os.ReadFile(credentialPath)
+	config, err := get_config_from_json()
 	if err != nil {
-		return fmt.Errorf("unable to read client secret file: %v", err)
+		return fmt.Errorf("unable to get google config: %s", err)
 	}
-	config, err := google.ConfigFromJSON(b, scopes...)
-	if err != nil {
-		return fmt.Errorf("unable to parse client secret file to config: %v", err)
-	}
-
-	log.Printf("Auth code: %s", authCode)
 
 	config.RedirectURL = "http://127.0.0.1:8081/connectors/google/callback"
 	log.Printf("Config: %v", config)
@@ -182,14 +184,9 @@ func (g *GoogleConnector) Sync(ctx context.Context, lastSync time.Time, resChan 
 	defer close(errChan)
 	defer close(resChan)
 
-	b, err := os.ReadFile(credentialPath)
+	config, err := get_config_from_json()
 	if err != nil {
-		errChan <- fmt.Errorf("unable to read client secret file: %v", err)
-		return
-	}
-	config, err := google.ConfigFromJSON(b, scopes...)
-	if err != nil {
-		errChan <- fmt.Errorf("unable to parse client secret file to config: %v", err)
+		errChan <- fmt.Errorf("unable to get google config: %s", err)
 		return
 	}
 

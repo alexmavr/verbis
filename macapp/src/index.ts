@@ -5,9 +5,9 @@ import winston from 'winston'
 import 'winston-daily-rotate-file'
 import * as path from 'path'
 
-import { v4 as uuidv4 } from 'uuid'
-
 require('@electron/remote/main').initialize()
+
+const isDevelopment = process.env.NODE_ENV === 'development'
 
 const store = new Store()
 
@@ -146,7 +146,7 @@ function init() {
  logger.info('Starting Lamoid')
  //updateTray()
 
-  if (process.platform === 'darwin') {
+  if (process.platform === 'darwin' && !isDevelopment) {
     if (app.isPackaged) {
       logger.info('In packaged')
       if (!app.isInApplicationsFolder()) {
@@ -182,7 +182,9 @@ function init() {
     }
   }
 
-  server()
+  if (!isDevelopment) {
+    server()
+  }
 
   logger.info('Running first window')
   firstRunWindow()

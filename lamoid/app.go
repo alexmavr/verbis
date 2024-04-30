@@ -10,12 +10,16 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/gorilla/handlers"
+
 	"github.com/epochlabs-ai/lamoid/lamoid/store"
 	"github.com/epochlabs-ai/lamoid/lamoid/types"
+	"github.com/epochlabs-ai/lamoid/lamoid/util"
 )
 
 var (
@@ -43,9 +47,19 @@ func main() {
 	}
 
 	router := api.SetupRouter()
+
+	// Apply CORS middleware for npm run start
+	// TODO: only do this in development
+	corsHeaders := handlers.CORS(
+		handlers.AllowedOrigins([]string{"http://localhost:3000"}),                   // Allow requests from Electron app
+		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}), // Allow these methods
+		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),           // Allow these headers
+	)
+	handler := corsHeaders(router)
+
 	server := http.Server{
 		Addr:    ":8081",
-		Handler: router,
+		Handler: handler,
 	}
 
 	// Cancel context when sigChan receives a signal
@@ -65,6 +79,13 @@ func main() {
 		}
 	}()
 
+	path, err := util.GetDistPath()
+	if err != nil {
+		log.Fatalf("Failed to get dist path: %s\n", err)
+	}
+	ollamaPath := filepath.Join(path, util.OllamaFile)
+	weaviatePath := filepath.Join(path, util.WeaviateFile)
+
 	// Weaviate flags
 	os.Setenv("PERSISTENCE_DATA_PATH", "/tmp/lamoid")
 	os.Setenv("AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED", "true")
@@ -72,16 +93,14 @@ func main() {
 		Name string
 		Args []string
 	}{
-		{"../Resources/ollama", []string{"serve"}},
-		{"../Resources/weaviate", []string{"--host", "0.0.0.0", "--port", "8088", "--scheme", "http"}},
+		{ollamaPath, []string{"serve"}},
+		{weaviatePath, []string{"--host", "0.0.0.0", "--port", "8088", "--scheme", "http"}},
 	}
 
 	// Start subprocesses
 	startSubprocesses(ctx, commands)
 
-	// TODO: start background sync process to sync data from external sources
-
-	err := waitForOllama(ctx)
+	err = waitForOllama(ctx)
 	if err != nil {
 		log.Fatalf("Failed to wait for ollama: %s\n", err)
 	}

@@ -3,6 +3,7 @@ module github.com/epochlabs-ai/lamoid/lamoid
 go 1.22.2
 
 require (
+	github.com/gorilla/handlers v1.5.2
 	github.com/gorilla/mux v1.8.1
 	github.com/weaviate/weaviate v1.24.8
 	github.com/weaviate/weaviate-go-client/v4 v4.13.1

@@ -41,6 +41,8 @@ func (a *API) SetupRouter() *mux.Router {
 
 	r.HandleFunc("/sync/force", a.forceSync).Methods("GET")
 
+	// TODO: the following are only available for development
+
 	r.HandleFunc("/mock", a.mockConnectorState).Methods("GET")
 
 	return r

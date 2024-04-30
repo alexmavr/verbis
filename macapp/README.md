@@ -4,11 +4,11 @@ This app builds upon Lamoid to provide a desktop experience for running models.
 
 ## Developing
 
-First, build the `lamoid` binary:
+First, build and run the `lamoid` binary:
 
 ```
-cd <PROJECT_ROOT>/lamoid
-go build .
+make lamoid
+./dist/lamoid
 ```
 
 Then run the desktop app with `npm start`:
@@ -19,3 +19,9 @@ npm install
 npm start
 ```
 
+
+## Packaging
+
+```
+make macapp
+```
