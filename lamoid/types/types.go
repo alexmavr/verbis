@@ -25,18 +25,17 @@ type ConnectorState struct {
 }
 
 type Chunk struct {
-	Document
-	Text string
+	Document `json:"document"`
+	Text     string `json:"text"`
 
 	// The following fields are only filled in when the chunk is a search result
-	Score        float64
-	ExplainScore string
+	Score        float64 `json:"score"`
+	ExplainScore string  `json:"explain_score"`
 }
-
 type Document struct {
-	Name       string
-	SourceURL  string
-	SourceName string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	Name       string    `json:"name"`
+	SourceURL  string    `json:"source_url"`
+	SourceName string    `json:"source_name"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }

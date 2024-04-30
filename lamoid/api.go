@@ -421,9 +421,15 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 		return
 
 	}
-	log.Printf("Response: %s", genResp.Message.Content)
 
-	b, err := json.Marshal(genResp.Message.Content)
+	response := PromptResponse{
+		Content:    genResp.Message.Content,
+		SourceURLs: urlsFromChunks(rerankedChunks),
+	}
+
+	log.Printf("Response: %v", response)
+
+	b, err := json.Marshal(response)
 	if err != nil {
 		http.Error(w, "Failed to marshal search results", http.StatusInternalServerError)
 		return
@@ -434,69 +440,116 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	w.Write(b)
 }
 
+type PromptResponse struct {
+	Content    string   `json:"content"`
+	SourceURLs []string `json:"urls"`
+}
+
+func urlsFromChunks(chunks []*types.Chunk) []string {
+	urls := []string{}
+	for _, chunk := range chunks {
+		urls = append(urls, chunk.SourceURL)
+	}
+	return urls
+}
+
 func Rerank(chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
-	// TODO: implement reranking via LLM model, right now this is a gamble on
-	// vector score relevance
-
 	// Skip chunks with a very low score
-	//minScore := 0.4
+	minScore := 0.4
 
+	log.Printf("Rerank: initial chunks %d", len(chunks))
 	// Sort chunks by score
 	sort.Slice(chunks, func(i, j int) bool {
 		return chunks[i].Score > chunks[j].Score
 	})
 
-	//for _, chunk := range chunks {
-	//	if chunk.Score > minScore {
-	//		new_chunks = append(new_chunks, chunk)
-	//	}
-	//}
-
-	// Keep only top two results by score
-	if len(chunks) > 2 {
-		chunks = chunks[:2]
+	new_chunks := []*types.Chunk{}
+	for _, chunk := range chunks {
+		if chunk.Score > minScore {
+			new_chunks = append(new_chunks, chunk)
+		}
 	}
+	log.Printf("Rerank: filtered chunks: %d", len(new_chunks))
 
-	// TODO: reranking currently fails to consistently return the expected JSON output
-	return chunks, nil
-}
-
-func rerankLLM(chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
-	var builder strings.Builder
-
-	builder.WriteString(` You are a language model designed to evaluate the relevance of documents
-	to a user query. You will respond with a single JSON array with the IDs of
-	the documents in the order of relevance. If you are unable to determine the
-	relevance of a document, you should not include it in the response.
-	For example, if given chunks from 7 documents, only 4 of which are over 0.5
-	relevance score, and where 5 > 2 > 3 > 1 in relevance, you should return
-	this example output: [5, 2, 3, 1].
-	`)
-
-	// Loop through each data chunk and append it followed by a newline
-	for i, chunk := range chunks {
-		builder.WriteString(fmt.Sprintf("\n========== Document ID: %d ==========\n", i))
-		builder.WriteString(fmt.Sprintf("Document Name: %s\n", chunk.SourceName))
-		builder.WriteString(fmt.Sprintf("Document URL: %s\n", chunk.SourceURL))
-		builder.WriteString(fmt.Sprintf("Raw text: %s\n", chunk.Text))
-	}
-
-	// Append the user query with an instruction
-	builder.WriteString("The user query that these documents must be relevant to answering is:")
-	builder.WriteString(query)
-
-	// Return the final combined prompt
-	finalPrompt := builder.String()
-
-	rerankedIds, err := rerankModel(finalPrompt)
+	rerankedChunks, err := rerankLLM(new_chunks, query)
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("Rerank: reranked chunks: %d", len(rerankedChunks))
 
-	resChunks := []*types.Chunk{}
-	for _, id := range rerankedIds {
-		resChunks = append(resChunks, chunks[id])
+	if len(rerankedChunks) == 0 {
+		return rerankedChunks, nil
 	}
+
+	log.Printf("Rerank: winner chunk: %s", rerankedChunks[0].Name)
+
+	// Keep only the one top result
+	// TODO: better reranking and LLMs performance will be needed to avoid
+	// mixing up results across chunks
+	return rerankedChunks[:1], nil
+}
+
+type ChunkForLLM struct {
+	Title   string `json:"title"`
+	Content string `json:"content"`
+}
+
+func rerankLLM(chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
+	resChunks := []*types.Chunk{}
+	for _, chunk := range chunks {
+		var builder strings.Builder
+		builder.WriteString(`You are an AI model designed to determine if a document is relevant to answering a user query. Here is the document:`)
+		builder.WriteString("")
+
+		// Loop through each data chunk and append it followed by a newline
+		llmChunk := &ChunkForLLM{
+			Title:   chunk.Name,
+			Content: chunk.Text,
+		}
+
+		jsonData, err := json.Marshal(llmChunk)
+		if err != nil {
+			return nil, fmt.Errorf("unable to marshal json: %s", err)
+		}
+
+		builder.Write(jsonData)
+		builder.WriteString("")
+
+		builder.WriteString(`The query to which these documents should be relevant is: \n`)
+		builder.WriteString(query)
+
+		// Append the user query with an instruction
+		builder.WriteString(`Determine if the content in the document is directly
+		relevant and helpful to answering the user's query. Return a json response
+		in the following format if the document is relevant:
+			{
+				"relevant": True
+			}
+
+			Or in the following format if the document is not relevant:
+			{
+				"relevant": False
+			}
+			` + "```json\n")
+
+		// Return the final combined prompt
+		finalPrompt := builder.String()
+
+		err = WritePromptLog(finalPrompt)
+		if err != nil {
+			return nil, fmt.Errorf("unable to write prompt to log: %s", err)
+		}
+
+		relevant, err := rerankModel(finalPrompt)
+		if err != nil {
+			return nil, err
+		}
+
+		if relevant {
+			resChunks = append(resChunks, chunk)
+		}
+	}
+	log.Printf("Reranking: final length: %d", len(resChunks))
 
 	return resChunks, nil
 }
@@ -509,14 +562,14 @@ func MakePrompt(chunks []*types.Chunk, query string) string {
 	// Append introduction to guide the model's focus
 	builder.WriteString("You are a personal chat assistant and you have to answer the following user query: ")
 	builder.WriteString(query)
-	builder.WriteString(`\n You may only use information from the following
-	documents to answer the user query. If none of them are relevant say you don't know.`)
+	builder.WriteString(`You may only use information from the following
+	documents to answer the user query. If none of them are relevant say you
+	don't know. Answer directly and succintly, keeping a professional tone`)
 
 	// Loop through each data chunk and append it followed by a newline
 	for i, chunk := range chunks {
 		builder.WriteString(fmt.Sprintf("\n========== Document %d ==========\n", i))
-		builder.WriteString(fmt.Sprintf("Document Name: %s\n", chunk.Name))
-		builder.WriteString(fmt.Sprintf("Document URL: %s\n", chunk.SourceURL))
+		builder.WriteString(fmt.Sprintf("Document Title: %s\n", chunk.Name))
 		builder.WriteString(fmt.Sprintf("Raw text: %s\n", chunk.Text))
 	}
 

@@ -71,14 +71,14 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 		WithQuery(query).
 		WithVector(vector).
 		WithProperties([]string{"chunk", "docName^2"}).
-		WithAlpha(0.8).
+		WithAlpha(0.7).
 		WithFusionType(graphql.RelativeScore)
 
 	resp, err := client.GraphQL().
 		Get().
 		WithClassName(chunkClassName).
 		WithHybrid(hybrid).
-		WithLimit(10).
+		WithLimit(5).
 		WithFields(_chunk_fields...).
 		//		WithAutocut(1).
 		Do(ctx)

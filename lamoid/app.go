@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -25,6 +26,7 @@ import (
 var (
 	httpClient          = &http.Client{Timeout: 10 * time.Second}
 	generationModelName = "mistral"
+	rerankModelName     = "mistral"
 	embeddingsModelName = "nomic-embed-text"
 	clean               = false
 )
@@ -170,7 +172,12 @@ func startSubprocesses(ctx context.Context, commands []struct {
 	}
 }
 
-func rerankModel(prompt string) ([]int, error) {
+type RerankResponse struct {
+	Relevant bool `json:"relevant"`
+}
+
+// returns titles ordered by relevance
+func rerankModel(prompt string) (bool, error) {
 	// URL of the API endpoint
 	url := "http://localhost:11434/api/chat"
 
@@ -184,7 +191,7 @@ func rerankModel(prompt string) ([]int, error) {
 	// TODO: pass history
 	// Create the payload
 	payload := RequestPayload{
-		Model:     generationModelName,
+		Model:     rerankModelName,
 		Messages:  messages,
 		Stream:    false,
 		KeepAlive: "20m",
@@ -194,13 +201,13 @@ func rerankModel(prompt string) ([]int, error) {
 	// Marshal the payload into JSON
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 
 	// Create a new HTTP request
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 
 	// Set the appropriate headers
@@ -210,26 +217,30 @@ func rerankModel(prompt string) ([]int, error) {
 	client := &http.Client{}
 	response, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 	defer response.Body.Close()
 
 	// Read the response body
 	responseData, err := io.ReadAll(response.Body)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 	log.Printf("Response: %v", string(responseData))
 
 	// Unmarshal JSON data into ApiResponse struct
-	var resIds []int
-	if err := json.Unmarshal(responseData, &resIds); err != nil {
-		return nil, err
+	var res ApiResponse
+	if err := json.Unmarshal(responseData, &res); err != nil {
+		return false, err
 	}
 
-	// Return the structured response
-	return resIds, nil
+	resp := RerankResponse{}
+	err = json.Unmarshal([]byte(res.Message.Content), &resp)
+	if err != nil {
+		return false, fmt.Errorf("failed to unmarshal content: %s", err)
+	}
 
+	return resp.Relevant, nil
 }
 
 // Function to call ollama model
