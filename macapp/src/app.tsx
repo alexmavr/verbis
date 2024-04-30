@@ -45,12 +45,13 @@ export default function () {
     }));
 
     try {
-      const response = await generate(promptText, history);
+      const { content, sourceURLs } = await generate(promptText, history);
+      console.log(sourceURLs);
       // Assuming that response is just the assistant's text, adjust if it's structured differently
       setConversation(conv => [
         ...conv,
         { role: 'user', content: promptText },
-        { role: 'assistant', content: response }
+        { role: 'assistant', content: content }
       ]);
       setPromptText(''); // Clear the input field after sending the prompt
     } catch (e) {

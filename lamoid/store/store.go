@@ -78,7 +78,7 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 		Get().
 		WithClassName(chunkClassName).
 		WithHybrid(hybrid).
-		WithLimit(5).
+		WithLimit(10).
 		WithFields(_chunk_fields...).
 		//		WithAutocut(1).
 		Do(ctx)

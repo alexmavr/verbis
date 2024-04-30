@@ -39,8 +39,12 @@ export async function google_sync() {
     throw error; // Rethrow or handle as needed
   }
 }
+interface PromptResponse {
+   content: string;
+   sourceURLs: string[];
+}
 
-export async function generate(promptText: string, history: { role: string; content: string; }[] = []): Promise<string> {
+export async function generate(promptText: string, history: { role: string; content: string; }[] = []): Promise<PromptResponse> {
   try {
     const payload = {
       prompt: promptText,
@@ -50,8 +54,8 @@ export async function generate(promptText: string, history: { role: string; cont
     const response = await axios.post('http://localhost:8081/prompt', payload);
     console.log('Prompt Response:', response.data);
 
-    // Assuming the server returns the response text directly
-    return response.data; // Adjust this according to your server's response structure
+    const { content, sourceURLs } = response.data;
+    return { content, sourceURLs };
   } catch (error) {
     console.error('Error when sending prompt:', error);
     throw new Error(`Failed to retrieve data: ${error.message}`);

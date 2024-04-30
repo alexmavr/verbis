@@ -421,14 +421,19 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 		return
 
 	}
-
 	response := PromptResponse{
 		Content:    genResp.Message.Content,
 		SourceURLs: urlsFromChunks(rerankedChunks),
 	}
 
-	log.Printf("Response: %v", response)
+	err = WritePromptLog(response.Content)
+	if err != nil {
+		log.Printf("Failed to write prompt to log: %s", err)
+		http.Error(w, "Failed to write prompt to log", http.StatusInternalServerError)
+		return
+	}
 
+	log.Printf("Response: %v", response)
 	b, err := json.Marshal(response)
 	if err != nil {
 		http.Error(w, "Failed to marshal search results", http.StatusInternalServerError)
@@ -495,63 +500,69 @@ type ChunkForLLM struct {
 }
 
 func rerankLLM(chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
-	resChunks := []*types.Chunk{}
 	for _, chunk := range chunks {
-		var builder strings.Builder
-		builder.WriteString(`You are an AI model designed to determine if a document is relevant to answering a user query. Here is the document:`)
-		builder.WriteString("")
-
-		// Loop through each data chunk and append it followed by a newline
-		llmChunk := &ChunkForLLM{
-			Title:   chunk.Name,
-			Content: chunk.Text,
+		relevant, err := evalChunk(chunk, query)
+		if err == nil && relevant {
+			return []*types.Chunk{chunk}, nil
 		}
-
-		jsonData, err := json.Marshal(llmChunk)
 		if err != nil {
-			return nil, fmt.Errorf("unable to marshal json: %s", err)
-		}
-
-		builder.Write(jsonData)
-		builder.WriteString("")
-
-		builder.WriteString(`The query to which these documents should be relevant is: \n`)
-		builder.WriteString(query)
-
-		// Append the user query with an instruction
-		builder.WriteString(`Determine if the content in the document is directly
-		relevant and helpful to answering the user's query. Return a json response
-		in the following format if the document is relevant:
-			{
-				"relevant": True
-			}
-
-			Or in the following format if the document is not relevant:
-			{
-				"relevant": False
-			}
-			` + "```json\n")
-
-		// Return the final combined prompt
-		finalPrompt := builder.String()
-
-		err = WritePromptLog(finalPrompt)
-		if err != nil {
-			return nil, fmt.Errorf("unable to write prompt to log: %s", err)
-		}
-
-		relevant, err := rerankModel(finalPrompt)
-		if err != nil {
-			return nil, err
-		}
-
-		if relevant {
-			resChunks = append(resChunks, chunk)
+			log.Printf("Failed to evaluate chunk: %s", err)
 		}
 	}
-	log.Printf("Reranking: final length: %d", len(resChunks))
 
-	return resChunks, nil
+	// None were deemed relevant, just get the highest search score
+	return []*types.Chunk{}, nil
+}
+
+func evalChunk(chunk *types.Chunk, query string) (bool, error) {
+	var builder strings.Builder
+	builder.WriteString(`You are an AI model designed to determine if a document is relevant to answering a user query. Here is the document:`)
+	builder.WriteString("")
+
+	// Loop through each data chunk and append it followed by a newline
+	llmChunk := &ChunkForLLM{
+		Title:   chunk.Name,
+		Content: chunk.Text,
+	}
+
+	jsonData, err := json.Marshal(llmChunk)
+	if err != nil {
+		return false, fmt.Errorf("unable to marshal json: %s", err)
+	}
+
+	builder.Write(jsonData)
+	builder.WriteString("")
+
+	builder.WriteString(`The query to which these documents should be relevant is: \n`)
+	builder.WriteString(query)
+
+	// Append the user query with an instruction
+	builder.WriteString(`Determine if the content in the document is directly
+	relevant and helpful to answering the user's query. Return a json response
+	in the following format if the document is relevant:
+		{
+			"relevant": True
+		}
+
+		Or in the following format if the document is not relevant:
+		{
+			"relevant": False
+		}
+		` + "```json\n")
+
+	// Return the final combined prompt
+	finalPrompt := builder.String()
+	relevant, err := rerankModel(finalPrompt)
+	if err != nil {
+		return false, err
+	}
+
+	logEntry := fmt.Sprintf("%s\n%t\n", finalPrompt, relevant)
+	err = WritePromptLog(logEntry)
+	if err != nil {
+		return false, fmt.Errorf("unable to write prompt to log: %s", err)
+	}
+	return relevant, nil
 }
 
 // TODO: function calling?
@@ -562,6 +573,13 @@ func MakePrompt(chunks []*types.Chunk, query string) string {
 	// Append introduction to guide the model's focus
 	builder.WriteString("You are a personal chat assistant and you have to answer the following user query: ")
 	builder.WriteString(query)
+
+	if len(chunks) == 0 {
+		builder.WriteString(`\nNo relevant documents were found to answer the
+		user query. You may answer the query based on historical chat but you
+		should prefer to say you don't know if you're not sure.`)
+		return builder.String()
+	}
 	builder.WriteString(`You may only use information from the following
 	documents to answer the user query. If none of them are relevant say you
 	don't know. Answer directly and succintly, keeping a professional tone`)
