@@ -12,6 +12,10 @@ import (
 	"github.com/epochlabs-ai/lamoid/lamoid/types"
 )
 
+const (
+	MinChunkSize = 10
+)
+
 type Syncer struct {
 	connectors      map[string]types.Connector
 	syncCheckPeriod time.Duration
@@ -86,7 +90,7 @@ func chunkAdder(ctx context.Context, c types.Connector, chunkChan chan types.Chu
 		log.Printf("Received chunk of length %d\n", len(chunk.Text))
 		saneChunk := cleanWhitespace(chunk.Text)
 		log.Printf("Sanitized chunk to length %d\n", len(saneChunk))
-		if len(saneChunk) < 50 {
+		if len(saneChunk) < MinChunkSize {
 			log.Printf("Skipping short chunk: %s\n", saneChunk)
 			continue
 		}

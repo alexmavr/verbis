@@ -1,11 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -25,10 +21,11 @@ import (
 
 var (
 	httpClient          = &http.Client{Timeout: 10 * time.Second}
-	generationModelName = "mistral"
-	rerankModelName     = "mistral"
+	generationModelName = "custom-mistral"
+	rerankModelName     = "custom-mistral"
 	embeddingsModelName = "nomic-embed-text"
 	clean               = false
+	KeepAliveTime       = "20m"
 )
 
 func main() {
@@ -107,9 +104,16 @@ func main() {
 		log.Fatalf("Failed to wait for ollama: %s\n", err)
 	}
 
-	err = pullModel(generationModelName, false)
-	if err != nil {
-		log.Fatalf("Failed to pull model: %s\n", err)
+	if IsCustomModel(generationModelName) {
+		err = createModel(generationModelName)
+		if err != nil {
+			log.Fatalf("Failed to create model: %s\n", err)
+		}
+	} else {
+		err = pullModel(generationModelName, false)
+		if err != nil {
+			log.Fatalf("Failed to pull model: %s\n", err)
+		}
 	}
 
 	err = pullModel(embeddingsModelName, false)
@@ -170,134 +174,4 @@ func startSubprocesses(ctx context.Context, commands []struct {
 			}
 		}(cmdConfig)
 	}
-}
-
-type RerankResponse struct {
-	Relevant bool `json:"relevant"`
-}
-
-// returns titles ordered by relevance
-func rerankModel(prompt string) (bool, error) {
-	// URL of the API endpoint
-	url := "http://localhost:11434/api/chat"
-
-	messages := []types.HistoryItem{
-		{
-			Role:    "user",
-			Content: prompt,
-		},
-	}
-
-	// TODO: pass history
-	// Create the payload
-	payload := RequestPayload{
-		Model:     rerankModelName,
-		Messages:  messages,
-		Stream:    false,
-		KeepAlive: "20m",
-		Format:    "json",
-	}
-
-	// Marshal the payload into JSON
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		return false, err
-	}
-
-	// Create a new HTTP request
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return false, err
-	}
-
-	// Set the appropriate headers
-	req.Header.Set("Content-Type", "application/json")
-
-	// Make the HTTP request using the default client
-	client := &http.Client{}
-	response, err := client.Do(req)
-	if err != nil {
-		return false, err
-	}
-	defer response.Body.Close()
-
-	// Read the response body
-	responseData, err := io.ReadAll(response.Body)
-	if err != nil {
-		return false, err
-	}
-	log.Printf("Response: %v", string(responseData))
-
-	// Unmarshal JSON data into ApiResponse struct
-	var res ApiResponse
-	if err := json.Unmarshal(responseData, &res); err != nil {
-		return false, err
-	}
-
-	resp := RerankResponse{}
-	err = json.Unmarshal([]byte(res.Message.Content), &resp)
-	if err != nil {
-		return false, fmt.Errorf("failed to unmarshal content: %s", err)
-	}
-
-	return resp.Relevant, nil
-}
-
-// Function to call ollama model
-func chatWithModel(prompt string, history []types.HistoryItem) (*ApiResponse, error) {
-	// URL of the API endpoint
-	url := "http://localhost:11434/api/chat"
-
-	messages := append(history, types.HistoryItem{
-		Role:    "user",
-		Content: prompt,
-	})
-
-	// TODO: pass history
-	// Create the payload
-	payload := RequestPayload{
-		Model:     generationModelName,
-		Messages:  messages,
-		Stream:    false,
-		KeepAlive: "20m",
-	}
-
-	// Marshal the payload into JSON
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a new HTTP request
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, err
-	}
-
-	// Set the appropriate headers
-	req.Header.Set("Content-Type", "application/json")
-
-	// Make the HTTP request using the default client
-	client := &http.Client{}
-	response, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer response.Body.Close()
-
-	// Read the response body
-	responseData, err := io.ReadAll(response.Body)
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("Response: %v", string(responseData))
-
-	// Unmarshal JSON data into ApiResponse struct
-	var apiResponse ApiResponse
-	if err := json.Unmarshal(responseData, &apiResponse); err != nil {
-		return nil, err
-	}
-
-	// Return the structured response
-	return &apiResponse, nil
 }

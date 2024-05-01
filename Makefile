@@ -42,6 +42,8 @@ dist/weaviate:
 lamoid:
 	# Ensure dist directory exists
 	mkdir -p $(DIST_DIR)
+	# Modelfile is needed for any custom model execution
+	cp Modelfile.* dist/
 
 	pushd lamoid && go build -o ../$(DIST_DIR)/lamoid . && popd
 

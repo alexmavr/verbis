@@ -20,6 +20,7 @@ const config: ForgeConfig = {
       '../dist/ollama',
       '../dist/weaviate',
       '../dist/credentials.json',
+      '../dist/Modelfile.custom-mistral',
 //      path.join(__dirname, './assets/iconTemplate.png'),
     ],
     ...(process.env.SIGN

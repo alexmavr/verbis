@@ -5,6 +5,10 @@ import (
 	"time"
 )
 
+const (
+	MaxChunkSize = 2000 // Maximum number of characters in a chunk
+)
+
 type Connector interface {
 	Name() string
 

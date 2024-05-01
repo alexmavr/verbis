@@ -8,10 +8,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
-	"sort"
-	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -22,7 +18,8 @@ import (
 )
 
 var (
-	PromptLogFile = ".lamoid/logs/prompt.log" // Relative to home
+	PromptLogFile           = ".lamoid/logs/prompt.log" // Relative to home
+	NumConcurrentInferences = 3
 )
 
 type API struct {
@@ -443,171 +440,4 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(b)
-}
-
-type PromptResponse struct {
-	Content    string   `json:"content"`
-	SourceURLs []string `json:"urls"`
-}
-
-func urlsFromChunks(chunks []*types.Chunk) []string {
-	urls := []string{}
-	for _, chunk := range chunks {
-		urls = append(urls, chunk.SourceURL)
-	}
-	return urls
-}
-
-func Rerank(chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
-	// Skip chunks with a very low score
-	minScore := 0.4
-
-	log.Printf("Rerank: initial chunks %d", len(chunks))
-	// Sort chunks by score
-	sort.Slice(chunks, func(i, j int) bool {
-		return chunks[i].Score > chunks[j].Score
-	})
-
-	new_chunks := []*types.Chunk{}
-	for _, chunk := range chunks {
-		if chunk.Score > minScore {
-			new_chunks = append(new_chunks, chunk)
-		}
-	}
-	log.Printf("Rerank: filtered chunks: %d", len(new_chunks))
-
-	rerankedChunks, err := rerankLLM(new_chunks, query)
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("Rerank: reranked chunks: %d", len(rerankedChunks))
-
-	if len(rerankedChunks) == 0 {
-		return rerankedChunks, nil
-	}
-
-	log.Printf("Rerank: winner chunk: %s", rerankedChunks[0].Name)
-
-	// Keep only the one top result
-	// TODO: better reranking and LLMs performance will be needed to avoid
-	// mixing up results across chunks
-	return rerankedChunks[:1], nil
-}
-
-type ChunkForLLM struct {
-	Title   string `json:"title"`
-	Content string `json:"content"`
-}
-
-func rerankLLM(chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
-	for _, chunk := range chunks {
-		relevant, err := evalChunk(chunk, query)
-		if err == nil && relevant {
-			return []*types.Chunk{chunk}, nil
-		}
-		if err != nil {
-			log.Printf("Failed to evaluate chunk: %s", err)
-		}
-	}
-
-	// None were deemed relevant, just get the highest search score
-	return []*types.Chunk{}, nil
-}
-
-func evalChunk(chunk *types.Chunk, query string) (bool, error) {
-	var builder strings.Builder
-	builder.WriteString(`You are an AI model designed to determine if a document is relevant to answering a user query. Here is the document:`)
-	builder.WriteString("")
-
-	// Loop through each data chunk and append it followed by a newline
-	llmChunk := &ChunkForLLM{
-		Title:   chunk.Name,
-		Content: chunk.Text,
-	}
-
-	jsonData, err := json.Marshal(llmChunk)
-	if err != nil {
-		return false, fmt.Errorf("unable to marshal json: %s", err)
-	}
-
-	builder.Write(jsonData)
-	builder.WriteString("")
-
-	builder.WriteString(`The query to which these documents should be relevant is: \n`)
-	builder.WriteString(query)
-
-	// Append the user query with an instruction
-	builder.WriteString(`Determine if the content in the document is directly
-	relevant and helpful to answering the user's query. Return a json response
-	in the following format if the document is relevant:
-		{
-			"relevant": True
-		}
-
-		Or in the following format if the document is not relevant:
-		{
-			"relevant": False
-		}
-		` + "```json\n")
-
-	// Return the final combined prompt
-	finalPrompt := builder.String()
-	relevant, err := rerankModel(finalPrompt)
-	if err != nil {
-		return false, err
-	}
-
-	logEntry := fmt.Sprintf("%s\n%t\n", finalPrompt, relevant)
-	err = WritePromptLog(logEntry)
-	if err != nil {
-		return false, fmt.Errorf("unable to write prompt to log: %s", err)
-	}
-	return relevant, nil
-}
-
-// TODO: function calling?
-func MakePrompt(chunks []*types.Chunk, query string) string {
-	// Create a builder to efficiently concatenate strings
-	var builder strings.Builder
-
-	// Append introduction to guide the model's focus
-	builder.WriteString("You are a personal chat assistant and you have to answer the following user query: ")
-	builder.WriteString(query)
-
-	if len(chunks) == 0 {
-		builder.WriteString(`\nNo relevant documents were found to answer the
-		user query. You may answer the query based on historical chat but you
-		should prefer to say you don't know if you're not sure.`)
-		return builder.String()
-	}
-	builder.WriteString(`You may only use information from the following
-	documents to answer the user query. If none of them are relevant say you
-	don't know. Answer directly and succintly, keeping a professional tone`)
-
-	// Loop through each data chunk and append it followed by a newline
-	for i, chunk := range chunks {
-		builder.WriteString(fmt.Sprintf("\n========== Document %d ==========\n", i))
-		builder.WriteString(fmt.Sprintf("Document Title: %s\n", chunk.Name))
-		builder.WriteString(fmt.Sprintf("Raw text: %s\n", chunk.Text))
-	}
-
-	// Return the final combined prompt
-	return builder.String()
-}
-
-func WritePromptLog(prompt string) error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("unable to get user home directory: %w", err)
-	}
-	path := filepath.Join(home, PromptLogFile)
-	// Open the file for writing, creating it if it doesn't exist
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-
-	// Write the prompt to the file
-	_, err = file.WriteString("\n===\n" + prompt + "\n")
-	return err
 }

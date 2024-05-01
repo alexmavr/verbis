@@ -30,7 +30,7 @@ const (
 	credentialFile = "credentials.json"
 	tokenKey       = "user-google-oauth-token"
 	keyringService = "LamoidApp"
-	MaxChunkSize   = 10000 // Maximum number of characters in a chunk
+	MaxChunkSize   = 2000 // Maximum number of characters in a chunk
 )
 
 type GoogleConnector struct {
