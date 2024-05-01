@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import Store from "electron-store";
 import { getCurrentWindow, app } from "@electron/remote";
 import axios from "axios";
+import { PaperAirplaneIcon } from "@heroicons/react/24/solid";
 
 import {
   google_init,
@@ -25,6 +26,7 @@ export default function () {
   const [loading, setLoading] = useState(true); // State for the spinner
   const [conversation, setConversation] = useState([]);
   const conversationContainer = useRef<HTMLDivElement>(null);
+  const promptInputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const checkHealth = async () => {
@@ -73,6 +75,14 @@ export default function () {
   useEffect(() => {
     smoothScrollToBottom();
   }, [conversation.length]);
+
+  useEffect(() => {
+    const textarea = promptInputRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    }
+  }, [promptText]);
 
   // Function to handle the prompting action
   const triggerPrompt = async () => {
@@ -202,19 +212,21 @@ export default function () {
               )}
 
               {/* Prompt input and button */}
-              <div className="prompt-section fixed inset-x-0 bottom-0 bg-white p-4 shadow-lg">
-                <input
-                  type="text"
+              <div className="fixed inset-x-0 bottom-0 flex items-center bg-white p-4 shadow-lg">
+                <textarea
+                  ref={promptInputRef}
                   value={promptText}
                   onChange={(e) => setPromptText(e.target.value)}
-                  placeholder={loading ? "Loading..." : "Enter your prompt"}
+                  placeholder={loading ? "Loading..." : "How can I help?"}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
+                    if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
                       triggerPrompt();
+                    } else if (e.key === "Enter" && e.shiftKey) {
+                      // setPromptText(promptText + "\n");
                     }
                   }}
-                  className={`prompt-input w-full rounded-lg border border-gray-300 p-2 ${
+                  className={`flex-grow resize-none overflow-hidden rounded border border-gray-300 p-2 pr-16 ${
                     loading
                       ? "disabled:cursor-not-allowed disabled:opacity-50"
                       : ""
@@ -223,14 +235,18 @@ export default function () {
                 />
                 <button
                   onClick={triggerPrompt}
-                  className={`prompt-button rounded bg-blue-500 px-4 py-2 font-bold text-white hover:bg-blue-700 ${
+                  className={`absolute bottom-4 right-4 mb-2 mr-2 flex h-10 w-10 items-center justify-center rounded bg-blue-500 font-bold text-white hover:bg-blue-700 ${
                     loading
                       ? "disabled:cursor-not-allowed disabled:opacity-50"
                       : ""
                   }`}
                   disabled={loading}
                 >
-                  {loading ? <div className="spinner"></div> : "Prompt"}
+                  {loading ? (
+                    <p className="loading-spinner"></p>
+                  ) : (
+                    <PaperAirplaneIcon className=" p-2 text-white" />
+                  )}
                 </button>
               </div>
             </div>
