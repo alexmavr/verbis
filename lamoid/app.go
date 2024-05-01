@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -166,6 +167,19 @@ func main() {
 
 	endTime := time.Now()
 
+	// Identify user to posthog
+	systemStats, err := getSystemStats()
+	if err != nil {
+		log.Fatalf("Failed to get system stats: %s\n", err)
+	}
+	err = postHogClient.Enqueue(posthog.Identify{
+		DistinctId: postHogDistinctID,
+		Properties: posthog.NewProperties().
+			Set("chipset", systemStats.Chipset).
+			Set("macos", systemStats.MacOS).
+			Set("memsize", systemStats.Memsize),
+	})
+
 	err = postHogClient.Enqueue(posthog.Capture{
 		DistinctId: postHogDistinctID,
 		Event:      "Started",
@@ -181,6 +195,43 @@ func main() {
 	// Start HTTP server
 	log.Print("Starting server on port 8081")
 	log.Fatal(server.ListenAndServe())
+}
+
+type SystemStats struct {
+	Chipset string
+	MacOS   string
+	Memsize string
+}
+
+func getSystemStats() (*SystemStats, error) {
+	chipsetCmd := exec.Command("sysctl", "-n", "machdep.cpu.brand_string")
+	chipsetOut, err := chipsetCmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get chipset info: %v", err)
+	}
+	chipset := strings.TrimSpace(string(chipsetOut))
+
+	// Retrieve macOS version
+	versionCmd := exec.Command("sw_vers", "-productVersion")
+	versionOut, err := versionCmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get macOS version: %v", err)
+	}
+	macos := strings.TrimSpace(string(versionOut))
+
+	// Retrieve system memory information
+	memCmd := exec.Command("sysctl", "-n", "hw.memsize")
+	memOut, err := memCmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get memory info: %v", err)
+	}
+	memGB := strings.TrimSpace(string(memOut))
+
+	return &SystemStats{
+		Chipset: chipset,
+		MacOS:   macos,
+		Memsize: memGB,
+	}, nil
 }
 
 func startSubprocesses(ctx context.Context, commands []struct {
