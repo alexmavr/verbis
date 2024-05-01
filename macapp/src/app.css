@@ -5,6 +5,28 @@
 html,
 body {
   background: transparent;
+  scroll-behavior: smooth;
+}
+
+/* For WebKit browsers */
+::-webkit-scrollbar {
+    width: 8px; /* Vertical scrollbar width */
+    height: 8px; /* Horizontal scrollbar height */
+}
+
+::-webkit-scrollbar-track {
+    background: transparent; /* Track background */
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.2); /* Thumb color */
+    border-radius: 4px; /* Roundness of the scrollbar thumb */
+}
+
+/* For Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
 }
 
 .drag {
@@ -45,13 +67,6 @@ spinner {
   margin-top: 20px;
 }
 
-.message {
-  padding: 5px;
-  margin-bottom: 5px;
-  border-radius: 10px;
-  max-width: 80%;
-}
-
 .user {
   align-self: flex-end;
   background-color: #dcf8c6;
@@ -60,10 +75,6 @@ spinner {
 .assistant {
   align-self: flex-start;
   background-color: #ebebeb;
-}
-
-.message-content {
-  padding: 10px;
 }
 
 @keyframes blink {
@@ -93,8 +104,4 @@ spinner {
   100% {
     transform: rotate(360deg);
   }
-}
-
-.conversation-container {
-  scroll-behavior: smooth;
 }

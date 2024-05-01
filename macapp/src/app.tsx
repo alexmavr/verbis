@@ -118,13 +118,22 @@ export default function () {
       content: item.content,
     }));
 
+    // Display the submitted prompt immediately
+    setConversation((conv) => [
+      ...conv,
+      {
+        role: "user",
+        content: previousPrompt,
+      },
+    ]);
+
     try {
       const { content, sourceURLs } = await generate(promptText, history);
       console.log(sourceURLs);
       // Assuming that response is just the assistant's text, adjust if it's structured differently
       setConversation((conv) => [
         ...conv,
-        { role: "user", content: promptText },
+        // { role: "user", content: promptText },
         { role: "assistant", content: content },
       ]);
       setPromptText(""); // Clear the input field after sending the prompt
@@ -141,8 +150,8 @@ export default function () {
 
   const renderConversation = () => {
     return conversation.map((item, index) => (
-      <div key={index} className={`message ${item.role}`}>
-        <div className="message-content">{item.content}</div>
+      <div key={index} className={`mb-1 rounded p-1 ${item.role}`}>
+        <div className="p-2">{item.content}</div>
       </div>
     ));
   };
@@ -219,18 +228,21 @@ export default function () {
               {conversation.length > 0 && (
                 <div
                   ref={conversationContainer}
-                  className="conversation-container overflow-auto pb-20"
+                  className="mt-5 overflow-auto overflow-y-auto pb-20 pr-2"
                 >
                   {conversation.map((item, index) => (
-                    <div key={index} className={`message ${item.role}`}>
-                      <div className="message-content">{item.content}</div>
+                    <div
+                      key={index}
+                      className={`mb-1 rounded p-1 ${item.role}`}
+                    >
+                      <div className="p-2">{item.content}</div>
                     </div>
                   ))}
                 </div>
               )}
 
               {/* Prompt input and button */}
-              <div className="fixed inset-x-0 bottom-0 flex items-center bg-white p-4 shadow-lg">
+              <div className="fixed inset-x-0 bottom-0 flex items-center p-4 shadow-lg">
                 <textarea
                   ref={promptInputRef}
                   value={promptText}
