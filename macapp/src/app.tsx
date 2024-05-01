@@ -27,6 +27,8 @@ export default function () {
   const [conversation, setConversation] = useState([]);
   const conversationContainer = useRef<HTMLDivElement>(null);
   const promptInputRef = useRef<HTMLTextAreaElement>(null);
+  const [placeholder, setPlaceholder] = useState("How can I help?");
+  const countRef = useRef(0); // To keep track of the ellipsis state
 
   useEffect(() => {
     const checkHealth = async () => {
@@ -83,6 +85,22 @@ export default function () {
       textarea.style.height = `${textarea.scrollHeight}px`;
     }
   }, [promptText]);
+
+  useEffect(() => {
+    if (loading) {
+      setPlaceholder("Processing");
+      const interval = setInterval(() => {
+        const dots = countRef.current % 4;
+        setPlaceholder(`Processing${".".repeat(dots)}`);
+        countRef.current++;
+      }, 500);
+
+      return () => clearInterval(interval);
+    } else {
+      setPlaceholder("How can I help?");
+      countRef.current = 0;
+    }
+  }, [loading]);
 
   // Function to handle the prompting action
   const triggerPrompt = async () => {
@@ -217,7 +235,7 @@ export default function () {
                   ref={promptInputRef}
                   value={promptText}
                   onChange={(e) => setPromptText(e.target.value)}
-                  placeholder={loading ? "Loading..." : "How can I help?"}
+                  placeholder={placeholder}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
