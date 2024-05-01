@@ -12,7 +12,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/handlers"
+	"github.com/posthog/posthog-go"
 
 	"github.com/epochlabs-ai/lamoid/lamoid/store"
 	"github.com/epochlabs-ai/lamoid/lamoid/types"
@@ -26,9 +28,14 @@ var (
 	embeddingsModelName = "nomic-embed-text"
 	clean               = false
 	KeepAliveTime       = "20m"
+
+	PosthogAPIKey = "n/a" // Will be populated by linker from builder's env
 )
 
 func main() {
+	startTime := time.Now()
+	postHogDistinctID := uuid.New().String()
+
 	// Define the commands to be executed
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
@@ -40,9 +47,28 @@ func main() {
 	// Start syncer as separate goroutine
 	syncer := NewSyncer()
 	go syncer.Run(ctx)
+
+	if PosthogAPIKey == "n/a" {
+		log.Fatalf("Posthog API key not set\n")
+	}
+
+	postHogClient, err := posthog.NewWithConfig(
+		PosthogAPIKey,
+		posthog.Config{
+			PersonalApiKey: PosthogAPIKey,
+			Endpoint:       "https://eu.i.posthog.com",
+		},
+	)
+	if err != nil {
+		log.Fatalf("Failed to create PostHog client: %s\n", err)
+	}
+	defer postHogClient.Close()
+
 	api := API{
-		Syncer:  syncer,
-		Context: ctx,
+		Syncer:            syncer,
+		Context:           ctx,
+		Posthog:           postHogClient,
+		PosthogDistinctID: postHogDistinctID,
 	}
 
 	router := api.SetupRouter()
@@ -136,6 +162,20 @@ func main() {
 	}
 	if !strings.Contains(resp.Message.Content, "Paris") {
 		log.Fatalf("Response does not contain Paris: %v\n", resp.Message.Content)
+	}
+
+	endTime := time.Now()
+
+	err = postHogClient.Enqueue(posthog.Capture{
+		DistinctId: postHogDistinctID,
+		Event:      "Started",
+		Properties: posthog.NewProperties().
+			// TODO: version
+			// TODO: connector states
+			Set("start_duration", endTime.Sub(startTime).String()),
+	})
+	if err != nil {
+		log.Fatalf("Failed to enqueue event: %s\n", err)
 	}
 
 	// Start HTTP server

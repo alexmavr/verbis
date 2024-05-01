@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/posthog/posthog-go"
 
 	"github.com/epochlabs-ai/lamoid/lamoid/connectors"
 	"github.com/epochlabs-ai/lamoid/lamoid/store"
@@ -23,8 +24,10 @@ var (
 )
 
 type API struct {
-	Syncer  *Syncer
-	Context context.Context
+	Syncer            *Syncer
+	Context           context.Context
+	Posthog           posthog.Client
+	PosthogDistinctID string
 }
 
 func (a *API) SetupRouter() *mux.Router {
@@ -365,6 +368,7 @@ type PromptRequest struct {
 }
 
 func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	var promptReq PromptRequest
 	defer r.Body.Close()
 	err := json.NewDecoder(r.Body).Decode(&promptReq)
@@ -380,6 +384,7 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to get embeddings", http.StatusInternalServerError)
 		return
 	}
+	embedTime := time.Now()
 
 	embeddings := resp.Embedding
 	log.Printf("Performing vector search")
@@ -395,6 +400,7 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to search for vectors", http.StatusInternalServerError)
 		return
 	}
+	searchTime := time.Now()
 
 	// Rerank the results
 	rerankedChunks, err := Rerank(r.Context(), searchResults, promptReq.Prompt)
@@ -403,6 +409,7 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to rerank search results", http.StatusInternalServerError)
 		return
 	}
+	rerankTime := time.Now()
 
 	llmPrompt := MakePrompt(rerankedChunks, promptReq.Prompt)
 	log.Printf("LLM Prompt: %s", llmPrompt)
@@ -431,6 +438,7 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to write prompt to log", http.StatusInternalServerError)
 		return
 	}
+	doneTime := time.Now()
 
 	log.Printf("Response: %v", response)
 	b, err := json.Marshal(response)
@@ -438,6 +446,18 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to marshal search results", http.StatusInternalServerError)
 		return
 	}
+	a.Posthog.Enqueue(posthog.Capture{
+		DistinctId: a.PosthogDistinctID,
+		Event:      "Prompt",
+		Properties: posthog.NewProperties().
+			Set("total_duration", doneTime.Sub(startTime).String()).
+			Set("generation_duration", doneTime.Sub(rerankTime).String()).
+			Set("rerank_duration", rerankTime.Sub(searchTime).String()).
+			Set("search_duration", searchTime.Sub(embedTime).String()).
+			Set("embed_duration", embedTime.Sub(startTime).String()).
+			Set("num_search_results", len(searchResults)).
+			Set("num_reranked_results", len(rerankedChunks)),
+	})
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

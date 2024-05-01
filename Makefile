@@ -8,6 +8,12 @@ ZIP_FILE := weaviate-$(WEAVIATE_VERSION)-darwin-all.zip
 OLLAMA_BIN := ollama-darwin
 OLLAMA_URL := https://github.com/ollama/ollama/releases/download/$(OLLAMA_VERSION)/$(OLLAMA_BIN)
 
+PACKAGE := main
+
+include .build.env
+
+LDFLAGS := -X "$(PACKAGE).PosthogAPIKey=$(POSTHOG_PERSONAL_API_KEY)"
+
 all: macapp
 
 dist/ollama:
@@ -45,7 +51,10 @@ lamoid:
 	# Modelfile is needed for any custom model execution
 	cp Modelfile.* dist/
 
-	pushd lamoid && go build -o ../$(DIST_DIR)/lamoid . && popd
+	echo "$(LDFLAGS)"
+
+
+	pushd lamoid && go build -ldflags="$(LDFLAGS)" -o ../$(DIST_DIR)/lamoid . && popd
 
 macapp: lamoid dist/ollama dist/weaviate
 	pushd macapp && npm install && npm run package && popd
