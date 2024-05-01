@@ -89,6 +89,8 @@ func (a *API) connectorsList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) connectorInit(w http.ResponseWriter, r *http.Request) {
+	// Should not error when called accidentally multiple times
+	// Can be re-invoked to re-init the connector (i.e. to reset stuck syncing state)
 	vars := mux.Vars(r)
 	connectorName, ok := vars["name"]
 	if !ok {
@@ -384,7 +386,7 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 
 	// Perform vector similarity search and get list of most relevant results
 	searchResults, err := store.HybridSearch(
-		context.Background(),
+		r.Context(),
 		store.GetWeaviateClient(),
 		promptReq.Prompt,
 		embeddings,
@@ -395,7 +397,7 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Rerank the results
-	rerankedChunks, err := Rerank(searchResults, promptReq.Prompt)
+	rerankedChunks, err := Rerank(r.Context(), searchResults, promptReq.Prompt)
 	if err != nil {
 		log.Printf("Failed to rerank search results: %s", err)
 		http.Error(w, "Failed to rerank search results", http.StatusInternalServerError)

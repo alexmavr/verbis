@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -226,7 +227,7 @@ func urlsFromChunks(chunks []*types.Chunk) []string {
 	return urls
 }
 
-func Rerank(chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
+func Rerank(ctx context.Context, chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
 	// Skip chunks with a very low score
 	minScore := 0.4
 
@@ -244,7 +245,7 @@ func Rerank(chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
 	}
 	log.Printf("Rerank: filtered chunks: %d", len(new_chunks))
 
-	rerankedChunks, err := rerankLLM(new_chunks, query)
+	rerankedChunks, err := rerankLLM(ctx, new_chunks, query)
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +319,7 @@ func evalChunk(chunk *types.Chunk, query string) (bool, error) {
 	return relevant, nil
 }
 
-func rerankLLM(chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
+func rerankLLM(ctx context.Context, chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
 	var wg sync.WaitGroup
 	chunkChan := make(chan *types.Chunk, len(chunks))
 	relevantChan := make(chan *types.Chunk, len(chunks))
@@ -330,6 +331,8 @@ func rerankLLM(chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
 	}
 	close(chunkChan)
 
+	newCtx, cancel := context.WithCancel(ctx)
+
 	// Worker pool
 	for i := 0; i < NumConcurrentInferences; i++ {
 		wg.Add(1)
@@ -338,12 +341,19 @@ func rerankLLM(chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
 
 			log.Printf("Starting worker %d", i)
 			for chunk := range chunkChan {
+				select {
+				case <-newCtx.Done():
+					return
+				default:
+				}
 				log.Printf("Worker %d, Chunk: %s", i, chunk.Name)
 				relevant, err := evalChunk(chunk, query)
 				if err != nil {
 					errorChan <- fmt.Errorf("unable to evaluate chunk: %s", err)
 				} else if relevant {
 					relevantChan <- chunk
+					cancel()
+					return
 				}
 			}
 		}(i)

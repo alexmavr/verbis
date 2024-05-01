@@ -32,10 +32,9 @@ func NewSyncer() *Syncer {
 
 func (s *Syncer) AddConnector(c types.Connector) error {
 	_, ok := s.connectors[c.Name()]
-	if ok {
-		return fmt.Errorf("connector %s already exists", c.Name())
+	if !ok {
+		s.connectors[c.Name()] = c
 	}
-	s.connectors[c.Name()] = c
 	return nil
 }
 
