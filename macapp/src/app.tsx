@@ -235,7 +235,7 @@ export default function () {
                 />
                 <button
                   onClick={triggerPrompt}
-                  className={`absolute bottom-4 right-4 mb-2 mr-2 flex h-10 w-10 items-center justify-center rounded bg-blue-500 font-bold text-white hover:bg-blue-700 ${
+                  className={`absolute bottom-4 right-4 mb-2 mr-2 flex h-10 w-10 items-center justify-center rounded-full bg-blue-500 font-bold text-white hover:bg-blue-700 ${
                     loading
                       ? "disabled:cursor-not-allowed disabled:opacity-50"
                       : ""
