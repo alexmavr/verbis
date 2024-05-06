@@ -14,14 +14,14 @@ const config: ForgeConfig = {
   packagerConfig: {
     appVersion: process.env.VERSION || packageJson.version,
     asar: true,
-    icon: './assets/icon.icns',
+    icon: "./assets/icon.icns",
     extraResource: [
-      '../dist/lamoid',
-      '../dist/ollama',
-      '../dist/weaviate',
-      '../dist/credentials.json',
-      '../dist/Modelfile.custom-mistral',
-//      path.join(__dirname, './assets/iconTemplate.png'),
+      "../dist/lamoid",
+      "../dist/ollama",
+      "../dist/weaviate",
+      "../dist/credentials.json",
+      "../dist/Modelfile.custom-mistral-instruct",
+      //      path.join(__dirname, './assets/iconTemplate.png'),
     ],
     ...(process.env.SIGN
       ? {
@@ -29,22 +29,25 @@ const config: ForgeConfig = {
             identity: process.env.APPLE_IDENTITY,
           },
           osxNotarize: {
-            tool: 'notarytool',
-            appleId: process.env.APPLE_ID || '',
-            appleIdPassword: process.env.APPLE_PASSWORD || '',
-            teamId: process.env.APPLE_TEAM_ID || '',
+            tool: "notarytool",
+            appleId: process.env.APPLE_ID || "",
+            appleIdPassword: process.env.APPLE_PASSWORD || "",
+            teamId: process.env.APPLE_TEAM_ID || "",
           },
         }
       : {}),
     osxUniversal: {
-      x64ArchFiles: '**/*',
+      x64ArchFiles: "**/*",
     },
   },
   rebuildConfig: {},
-  makers: [new MakerZIP({}, ['darwin'])],
+  makers: [new MakerZIP({}, ["darwin"])],
   hooks: {
     readPackageJson: async (_, packageJson) => {
-      return { ...packageJson, version: process.env.VERSION || packageJson.version }
+      return {
+        ...packageJson,
+        version: process.env.VERSION || packageJson.version,
+      };
     },
   },
   plugins: [
@@ -57,17 +60,17 @@ const config: ForgeConfig = {
         nodeIntegration: true,
         entryPoints: [
           {
-            html: './src/index.html',
-            js: './src/renderer.tsx',
-            name: 'main_window',
+            html: "./src/index.html",
+            js: "./src/renderer.tsx",
+            name: "main_window",
             preload: {
-              js: './src/preload.ts',
+              js: "./src/preload.ts",
             },
           },
         ],
       },
     }),
   ],
-}
+};
 
 export default config
