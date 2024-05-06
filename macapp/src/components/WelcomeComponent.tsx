@@ -1,13 +1,29 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import LamoidIcon from "../lamoid.svg";
 import { AppScreen } from "../types";
+import axios from "axios";
 
 interface Props {
   navigate: (screen: AppScreen) => void;
-  loading: boolean;
 }
 
-const WelcomeComponent: React.FC<Props> = ({ navigate, loading }) => {
+const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
+  const [loading, setLoading] = useState(true); // State for the spinner
+
+  useEffect(() => {
+    const checkHealth = async () => {
+      try {
+        await axios.get("http://localhost:8081/health");
+        setLoading(false); // Turn off spinner on successful response
+      } catch (error) {
+        console.error("Error checking health: ", error);
+        setTimeout(checkHealth, 3000); // Retry after 3 seconds if the request fails
+      }
+    };
+
+    checkHealth();
+  }, []);
+
   return (
     <>
       <div className="mx-auto text-center">

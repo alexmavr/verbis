@@ -40,24 +40,37 @@ export async function google_sync() {
   }
 }
 interface PromptResponse {
-   content: string;
-   sourceURLs: string[];
+  content: string;
+  urls: string[];
 }
 
-export async function generate(promptText: string, history: { role: string; content: string; }[] = []): Promise<PromptResponse> {
+export async function generate(
+  promptText: string,
+  history: { role: string; content: string }[] = []
+): Promise<PromptResponse> {
   try {
     const payload = {
       prompt: promptText,
-      history: history.length > 0 ? history : []
+      history: history.length > 0 ? history : [],
     };
 
-    const response = await axios.post('http://localhost:8081/prompt', payload);
-    console.log('Prompt Response:', response.data);
+    const response = await axios.post("http://localhost:8081/prompt", payload);
+    console.log("Prompt Response:", response.data);
 
-    const { content, sourceURLs } = response.data;
-    return { content, sourceURLs };
+    const { content, urls } = response.data;
+    return { content, urls };
   } catch (error) {
-    console.error('Error when sending prompt:', error);
+    console.error("Error when sending prompt:", error);
     throw new Error(`Failed to retrieve data: ${error.message}`);
+  }
+}
+
+export async function list_connectors() {
+  try {
+    const response = await axios.get("http://localhost:8081/connectors");
+    return response.data;
+  } catch (error) {
+    console.error("Connector list", error);
+    throw error;
   }
 }

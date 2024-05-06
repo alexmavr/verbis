@@ -18,11 +18,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
   const [placeholder, setPlaceholder] = useState("How can I help?");
   const countRef = useRef(0); // To keep track of the ellipsis state
   const [conversation, setConversation] = useState([]);
-  const [showSettings, setShowSettings] = useState(false);
 
-  const toggleSettings = () => {
-    setShowSettings(!showSettings);
-  };
   const smoothScrollToBottom = () => {
     const element = conversationContainer.current;
     if (element) {
@@ -107,13 +103,13 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
     ]);
 
     try {
-      const { content, sourceURLs } = await generate(promptText, history);
-      console.log(sourceURLs);
+      const { content, urls } = await generate(promptText, history);
+
       // Assuming that response is just the assistant's text, adjust if it's structured differently
       setConversation((conv) => [
         ...conv,
         // { role: "user", content: promptText },
-        { role: "assistant", content: content },
+        { role: "assistant", content: content, urls: urls },
       ]);
       setPromptText(""); // Clear the input field after sending the prompt
     } catch (e) {
@@ -130,12 +126,11 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
   return (
     <>
       <div className="fixed right-4 top-4">
-        <button onClick={toggleSettings}>
+        <button onClick={() => navigate(AppScreen.SETTINGS)}>
           <CogIcon className="h-6 w-6" />
         </button>
       </div>
-      {showSettings && <SettingsComponent />}
-      <div className="mx-auto flex h-screen flex-col justify-between">
+      <div className="flex h-screen flex-col justify-between">
         <h1 className="mt-4 text-center text-2xl tracking-tight text-gray-900">
           Prompt to your heart's desire
         </h1>
@@ -148,7 +143,27 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
           >
             {conversation.map((item, index) => (
               <div key={index} className={`mb-1 rounded p-1 ${item.role}`}>
-                <div className="p-2">{item.content}</div>
+                <div className="p-2">
+                  {item.content}
+                  <p>
+                    {item.hasOwnProperty("urls") &&
+                      item.urls.map((url: string, urlIndex: number) => (
+                        <a
+                          key={urlIndex}
+                          href={url}
+                          target="none"
+                          className="mr-1 text-blue-600 underline visited:text-purple-600 hover:text-blue-800"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            require("electron").shell.openExternal(url);
+                          }}
+                        >
+                          {urlIndex + 1}
+                        </a>
+                      ))}
+                  </p>
+                </div>
               </div>
             ))}
           </div>
