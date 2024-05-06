@@ -2,16 +2,15 @@ import { getCurrentWindow } from "@electron/remote";
 import { PaperAirplaneIcon } from "@heroicons/react/24/solid";
 import React, { useEffect, useRef, useState } from "react";
 import { generate } from "../client";
+import { CogIcon } from "@heroicons/react/24/solid";
+import SettingsComponent from "./SettingsComponent";
+import { AppScreen } from "../types";
 
 interface Props {
-  // Add your component's props here
+  navigate: (screen: AppScreen) => void;
 }
 
-const ChatComponent: React.FC<Props> = (
-  {
-    /* Add your props here */
-  }
-) => {
+const ChatComponent: React.FC<Props> = ({ navigate }) => {
   const conversationContainer = useRef<HTMLDivElement>(null);
   const [promptText, setPromptText] = useState(""); // State to store input from the textbox
   const [loading, setLoading] = useState(false); // State for the spinner
@@ -19,7 +18,11 @@ const ChatComponent: React.FC<Props> = (
   const [placeholder, setPlaceholder] = useState("How can I help?");
   const countRef = useRef(0); // To keep track of the ellipsis state
   const [conversation, setConversation] = useState([]);
+  const [showSettings, setShowSettings] = useState(false);
 
+  const toggleSettings = () => {
+    setShowSettings(!showSettings);
+  };
   const smoothScrollToBottom = () => {
     const element = conversationContainer.current;
     if (element) {
@@ -126,6 +129,12 @@ const ChatComponent: React.FC<Props> = (
 
   return (
     <>
+      <div className="fixed right-4 top-4">
+        <button onClick={toggleSettings}>
+          <CogIcon className="h-6 w-6" />
+        </button>
+      </div>
+      {showSettings && <SettingsComponent />}
       <div className="mx-auto flex h-screen flex-col justify-between">
         <h1 className="mt-4 text-center text-2xl tracking-tight text-gray-900">
           Prompt to your heart's desire

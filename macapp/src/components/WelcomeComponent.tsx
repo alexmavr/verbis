@@ -1,19 +1,13 @@
 import React, { useState } from "react";
 import LamoidIcon from "../lamoid.svg";
-
-enum Step {
-  WELCOME = 0,
-  GOOGLE_INIT,
-  PROMPT,
-}
+import { AppScreen } from "../types";
 
 interface Props {
-  // Add your component's props here
-  setStep: (step: Step) => void;
+  navigate: (screen: AppScreen) => void;
   loading: boolean;
 }
 
-const WelcomeComponent: React.FC<Props> = ({ setStep, loading }) => {
+const WelcomeComponent: React.FC<Props> = ({ navigate, loading }) => {
   return (
     <>
       <div className="mx-auto text-center">
@@ -28,7 +22,7 @@ const WelcomeComponent: React.FC<Props> = ({ setStep, loading }) => {
               Let's get you up and running.
             </p>
             <button
-              onClick={() => setStep(Step.GOOGLE_INIT)}
+              onClick={() => navigate(AppScreen.GOOGLE_INIT)}
               className="no-drag rounded-dm mx-auto my-8 w-[40%] rounded-md bg-black px-4 py-2 text-sm text-white hover:brightness-110"
             >
               Google sync

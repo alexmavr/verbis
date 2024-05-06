@@ -1,19 +1,14 @@
 import React from "react";
 import { google_auth_setup, google_init } from "../client";
 import { getCurrentWindow } from "@electron/remote";
-
-enum Step {
-  WELCOME = 0,
-  GOOGLE_INIT,
-  PROMPT,
-}
+import { AppScreen } from "../types";
 
 interface Props {
   // Add your component's props here
-  setStep: (step: Step) => void;
+  navigate: (screen: AppScreen) => void;
 }
 
-const ConnectorsComponent: React.FC<Props> = ({ setStep }) => {
+const ConnectorsComponent: React.FC<Props> = ({ navigate }) => {
   // Add your component's state and logic here
 
   return (
@@ -28,7 +23,7 @@ const ConnectorsComponent: React.FC<Props> = ({ setStep }) => {
               try {
                 await google_init();
                 await google_auth_setup();
-                setStep(Step.PROMPT);
+                navigate(AppScreen.PROMPT);
               } catch (e) {
                 console.error("could not install: ", e);
               } finally {

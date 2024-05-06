@@ -3,16 +3,17 @@ import axios from "axios";
 import WelcomeComponent from "./WelcomeComponent";
 import ChatComponent from "./ChatComponent";
 import ConnectorsComponent from "./ConnectorsComponent";
-
-enum Step {
-  WELCOME = 0,
-  GOOGLE_INIT,
-  PROMPT,
-}
+import { AppScreen } from "../types";
 
 export default function () {
-  const [step, setStep] = useState<Step>(Step.WELCOME);
+  const [currentScreen, setCurrentScreen] = useState<AppScreen>(
+    AppScreen.WELCOME
+  );
   const [loading, setLoading] = useState(true); // State for the spinner
+
+  const navigateToScreen = (screen: AppScreen) => {
+    setCurrentScreen(screen);
+  };
 
   useEffect(() => {
     const checkHealth = async () => {
@@ -31,11 +32,15 @@ export default function () {
   return (
     <div className="drag">
       <div className="mx-auto flex min-h-screen w-full flex-col justify-between bg-white px-4">
-        {step == Step.WELCOME && (
-          <WelcomeComponent setStep={setStep} loading={loading} />
+        {currentScreen == AppScreen.WELCOME && (
+          <WelcomeComponent navigate={navigateToScreen} loading={loading} />
         )}
-        {step === Step.GOOGLE_INIT && <ConnectorsComponent setStep={setStep} />}
-        {step === Step.PROMPT && <ChatComponent />}
+        {currentScreen === AppScreen.GOOGLE_INIT && (
+          <ConnectorsComponent navigate={navigateToScreen} />
+        )}
+        {currentScreen === AppScreen.PROMPT && (
+          <ChatComponent navigate={navigateToScreen} />
+        )}
       </div>
     </div>
   );
