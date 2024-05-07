@@ -26,7 +26,7 @@ var (
 	httpClient          = &http.Client{Timeout: 10 * time.Second}
 	generationModelName = "custom-mistral"
 	embeddingsModelName = "nomic-embed-text"
-	rerankModelName     = "custom-zephyr"
+	rerankModelName     = "epoch/rank-zephyr:q4_k_m"
 	clean               = false
 	KeepAliveTime       = "20m"
 

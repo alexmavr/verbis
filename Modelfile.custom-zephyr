@@ -1,1 +1,1 @@
-FROM ./rank_zephyr_7b_v1_full.gguf
+FROM epoch/rank-zephyr:q4_k_m

@@ -448,6 +448,9 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	}
 	rerankTime := time.Now()
 
+	// Only keep the highest ranked chunk
+	rerankedChunks = rerankedChunks[:1]
+
 	llmPrompt := MakePrompt(rerankedChunks, promptReq.Prompt)
 	log.Printf("LLM Prompt: %s", llmPrompt)
 	err = WritePromptLog(llmPrompt)

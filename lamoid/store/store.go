@@ -78,7 +78,7 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 		Get().
 		WithClassName(chunkClassName).
 		WithHybrid(hybrid).
-		WithLimit(10).
+		WithLimit(7).
 		WithFields(_chunk_fields...).
 		//		WithAutocut(1).
 		Do(ctx)
@@ -307,8 +307,6 @@ func GetConnectorState(ctx context.Context, client *weaviate.Client, name string
 		return nil, err
 	}
 
-	fmt.Println(resp.Data)
-
 	if resp.Data["Get"] == nil {
 		return nil, nil
 	}
@@ -318,14 +316,12 @@ func GetConnectorState(ctx context.Context, client *weaviate.Client, name string
 	if !ok {
 		return nil, nil
 	}
-	fmt.Println(states)
 
 	if len(states) == 0 {
 		return nil, nil
 	}
 
 	c := states[0].(map[string]interface{})
-
 	lastSync, err := time.Parse(time.RFC3339, c["lastSync"].(string))
 	if err != nil {
 		log.Printf("Failed to parse last sync time: %s\n", err)

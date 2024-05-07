@@ -100,7 +100,7 @@ func chatWithModel(prompt string, model string, history []types.HistoryItem) (*A
 	// TODO: pass history
 	// Create the payload
 	payload := RequestPayload{
-		Model:     generationModelName,
+		Model:     model,
 		Messages:  messages,
 		Stream:    false,
 		KeepAlive: KeepAliveTime,
@@ -178,6 +178,10 @@ func ParseStringToIntArray(input string) ([]int, error) {
 
 	// Iterate over the parts and convert each one to an integer
 	for _, part := range parts {
+		part = strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(part), "> "), "]")
+		if part == "" {
+			continue
+		}
 		num, err := strconv.Atoi(part)
 		if err != nil {
 			return nil, err // Return an error if conversion fails
@@ -193,15 +197,23 @@ func rerankLLM(chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to create rerank messages: %s", err)
 	}
+	log.Print(messages)
 
 	resp, err := chatWithModel("", rerankModelName, messages)
 	if err != nil {
 		return nil, fmt.Errorf("unable to generate rerank response: %s", err)
 	}
+	log.Print(resp.Message.Content)
 
 	idxs, err := ParseStringToIntArray(resp.Message.Content)
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse rerank response: %s", err)
+	}
+	log.Print(idxs)
+	if len(idxs) == 10 || (len(idxs) == 6 && idxs[0] == 6 && idxs[5] == 1) {
+		// default hallucination value, don't expect num chunks != 10
+		log.Printf("Rerank has hallucinated")
+		return chunks, nil
 	}
 
 	reranked := []*types.Chunk{}
@@ -215,15 +227,13 @@ func rerankLLM(chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
 func MakeRerankMessages(chunks []*types.Chunk, query string) ([]types.HistoryItem, error) {
 	// Define the data structure to hold the variables for the template
 	data := struct {
-		Num   int
 		Query string
 	}{
-		Num:   len(chunks),
 		Query: query,
 	}
 
 	// Define a multiline string literal as the template
-	tmpl := `I will provide you with {{.Num}} passages, each indicated by number identifier [].	Rank the passages based on their relevance to query: {{.Query}}.`
+	tmpl := `Use the provided passages, each indicated by number identifier [].	Rank the passages based on their relevance to query: {{.Query}}.`
 
 	// Parse the template string
 	t, err := template.New("passages").Parse(tmpl)
@@ -240,30 +250,33 @@ func MakeRerankMessages(chunks []*types.Chunk, query string) ([]types.HistoryIte
 	}
 	content2 := buffer.String()
 
-	chunkStr := ""
-	for i, chunk := range chunks {
-		chunkText := fmt.Sprintf("Title: %s\nContent: %s", chunk.Name, chunk.Text)
-		chunkStr += fmt.Sprintf("\n[%d] %s\n", i+1, chunkText)
-	}
-
 	messages := []types.HistoryItem{
 		{
 			Role:    "system",
 			Content: "You are RankGPT, an intelligent assistant that can rank passages based on their relevancy to the query.",
 		},
 		{
-			Role:    "user",
-			Content: content2,
-		},
-		{
 			Role:    "assistant",
 			Content: "Okay, please provide the passages.",
 		},
-		{
-			Role:    "user",
-			Content: chunkStr,
-		},
 	}
+
+	for i, chunk := range chunks {
+		messages = append(messages, []types.HistoryItem{
+			{
+				Role:    "user",
+				Content: fmt.Sprintf("\n[%d] %s: %s\n", i+1, chunk.Name, chunk.Text),
+			},
+			{
+				Role:    "assistant",
+				Content: fmt.Sprintf("Passage [%d] received, please provide more passages, or the user query", i+1),
+			},
+		}...)
+	}
+	messages = append(messages, types.HistoryItem{
+		Role:    "user",
+		Content: content2,
+	})
 
 	return messages, nil
 }
