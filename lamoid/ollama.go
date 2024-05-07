@@ -227,13 +227,15 @@ func rerankLLM(chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
 func MakeRerankMessages(chunks []*types.Chunk, query string) ([]types.HistoryItem, error) {
 	// Define the data structure to hold the variables for the template
 	data := struct {
+		Num   int
 		Query string
 	}{
+		Num:   len(chunks),
 		Query: query,
 	}
 
 	// Define a multiline string literal as the template
-	tmpl := `Use the provided passages, each indicated by number identifier [].	Rank the passages based on their relevance to query: {{.Query}}.`
+	tmpl := `I will provide you with {{ .Num }} passages, each indicated by number identifier [].	Rank the passages based on their relevance to query: {{.Query}}.`
 
 	// Parse the template string
 	t, err := template.New("passages").Parse(tmpl)
@@ -242,7 +244,6 @@ func MakeRerankMessages(chunks []*types.Chunk, query string) ([]types.HistoryIte
 	}
 
 	var buffer bytes.Buffer
-
 	// Execute the template with the data and output to stdout
 	err = t.Execute(&buffer, data)
 	if err != nil {
@@ -250,10 +251,30 @@ func MakeRerankMessages(chunks []*types.Chunk, query string) ([]types.HistoryIte
 	}
 	content2 := buffer.String()
 
+	tmpl_suffix := "Search Query: {{ .Num }}. \nRank the {num} passages above based on their relevance to the search query. The passages should be listed in descending order using identifiers. The most relevant passages should be listed first. The output format should be [] > [], e.g., [1] > [2]. Only response the ranking results, do not say any word or explain."
+
+	// Parse the template string
+	t, err = template.New("passages").Parse(tmpl_suffix)
+	if err != nil {
+		return nil, err
+	}
+
+	var buffer2 bytes.Buffer
+	// Execute the template with the data and output to stdout
+	err = t.Execute(&buffer2, data)
+	if err != nil {
+		return nil, err
+	}
+	suffix := buffer2.String()
+
 	messages := []types.HistoryItem{
 		{
 			Role:    "system",
 			Content: "You are RankGPT, an intelligent assistant that can rank passages based on their relevancy to the query.",
+		},
+		{
+			Role:    "user",
+			Content: content2,
 		},
 		{
 			Role:    "assistant",
@@ -269,13 +290,13 @@ func MakeRerankMessages(chunks []*types.Chunk, query string) ([]types.HistoryIte
 			},
 			{
 				Role:    "assistant",
-				Content: fmt.Sprintf("Passage [%d] received, please provide more passages, or the user query", i+1),
+				Content: fmt.Sprintf("Received passage [%d].", i+1),
 			},
 		}...)
 	}
 	messages = append(messages, types.HistoryItem{
 		Role:    "user",
-		Content: content2,
+		Content: suffix,
 	})
 
 	return messages, nil
