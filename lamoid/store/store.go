@@ -314,7 +314,10 @@ func GetConnectorState(ctx context.Context, client *weaviate.Client, name string
 	}
 
 	get := resp.Data["Get"].(map[string]interface{})
-	states := get["ConnectorState"].([]interface{})
+	states, ok := get["ConnectorState"].([]interface{})
+	if !ok {
+		return nil, nil
+	}
 	fmt.Println(states)
 
 	if len(states) == 0 {

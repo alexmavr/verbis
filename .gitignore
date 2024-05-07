@@ -5,3 +5,4 @@ lamoid/lamoid
 credentials.json
 .build.env
 .venv/
+*.gguf

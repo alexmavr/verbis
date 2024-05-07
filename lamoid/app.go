@@ -26,6 +26,7 @@ var (
 	httpClient          = &http.Client{Timeout: 10 * time.Second}
 	generationModelName = "custom-mistral"
 	embeddingsModelName = "nomic-embed-text"
+	rerankModelName     = "custom-zephyr"
 	clean               = false
 	KeepAliveTime       = "20m"
 
@@ -127,21 +128,9 @@ func main() {
 		log.Fatalf("Failed to wait for ollama: %s\n", err)
 	}
 
-	if IsCustomModel(generationModelName) {
-		err = createModel(generationModelName)
-		if err != nil {
-			log.Fatalf("Failed to create model: %s\n", err)
-		}
-	} else {
-		err = pullModel(generationModelName, false)
-		if err != nil {
-			log.Fatalf("Failed to pull model: %s\n", err)
-		}
-	}
-
-	err = pullModel(embeddingsModelName, false)
+	err = initModels([]string{generationModelName, embeddingsModelName, rerankModelName})
 	if err != nil {
-		log.Fatalf("Failed to pull model: %s\n", err)
+		log.Fatalf("Failed to initialize models: %s\n", err)
 	}
 
 	// Create indices for vector search
@@ -150,7 +139,7 @@ func main() {
 	store.CreateConnectorStateClass(ctx, weavClient, clean)
 
 	// Perform a test generation with ollama to load the model in memory
-	resp, err := chatWithModel("What is the capital of France? Respond in one word only", []types.HistoryItem{})
+	resp, err := chatWithModel("What is the capital of France? Respond in one word only", generationModelName, []types.HistoryItem{})
 	if err != nil {
 		log.Fatalf("Failed to generate response: %s\n", err)
 	}
@@ -262,4 +251,21 @@ func startSubprocesses(ctx context.Context, commands []CmdSpec) {
 			}
 		}(cmdConfig)
 	}
+}
+
+func initModels(models []string) error {
+	for _, modelName := range models {
+		if IsCustomModel(modelName) {
+			err := createModel(modelName)
+			if err != nil {
+				return fmt.Errorf("failed to create model %s: %v", modelName, err)
+			}
+		} else {
+			err := pullModel(modelName, false)
+			if err != nil {
+				return fmt.Errorf("failed to pull model %s: %v", modelName, err)
+			}
+		}
+	}
+	return nil
 }

@@ -19,9 +19,10 @@ const config: ForgeConfig = {
       "../dist/lamoid",
       "../dist/ollama",
       "../dist/weaviate",
-      "../dist/rerank",
       "../dist/credentials.json",
       "../dist/Modelfile.custom-mistral",
+      "../dist/Modelfile.custom-zephyr",
+      "../rank_zephyr_7b_v1_full.gguf",
       //      path.join(__dirname, './assets/iconTemplate.png'),
     ],
     ...(process.env.SIGN

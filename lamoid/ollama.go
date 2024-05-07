@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/epochlabs-ai/lamoid/lamoid/types"
@@ -47,7 +49,7 @@ func createModel(modelName string) error {
 	log.Printf("Modelfile contents: %s", string(modelFileData))
 
 	payload := ModelCreateRequest{
-		Name:      generationModelName,
+		Name:      modelName,
 		Modelfile: string(modelFileData),
 	}
 	// Marshal the payload into JSON
@@ -83,14 +85,17 @@ func createModel(modelName string) error {
 }
 
 // Function to call ollama model
-func chatWithModel(prompt string, history []types.HistoryItem) (*ApiResponse, error) {
+func chatWithModel(prompt string, model string, history []types.HistoryItem) (*ApiResponse, error) {
 	// URL of the API endpoint
 	url := "http://localhost:11434/api/chat"
 
-	messages := append(history, types.HistoryItem{
-		Role:    "user",
-		Content: prompt,
-	})
+	messages := history
+	if prompt != "" {
+		messages = append(history, types.HistoryItem{
+			Role:    "user",
+			Content: prompt,
+		})
+	}
 
 	// TODO: pass history
 	// Create the payload
@@ -155,7 +160,112 @@ func urlsFromChunks(chunks []*types.Chunk) []string {
 }
 
 func Rerank(ctx context.Context, chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
-	return []*types.Chunk{}, nil
+	if len(chunks) == 0 {
+		return []*types.Chunk{}, nil
+	}
+
+	// TODO: context
+	return rerankLLM(chunks, query)
+}
+
+// ParseStringToIntArray takes a specially formatted string and returns an array of integers
+func ParseStringToIntArray(input string) ([]int, error) {
+	// Trim the square brackets and split the string by " > "
+	parts := strings.Split(strings.ReplaceAll(input, "[", ""), "] > ")
+
+	// Prepare a slice to store the integers
+	var result []int
+
+	// Iterate over the parts and convert each one to an integer
+	for _, part := range parts {
+		num, err := strconv.Atoi(part)
+		if err != nil {
+			return nil, err // Return an error if conversion fails
+		}
+		result = append(result, num)
+	}
+
+	return result, nil
+}
+
+func rerankLLM(chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
+	messages, err := MakeRerankMessages(chunks, query)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create rerank messages: %s", err)
+	}
+
+	resp, err := chatWithModel("", rerankModelName, messages)
+	if err != nil {
+		return nil, fmt.Errorf("unable to generate rerank response: %s", err)
+	}
+
+	idxs, err := ParseStringToIntArray(resp.Message.Content)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse rerank response: %s", err)
+	}
+
+	reranked := []*types.Chunk{}
+	for _, idx := range idxs {
+		reranked = append(reranked, chunks[idx-1])
+	}
+
+	return reranked, nil
+}
+
+func MakeRerankMessages(chunks []*types.Chunk, query string) ([]types.HistoryItem, error) {
+	// Define the data structure to hold the variables for the template
+	data := struct {
+		Num   int
+		Query string
+	}{
+		Num:   len(chunks),
+		Query: query,
+	}
+
+	// Define a multiline string literal as the template
+	tmpl := `I will provide you with {{.Num}} passages, each indicated by number identifier [].	Rank the passages based on their relevance to query: {{.Query}}.`
+
+	// Parse the template string
+	t, err := template.New("passages").Parse(tmpl)
+	if err != nil {
+		return nil, err
+	}
+
+	var buffer bytes.Buffer
+
+	// Execute the template with the data and output to stdout
+	err = t.Execute(&buffer, data)
+	if err != nil {
+		return nil, err
+	}
+	content2 := buffer.String()
+
+	chunkStr := ""
+	for i, chunk := range chunks {
+		chunkText := fmt.Sprintf("Title: %s\nContent: %s", chunk.Name, chunk.Text)
+		chunkStr += fmt.Sprintf("\n[%d] %s\n", i+1, chunkText)
+	}
+
+	messages := []types.HistoryItem{
+		{
+			Role:    "system",
+			Content: "You are RankGPT, an intelligent assistant that can rank passages based on their relevancy to the query.",
+		},
+		{
+			Role:    "user",
+			Content: content2,
+		},
+		{
+			Role:    "assistant",
+			Content: "Okay, please provide the passages.",
+		},
+		{
+			Role:    "user",
+			Content: chunkStr,
+		},
+	}
+
+	return messages, nil
 }
 
 // TODO: function calling?

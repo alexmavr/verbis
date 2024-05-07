@@ -457,7 +457,7 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	genResp, err := chatWithModel(llmPrompt, promptReq.History)
+	genResp, err := chatWithModel(llmPrompt, generationModelName, promptReq.History)
 	if err != nil {
 		log.Printf("Failed to generate response: %s", err)
 		http.Error(w, "Failed to generate response", http.StatusInternalServerError)
