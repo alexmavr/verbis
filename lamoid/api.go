@@ -8,6 +8,9 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -16,6 +19,7 @@ import (
 	"github.com/epochlabs-ai/lamoid/lamoid/connectors"
 	"github.com/epochlabs-ai/lamoid/lamoid/store"
 	"github.com/epochlabs-ai/lamoid/lamoid/types"
+	"github.com/epochlabs-ai/lamoid/lamoid/util"
 )
 
 var (
@@ -44,6 +48,7 @@ func (a *API) SetupRouter() *mux.Router {
 	// TODO: the following are only available for development
 
 	r.HandleFunc("/mock", a.mockConnectorState).Methods("GET")
+	r.HandleFunc("/pytest", a.pytest).Methods("GET")
 
 	return r
 }
@@ -53,6 +58,38 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 	// TODO: return state of syncs and model downloads, to be used during init
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
+}
+
+func (a *API) pytest(w http.ResponseWriter, r *http.Request) {
+	// Launch python script
+	path, err := util.GetDistPath()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to get dist path: " + err.Error()))
+		return
+	}
+
+	rerankPath := filepath.Join(path, "rerank")
+
+	cmd := exec.Command(rerankPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); err != nil {
+		log.Printf("Error starting command %s: %s\n", rerankPath, err)
+		return
+	}
+
+	go func() {
+		<-r.Context().Done()
+		if err := cmd.Process.Kill(); err != nil {
+			log.Printf("Failed to kill process %s: %s\n", rerankPath, err)
+		}
+	}()
+
+	if err := cmd.Wait(); err != nil {
+		log.Printf("Command %s finished with error: %s\n", rerankPath, err)
+	}
 }
 
 // only for debug/dev purposes

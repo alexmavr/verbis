@@ -25,7 +25,6 @@ import (
 var (
 	httpClient          = &http.Client{Timeout: 10 * time.Second}
 	generationModelName = "custom-mistral"
-	rerankModelName     = "custom-mistral"
 	embeddingsModelName = "nomic-embed-text"
 	clean               = false
 	KeepAliveTime       = "20m"
@@ -115,10 +114,7 @@ func main() {
 	// Weaviate flags
 	os.Setenv("PERSISTENCE_DATA_PATH", "/tmp/lamoid")
 	os.Setenv("AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED", "true")
-	commands := []struct {
-		Name string
-		Args []string
-	}{
+	commands := []CmdSpec{
 		{ollamaPath, []string{"serve"}},
 		{weaviatePath, []string{"--host", "0.0.0.0", "--port", "8088", "--scheme", "http"}},
 	}
@@ -178,13 +174,16 @@ func main() {
 			Set("chipset", systemStats.Chipset).
 			Set("macos", systemStats.MacOS).
 			Set("memsize", systemStats.Memsize),
+		// TODO: version
 	})
+	if err != nil {
+		log.Fatalf("Failed to enqueue identify event: %s\n", err)
+	}
 
 	err = postHogClient.Enqueue(posthog.Capture{
 		DistinctId: postHogDistinctID,
 		Event:      "Started",
 		Properties: posthog.NewProperties().
-			// TODO: version
 			// TODO: connector states
 			Set("start_duration", endTime.Sub(startTime).String()),
 	})
@@ -234,16 +233,14 @@ func getSystemStats() (*SystemStats, error) {
 	}, nil
 }
 
-func startSubprocesses(ctx context.Context, commands []struct {
+type CmdSpec struct {
 	Name string
 	Args []string
-}) {
+}
 
+func startSubprocesses(ctx context.Context, commands []CmdSpec) {
 	for _, cmdConfig := range commands {
-		go func(c struct {
-			Name string
-			Args []string
-		}) {
+		go func(c CmdSpec) {
 			cmd := exec.Command(c.Name, c.Args...)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr

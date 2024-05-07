@@ -19,6 +19,7 @@ const config: ForgeConfig = {
       "../dist/lamoid",
       "../dist/ollama",
       "../dist/weaviate",
+      "../dist/rerank",
       "../dist/credentials.json",
       "../dist/Modelfile.custom-mistral",
       //      path.join(__dirname, './assets/iconTemplate.png'),

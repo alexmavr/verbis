@@ -1,5 +1,7 @@
 dist/*
+build/*
 .DS_Store
 lamoid/lamoid
 credentials.json
 .build.env
+.venv/

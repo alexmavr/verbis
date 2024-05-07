@@ -1,4 +1,4 @@
-.PHONY: build lamoid 
+.PHONY: build lamoid macapp 
 
 WEAVIATE_VERSION := v1.24.9
 OLLAMA_VERSION := v0.1.32
@@ -7,6 +7,8 @@ TMP_DIR := /tmp/weaviate-installation
 ZIP_FILE := weaviate-$(WEAVIATE_VERSION)-darwin-all.zip
 OLLAMA_BIN := ollama-darwin
 OLLAMA_URL := https://github.com/ollama/ollama/releases/download/$(OLLAMA_VERSION)/$(OLLAMA_BIN)
+
+VENV_DIR := .venv
 
 PACKAGE := main
 
@@ -45,6 +47,10 @@ dist/weaviate:
 	# Remove the temporary directory and the zip file
 	rm -rf $(TMP_DIR)
 
+dist/rerank:
+	. $(VENV_DIR)/bin/activate
+	pyinstaller --onefile script/rerank.py --specpath dist/ --collect-all flashrank
+
 lamoid:
 	# Ensure dist directory exists
 	mkdir -p $(DIST_DIR)
@@ -52,9 +58,18 @@ lamoid:
 	cp Modelfile.* dist/
 
 	echo "$(LDFLAGS)"
-
-
 	pushd lamoid && go build -ldflags="$(LDFLAGS)" -o ../$(DIST_DIR)/lamoid . && popd
 
-macapp: lamoid dist/ollama dist/weaviate
+macapp: lamoid dist/ollama dist/weaviate dist/rerank
 	pushd macapp && npm install && npm run package && popd
+
+# If we need to build llama.cpp, need Xcode
+builder-env:
+	python3 -m venv $(VENV_DIR)
+	. $(VENV_DIR)/bin/activate; \
+	pip install --upgrade pip; \
+	pip install llama-cpp-python[server]; \
+	pip install pyinstaller flashrank; \
+
+clean:
+	rm dist/weaviate dist/rerank dist/ollama dist/lamoid
