@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import LamoidIcon from "../lamoid.svg";
 import { AppScreen } from "../types";
 import axios from "axios";
+import { CogIcon } from "@heroicons/react/24/solid";
 
 interface Props {
   navigate: (screen: AppScreen) => void;
@@ -26,6 +27,11 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
 
   return (
     <>
+      <div className="fixed right-4 top-4">
+        <button onClick={() => navigate(AppScreen.SETTINGS)}>
+          <CogIcon className="h-6 w-6" />
+        </button>
+      </div>
       <div className="mx-auto text-center">
         <h1 className="mb-6 mt-4 text-2xl tracking-tight text-gray-900">
           Welcome to Lamoid
@@ -37,11 +43,17 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
             <p className="mx-auto w-[65%] text-sm text-gray-400">
               Let's get you up and running.
             </p>
-            <button
+            {/* <button
               onClick={() => navigate(AppScreen.GOOGLE_INIT)}
-              className="no-drag rounded-dm mx-auto my-8 w-[40%] rounded-md bg-black px-4 py-2 text-sm text-white hover:brightness-110"
+              className="no-drag rounded-dm mx-auto my-8 rounded-md bg-black px-4 py-2 text-sm text-white hover:brightness-110"
             >
-              Google sync
+              GOOGLE
+            </button> */}
+            <button
+              onClick={() => navigate(AppScreen.SETTINGS)}
+              className="no-drag rounded-dm mx-auto my-8 rounded-md bg-black px-4 py-2 text-sm text-white hover:brightness-110"
+            >
+              Continue
             </button>
           </>
         )}

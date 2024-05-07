@@ -9,9 +9,14 @@ export default function () {
   const [currentScreen, setCurrentScreen] = useState<AppScreen>(
     AppScreen.WELCOME
   );
+  const [previousScreen, setPreviousScreen] = useState<AppScreen | null>(null);
 
   const navigateToScreen = (screen: AppScreen) => {
+    setPreviousScreen(currentScreen);
     setCurrentScreen(screen);
+  };
+  const navigateBack = () => {
+    navigateToScreen(previousScreen ?? AppScreen.WELCOME);
   };
 
   return (
@@ -27,7 +32,10 @@ export default function () {
           <ChatComponent navigate={navigateToScreen} />
         )}
         {currentScreen === AppScreen.SETTINGS && (
-          <SettingsComponent navigate={navigateToScreen} />
+          <SettingsComponent
+            navigate={navigateToScreen}
+            navigateBack={navigateBack}
+          />
         )}
       </div>
     </div>

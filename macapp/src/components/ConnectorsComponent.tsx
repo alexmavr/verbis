@@ -2,6 +2,7 @@ import React from "react";
 import { google_auth_setup, google_init } from "../client";
 import { getCurrentWindow } from "@electron/remote";
 import { AppScreen } from "../types";
+import { CogIcon } from "@heroicons/react/24/solid";
 
 interface Props {
   // Add your component's props here
@@ -13,6 +14,11 @@ const ConnectorsComponent: React.FC<Props> = ({ navigate }) => {
 
   return (
     <>
+      <div className="fixed right-4 top-4">
+        <button onClick={() => navigate(AppScreen.SETTINGS)}>
+          <CogIcon className="h-6 w-6" />
+        </button>
+      </div>
       <div className="mx-auto flex flex-col space-y-28 text-center">
         <h1 className="mt-4 text-2xl tracking-tight text-gray-900">
           Set up your google connector

@@ -1,6 +1,6 @@
 FROM mistral
 
-PARAMETER temperature 0.75
+PARAMETER temperature 0.6
 PARAMETER top_k 60
 PARAMETER top_p 0.5
 

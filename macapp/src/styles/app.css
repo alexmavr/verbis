@@ -37,13 +37,13 @@ body {
   -webkit-app-region: no-drag;
 }
 
-.blink {
+/* .blink {
   -webkit-animation: 1s blink step-end infinite;
   -moz-animation: 1s blink step-end infinite;
   -ms-animation: 1s blink step-end infinite;
   -o-animation: 1s blink step-end infinite;
   animation: 1s blink step-end infinite;
-}
+} */
 
 spinner {
   display: flex;
