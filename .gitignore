@@ -6,3 +6,5 @@ credentials.json
 .build.env
 .venv/
 *.gguf
+.python-version
+
