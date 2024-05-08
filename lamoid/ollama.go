@@ -140,7 +140,6 @@ func chatWithModelStream(ctx context.Context, prompt string, model string, histo
 		defer response.Body.Close()
 		reader := bufio.NewReader(response.Body)
 		decoder := json.NewDecoder(reader)
-		log.Printf("DEBUG started goroutine")
 
 		for {
 			select {
@@ -155,7 +154,6 @@ func chatWithModelStream(ctx context.Context, prompt string, model string, histo
 					fmt.Println("Error decoding JSON:", err)
 					return
 				}
-				log.Printf("DEBUG Stream response: %v", streamResp)
 
 				resChan <- streamResp
 
@@ -166,7 +164,6 @@ func chatWithModelStream(ctx context.Context, prompt string, model string, histo
 			}
 		}
 	}()
-	log.Printf("DEBUG terminating method")
 
 	// Return the structured response
 	return nil

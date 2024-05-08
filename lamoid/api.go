@@ -20,7 +20,7 @@ import (
 
 var (
 	PromptLogFile        = ".lamoid/logs/prompt.log" // Relative to home
-	MaxNumRerankedChunks = 2
+	MaxNumRerankedChunks = 1
 )
 
 type API struct {
