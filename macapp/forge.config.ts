@@ -38,7 +38,7 @@ const config: ForgeConfig = {
         }
       : {}),
     osxUniversal: {
-      x64ArchFiles: "**/*",
+      x64ArchFiles: "**/*,!**/*.dylib",
     },
   },
   rebuildConfig: {},

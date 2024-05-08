@@ -6,9 +6,9 @@
   "main": ".webpack/main",
   "scripts": {
     "start": "NODE_ENV=development electron-forge start",
-    "package": "NODE_ENV=production electron-forge package --arch universal",
+    "package": "NODE_ENV=production electron-forge package --arch arm64",
     "package:sign": "NODE_ENV=production SIGN=1 electron-forge package --arch universal",
-    "make": "NODE_ENV=production electron-forge make --arch universal",
+    "make": "NODE_ENV=production electron-forge make --arch arm64",
     "make:sign": "NODE_ENV=production SIGN=1 electron-forge make --arch universal",
     "publish": "NODE_ENV=production SIGN=1 electron-forge publish",
     "lint": "eslint --ext .ts,.tsx .",
