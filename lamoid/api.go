@@ -464,7 +464,7 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	}
 	doneTime := time.Now()
 
-	a.Posthog.Enqueue(posthog.Capture{
+	err = a.Posthog.Enqueue(posthog.Capture{
 		DistinctId: a.PosthogDistinctID,
 		Event:      "Prompt",
 		Properties: posthog.NewProperties().
@@ -480,4 +480,10 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 			Set("num_reranked_results", len(rerankedChunks)).
 			Set("num_streamed_events", streamCount),
 	})
+	if err != nil {
+		log.Printf("Failed to enqueue event: %s\n", err)
+		http.Error(w, "Failed to enqueue event", http.StatusInternalServerError)
+		return
+	}
+	log.Printf("End of handlePrompt")
 }

@@ -112,11 +112,20 @@ func main() {
 	weaviatePath := filepath.Join(path, util.WeaviateFile)
 
 	// Weaviate flags
-	os.Setenv("PERSISTENCE_DATA_PATH", "/tmp/lamoid")
-	os.Setenv("AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED", "true")
 	commands := []CmdSpec{
-		{ollamaPath, []string{"serve"}},
-		{weaviatePath, []string{"--host", "0.0.0.0", "--port", "8088", "--scheme", "http"}},
+		{
+			ollamaPath,
+			[]string{"serve"},
+			[]string{"OLLAMA_KEEP_ALIVE=" + KeepAliveTime},
+		},
+		{
+			weaviatePath,
+			[]string{"--host", "0.0.0.0", "--port", "8088", "--scheme", "http"},
+			[]string{
+				"PERSISTENCE_DATA_PATH=/tmp/lamoid",
+				"AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true",
+			},
+		},
 	}
 
 	// Start subprocesses
@@ -232,12 +241,14 @@ func getSystemStats() (*SystemStats, error) {
 type CmdSpec struct {
 	Name string
 	Args []string
+	Env  []string
 }
 
 func startSubprocesses(ctx context.Context, commands []CmdSpec) {
 	for _, cmdConfig := range commands {
 		go func(c CmdSpec) {
 			cmd := exec.Command(c.Name, c.Args...)
+			cmd.Env = append(os.Environ(), c.Env...)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 
