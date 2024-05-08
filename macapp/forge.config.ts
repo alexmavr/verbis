@@ -21,8 +21,7 @@ const config: ForgeConfig = {
       "../dist/weaviate",
       "../dist/credentials.json",
       "../dist/Modelfile.custom-mistral",
-      "../dist/Modelfile.custom-zephyr",
-      "../rank_zephyr_7b_v1_full.gguf",
+      "../dist/rerank",
       //      path.join(__dirname, './assets/iconTemplate.png'),
     ],
     ...(process.env.SIGN
