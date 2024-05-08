@@ -21,7 +21,7 @@ var (
 )
 
 const (
-	MaxNumSearchResults = 5
+	MaxNumSearchResults = 8
 )
 
 func GetWeaviateClient() *weaviate.Client {

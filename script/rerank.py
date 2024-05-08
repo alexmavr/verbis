@@ -142,28 +142,6 @@ class Ranker:
             token = token.rstrip("\n")
             vocab[token] = index
         return vocab
-    
-    def _get_prefix_prompt(self, query, num):
-        return [
-            {
-                "role": "system",
-                "content": "You are RankGPT, an intelligent assistant that can rank passages based on their relevancy to the query.",
-            },
-            {
-                "role": "user",
-                "content": f"I will provide you with {num} passages, each indicated by number identifier []. \nRank the passages based on their relevance to query: {query}.",
-            },
-            {"role": "assistant", "content": "Okay, please provide the passages."},
-        ]
-
-    def _get_postfix_prompt(self, query, num):
-        example_ordering = "[2] > [1]"
-        return {
-            "role": "user",
-            "content": f"Search Query: {query}.\nRank the {num} passages above based on their relevance to the search query. All the passages should be included and listed using identifiers, in descending order of relevance. The output format should be [] > [], e.g., {example_ordering}, Only respond with the ranking results, do not say any word or explain.",
-        }
-
-
 
     def rerank(self, request: RerankRequest) -> List[Dict[str, Any]]:
         """ Reranks a list of passages based on a query using a pre-trained model.
@@ -177,61 +155,29 @@ class Ranker:
         query = request.query
         passages = request.passages
 
-        # self.llm_model will be instantiated for GGUF based Listwise LLM models
-        if self.llm_model is not None:
-            print("Running listwise ranking..")
-            num_of_passages = len(passages)
-            messages = self._get_prefix_prompt(query, num_of_passages)
+        query_passage_pairs = [[query, passage["text"]] for passage in passages]
 
-            result_map = {}
-            for rank, passage in enumerate(passages):
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": f"[{rank + 1}] {passage['text']}",
-                    }
-                )
-                messages.append(
-                        {
-                            "role": "assistant", 
-                            "content": f"Received passage [{rank + 1}]."
-                        }
-                )
-                
-                result_map[rank + 1] = passage
+        input_text = self.tokenizer.encode_batch(query_passage_pairs)
+        input_ids = np.array([e.ids for e in input_text])
+        token_type_ids = np.array([e.type_ids for e in input_text])
+        attention_mask = np.array([e.attention_mask for e in input_text])
 
-            messages.append(self._get_postfix_prompt(query, num_of_passages))
-            raw_ranks = self.llm_model.create_chat_completion(messages)
-            results = []
-            for rank in raw_ranks["choices"][0]["message"]["content"].split(" > "):
-                results.append(result_map[int(rank[1])])
-            return results    
+        use_token_type_ids = token_type_ids is not None and not np.all(token_type_ids == 0)
 
-        # self.session will be instantiated for ONNX based pairwise CE models
-        else:
-            query_passage_pairs = [[query, passage["text"]] for passage in passages]
+        onnx_input = {"input_ids": input_ids.astype(np.int64), "attention_mask": attention_mask.astype(np.int64)}
+        if use_token_type_ids:
+            onnx_input["token_type_ids"] = token_type_ids.astype(np.int64)
 
-            input_text = self.tokenizer.encode_batch(query_passage_pairs)
-            input_ids = np.array([e.ids for e in input_text])
-            token_type_ids = np.array([e.type_ids for e in input_text])
-            attention_mask = np.array([e.attention_mask for e in input_text])
+        outputs = self.session.run(None, onnx_input)
 
-            use_token_type_ids = token_type_ids is not None and not np.all(token_type_ids == 0)
+        scores = np.exp(outputs[0]) / (1 + np.exp(outputs[0])) if outputs[0].shape[1] > 1 else np.exp(outputs[0].flatten()) / (1 + np.exp(outputs[0].flatten()))
+        scores = scores.tolist()
 
-            onnx_input = {"input_ids": input_ids.astype(np.int64), "attention_mask": attention_mask.astype(np.int64)}
-            if use_token_type_ids:
-                onnx_input["token_type_ids"] = token_type_ids.astype(np.int64)
+        for score, passage in zip(scores, passages):
+            passage["score"] = score
 
-            outputs = self.session.run(None, onnx_input)
-
-            scores = np.exp(outputs[0]) / (1 + np.exp(outputs[0])) if outputs[0].shape[1] > 1 else np.exp(outputs[0].flatten()) / (1 + np.exp(outputs[0].flatten()))
-            scores = scores.tolist()
-
-            for score, passage in zip(scores, passages):
-                passage["score"] = score
-
-            passages.sort(key=lambda x: x["score"], reverse=True)
-            return passages
+        passages.sort(key=lambda x: x["score"], reverse=True)
+        return passages
 
 class Passage:
     def __init__(self, id, text, meta):

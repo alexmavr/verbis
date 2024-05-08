@@ -49,7 +49,7 @@ dist/weaviate:
 
 dist/rerank:
 	. $(VENV_DIR)/bin/activate
-	pyinstaller --onefile script/rerank.py --specpath dist/ 
+	python -OO -m PyInstaller --onedir script/rerank.py --specpath dist/ 
 
 lamoid:
 	# Ensure dist directory exists

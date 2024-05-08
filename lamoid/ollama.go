@@ -21,7 +21,7 @@ import (
 
 const (
 	CustomModelPrefix = "custom-"
-	rerankFileName    = "rerank"
+	rerankDistPath    = "rerank/rerank"
 )
 
 func IsCustomModel(modelName string) bool {
@@ -238,7 +238,7 @@ func RunRerankModel(ctx context.Context, jsonData []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get dist path: %v", err)
 	}
-	rerankFilePath := filepath.Join(distPath, rerankFileName)
+	rerankFilePath := filepath.Join(distPath, rerankDistPath)
 	cmd := exec.CommandContext(ctx, rerankFilePath)
 	cmd.Stdin = bytes.NewReader(jsonData)
 	output, err := cmd.CombinedOutput()
