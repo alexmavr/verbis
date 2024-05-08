@@ -31,6 +31,8 @@ const SettingsComponent: React.FC<Props> = ({ navigate, navigateBack }) => {
     // run once on load and then poll
     getConnectorList();
     const intervalId = setInterval(getConnectorList, 2000);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   return (
