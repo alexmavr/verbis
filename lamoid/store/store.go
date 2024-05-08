@@ -94,11 +94,17 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 	res := []*types.Chunk{}
 	if resp.Data["Get"] != nil {
 		get := resp.Data["Get"].(map[string]interface{})
-		chunks := get[chunkClassName].([]interface{})
-		fmt.Println(chunks)
+		if get[chunkClassName] == nil {
+			// return empty result
+			return res, nil
+		}
 
+		chunks := get[chunkClassName].([]interface{})
 		for _, chunkMap := range chunks {
 			c := chunkMap.(map[string]interface{})
+
+			// Find similarity score
+			// TODO: refactor
 			addl := c["_additional"].(map[string]interface{})
 			scoreStr := addl["score"].(string)
 			log.Printf("ScoreStr: %s\n", scoreStr)

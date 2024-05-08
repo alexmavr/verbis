@@ -395,8 +395,9 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	}
 	rerankTime := time.Now()
 
-	// Keep up to MaxNumRerankedChunks highest ranked chunks
-	rerankedChunks = rerankedChunks[:MaxNumRerankedChunks]
+	if len(rerankedChunks) > MaxNumRerankedChunks {
+		rerankedChunks = rerankedChunks[:MaxNumRerankedChunks]
+	}
 
 	llmPrompt := MakePrompt(rerankedChunks, promptReq.Prompt)
 	log.Printf("LLM Prompt: %s", llmPrompt)
