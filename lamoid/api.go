@@ -8,9 +8,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -19,7 +16,6 @@ import (
 	"github.com/epochlabs-ai/lamoid/lamoid/connectors"
 	"github.com/epochlabs-ai/lamoid/lamoid/store"
 	"github.com/epochlabs-ai/lamoid/lamoid/types"
-	"github.com/epochlabs-ai/lamoid/lamoid/util"
 )
 
 var (
@@ -45,11 +41,6 @@ func (a *API) SetupRouter() *mux.Router {
 
 	r.HandleFunc("/sync/force", a.forceSync).Methods("GET")
 
-	// TODO: the following are only available for development
-
-	r.HandleFunc("/mock", a.mockConnectorState).Methods("GET")
-	r.HandleFunc("/pytest", a.pytest).Methods("GET")
-
 	return r
 }
 
@@ -58,56 +49,6 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 	// TODO: return state of syncs and model downloads, to be used during init
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
-}
-
-func (a *API) pytest(w http.ResponseWriter, r *http.Request) {
-	// Launch python script
-	path, err := util.GetDistPath()
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Failed to get dist path: " + err.Error()))
-		return
-	}
-
-	rerankPath := filepath.Join(path, "rerank")
-
-	cmd := exec.Command(rerankPath)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Start(); err != nil {
-		log.Printf("Error starting command %s: %s\n", rerankPath, err)
-		return
-	}
-
-	go func() {
-		<-r.Context().Done()
-		if err := cmd.Process.Kill(); err != nil {
-			log.Printf("Failed to kill process %s: %s\n", rerankPath, err)
-		}
-	}()
-
-	if err := cmd.Wait(); err != nil {
-		log.Printf("Command %s finished with error: %s\n", rerankPath, err)
-	}
-}
-
-// only for debug/dev purposes
-func (a *API) mockConnectorState(w http.ResponseWriter, r *http.Request) {
-	state := &types.ConnectorState{
-		Name:         "Google Drive",
-		Syncing:      true,
-		LastSync:     time.Now(),
-		NumDocuments: 15,
-		NumChunks:    1005,
-	}
-
-	err := store.UpdateConnectorState(context.Background(), store.GetWeaviateClient(), state)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Failed to update state: " + err.Error()))
-		return
-	}
 }
 
 func (a *API) connectorsList(w http.ResponseWriter, r *http.Request) {
@@ -404,6 +345,10 @@ type PromptRequest struct {
 	History []types.HistoryItem `json:"history"`
 }
 
+type StreamResponseHeader struct {
+	SourceURLs []string `json:"urls"` // Only returned on the first response
+}
+
 func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	var promptReq PromptRequest
@@ -414,6 +359,8 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Failed to decode request"))
 	}
+
+	w.Header().Set("Content-Type", "application/json")
 
 	// Call Ollama embeddings model to get embeddings for the prompt
 	resp, err := EmbedFromModel(promptReq.Prompt)
@@ -460,19 +407,56 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	genResp, err := chatWithModel(llmPrompt, generationModelName, promptReq.History)
+	streamChan := make(chan StreamResponse)
+	err = chatWithModelStream(r.Context(), llmPrompt, generationModelName, promptReq.History, streamChan)
 	if err != nil {
 		log.Printf("Failed to generate response: %s", err)
 		http.Error(w, "Failed to generate response", http.StatusInternalServerError)
 		return
-
 	}
-	response := PromptResponse{
-		Content:    genResp.Message.Content,
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		// TODO: if we run into this, fall back to non-streaming
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	// First write the header response
+	err = json.NewEncoder(w).Encode(StreamResponseHeader{
 		SourceURLs: urlsFromChunks(rerankedChunks),
+	})
+	if err != nil {
+		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		return
 	}
 
-	err = WritePromptLog(response.Content)
+	// Write a newline after the header
+	_, err = w.Write([]byte("\n"))
+	if err != nil {
+		http.Error(w, "Failed to write newline", http.StatusInternalServerError)
+		return
+	}
+
+	timeToFirstToken := time.Time{}
+	responseAcc := ""
+	streamCount := 0
+	for item := range streamChan {
+		if timeToFirstToken.IsZero() {
+			timeToFirstToken = time.Now()
+		}
+		streamCount++
+		responseAcc += item.Message.Content
+		json.NewEncoder(w).Encode(item)
+		_, err = w.Write([]byte("\n"))
+		if err != nil {
+			http.Error(w, "Failed to write newline", http.StatusInternalServerError)
+			return
+		}
+		flusher.Flush()
+	}
+
+	err = WritePromptLog(responseAcc)
 	if err != nil {
 		log.Printf("Failed to write prompt to log: %s", err)
 		http.Error(w, "Failed to write prompt to log", http.StatusInternalServerError)
@@ -480,26 +464,20 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	}
 	doneTime := time.Now()
 
-	log.Printf("Response: %v", response)
-	b, err := json.Marshal(response)
-	if err != nil {
-		http.Error(w, "Failed to marshal search results", http.StatusInternalServerError)
-		return
-	}
 	a.Posthog.Enqueue(posthog.Capture{
 		DistinctId: a.PosthogDistinctID,
 		Event:      "Prompt",
 		Properties: posthog.NewProperties().
 			Set("total_duration", doneTime.Sub(startTime).String()).
-			Set("generation_duration", doneTime.Sub(rerankTime).String()).
-			Set("rerank_duration", rerankTime.Sub(searchTime).String()).
-			Set("search_duration", searchTime.Sub(embedTime).String()).
-			Set("embed_duration", embedTime.Sub(startTime).String()).
+			Set("1.search_duration", searchTime.Sub(embedTime).String()).
+			Set("2.embed_duration", embedTime.Sub(startTime).String()).
+			Set("3.rerank_duration", rerankTime.Sub(searchTime).String()).
+			Set("4.gen_ttft_duration", timeToFirstToken.Sub(rerankTime).String()).
+			Set("5.gen_stream_duration", doneTime.Sub(timeToFirstToken).String()).
+			Set("ttft_duration", timeToFirstToken.Sub(startTime).String()).
+			Set("gen_sum_duration", doneTime.Sub(rerankTime).String()).
 			Set("num_search_results", len(searchResults)).
-			Set("num_reranked_results", len(rerankedChunks)),
+			Set("num_reranked_results", len(rerankedChunks)).
+			Set("num_streamed_events", streamCount),
 	})
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write(b)
 }

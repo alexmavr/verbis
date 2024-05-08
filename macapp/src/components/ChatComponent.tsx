@@ -18,6 +18,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
   const [placeholder, setPlaceholder] = useState("How can I help?");
   const countRef = useRef(0); // To keep track of the ellipsis state
   const [conversation, setConversation] = useState([]);
+  const controller = new AbortController(); // For handling cancellation
 
   const smoothScrollToBottom = () => {
     const element = conversationContainer.current;
@@ -77,52 +78,60 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
     }
   }, [loading]);
 
-  // Function to handle the prompting action
+  useEffect(() => {
+    return () => {
+      controller.abort(); // Abort fetch on cleanup
+    };
+  }, []); 
+
   const triggerPrompt = async () => {
-    // Set loading to disable input and button
-    setLoading(true);
-    // Remember previous prompt
-    const previousPrompt = promptText;
-    setPromptText("");
-
-    if (!promptText.trim()) return; // Do nothing if the prompt is empty
-
-    // Transform conversation history to the expected format
+    setLoading(true); // Show loading state
+    setPromptText(""); // Clear input after sending
+  
+    const previousPrompt = promptText.trim();
+    if (!previousPrompt) return; // Do nothing if the prompt is empty
+  
     const history = conversation.map((item) => ({
       role: item.role,
       content: item.content,
     }));
-
-    // Display the submitted prompt immediately
-    setConversation((conv) => [
-      ...conv,
-      {
-        role: "user",
-        content: previousPrompt,
-      },
-    ]);
+  
+    const assistantResponseIndex = conversation.length + 1; // zero-indexed, user + assistant message from now
 
     try {
-      const { content, urls } = await generate(promptText, history);
-
-      // Assuming that response is just the assistant's text, adjust if it's structured differently
-      setConversation((conv) => [
+      const { initialUrls, generator } = await generate(previousPrompt, history);
+      // Create an entry for the assistant's response to accumulate content
+      setConversation(conv => [
         ...conv,
-        // { role: "user", content: promptText },
-        { role: "assistant", content: content, urls: urls },
+        { role: "user", content: previousPrompt },
+        {
+          role: "assistant",
+          content: "",
+          urls: initialUrls,
+        }
       ]);
-      setPromptText(""); // Clear the input field after sending the prompt
+
+      let accumulatedContent = "";
+      // Process each generated chunk as it arrives
+      for await (const chunk of generator) {
+        accumulatedContent += chunk.content;
+        setConversation(conv => {
+          const newConv = [...conv];
+          newConv[assistantResponseIndex] = {
+            ...newConv[assistantResponseIndex],
+            content: accumulatedContent
+          };
+          return newConv;
+        });
+      }
     } catch (e) {
       console.error("Error during prompt generation: ", e);
-      // Put the prompt back
-      setPromptText(previousPrompt);
+      setPromptText(previousPrompt); // Restore the prompt text if there's an error
     } finally {
       setLoading(false);
-      getCurrentWindow().show();
-      getCurrentWindow().focus();
     }
   };
-
+  
   return (
     <>
       <div className="fixed right-4 top-4">

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/epochlabs-ai/lamoid/lamoid/types"
 	"github.com/epochlabs-ai/lamoid/lamoid/util"
@@ -86,6 +88,90 @@ func createModel(modelName string) error {
 	return nil
 }
 
+type StreamResponse struct {
+	Model     string            `json:"model"`
+	CreatedAt time.Time         `json:"created_at"`
+	Message   types.HistoryItem `json:"message"`
+	Done      bool              `json:"done"`
+}
+
+func chatWithModelStream(ctx context.Context, prompt string, model string, history []types.HistoryItem, resChan chan<- StreamResponse) error {
+	url := "http://localhost:11434/api/chat"
+
+	messages := history
+	if prompt != "" {
+		messages = append(history, types.HistoryItem{
+			Role:    "user",
+			Content: prompt,
+		})
+	}
+
+	payload := RequestPayload{
+		Model:     model,
+		Messages:  messages,
+		Stream:    true,
+		KeepAlive: KeepAliveTime,
+	}
+
+	// Marshal the payload into JSON
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	// Create a new HTTP request
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return err
+	}
+
+	// Set the appropriate headers
+	req.Header.Set("Content-Type", "application/json")
+
+	// Make the HTTP request using the default client
+	client := &http.Client{}
+	response, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+
+	// Start a go routine to read from the response body
+	go func() {
+		defer response.Body.Close()
+		reader := bufio.NewReader(response.Body)
+		decoder := json.NewDecoder(reader)
+		log.Printf("DEBUG started goroutine")
+
+		for {
+			select {
+			case <-ctx.Done():
+				fmt.Println("Context cancelled")
+				return
+			default:
+				var streamResp StreamResponse
+				if err := decoder.Decode(&streamResp); err == io.EOF {
+					break
+				} else if err != nil {
+					fmt.Println("Error decoding JSON:", err)
+					return
+				}
+				log.Printf("DEBUG Stream response: %v", streamResp)
+
+				resChan <- streamResp
+
+				if streamResp.Done {
+					close(resChan)
+					return
+				}
+			}
+		}
+	}()
+	log.Printf("DEBUG terminating method")
+
+	// Return the structured response
+	return nil
+}
+
 // Function to call ollama model
 func chatWithModel(prompt string, model string, history []types.HistoryItem) (*ApiResponse, error) {
 	// URL of the API endpoint
@@ -99,8 +185,6 @@ func chatWithModel(prompt string, model string, history []types.HistoryItem) (*A
 		})
 	}
 
-	// TODO: pass history
-	// Create the payload
 	payload := RequestPayload{
 		Model:     model,
 		Messages:  messages,
@@ -146,11 +230,6 @@ func chatWithModel(prompt string, model string, history []types.HistoryItem) (*A
 
 	// Return the structured response
 	return &apiResponse, nil
-}
-
-type PromptResponse struct {
-	Content    string   `json:"content"`
-	SourceURLs []string `json:"urls"`
 }
 
 func urlsFromChunks(chunks []*types.Chunk) []string {

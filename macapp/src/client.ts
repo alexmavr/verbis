@@ -2,6 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { promisify } from 'util'
 import axios from 'axios';
+import { json } from 'stream/consumers';
 
 const app = process && process.type === 'renderer' ? require('@electron/remote').app : require('electron').app
 const lamoid = app.isPackaged ? path.join(process.resourcesPath, 'ollama') : path.resolve(process.cwd(), '..', 'lamoid')
@@ -39,30 +40,86 @@ export async function google_sync() {
     throw error; // Rethrow or handle as needed
   }
 }
-interface PromptResponse {
-  content: string;
-  urls: string[];
+
+async function* responseGenerator(response: Response): AsyncGenerator<GenerateChunk, void, undefined> {
+  const reader = response.body!.getReader();
+  const textDecoder = new TextDecoder();
+  let buffer = '';
+  let isFirst = true;
+
+  while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += textDecoder.decode(value, { stream: true });
+      let boundary;
+
+      while ((boundary = buffer.indexOf('\n')) >= 0) {
+          const jsonStr = buffer.substring(0, boundary);
+          buffer = buffer.substring(boundary + 1);
+          if (!/\S/.test(jsonStr) || jsonStr.length == 0) {
+            // Skip whitespace lines
+            continue;
+          }
+
+          try {
+              const obj = JSON.parse(jsonStr);
+              if (isFirst) {
+                  isFirst = false;
+                  yield { content: "", urls: obj.urls};
+              } else {
+                  if (obj.done) return;  // Exit if the stream indicates completion
+                  yield { content: obj.message.content, urls: []};
+              }
+          } catch (error) {
+              console.error("Failed to parse JSON:", error);
+          }
+      }
+  }
 }
 
-export async function generate(
-  promptText: string,
-  history: { role: string; content: string }[] = []
-): Promise<PromptResponse> {
-  try {
-    const payload = {
-      prompt: promptText,
-      history: history.length > 0 ? history : [],
-    };
+// StreamedResponse is the type of each chunk returned by ollama
+interface StreamedResponse {
+  done: boolean;
+  response: string;
+}
+// Returned by the generate function as a generator
+interface GenerateChunk {
+  content: string;
+  urls: string[]; // Only populated on the first message
+}
+interface HistoryItem {
+  role: string;
+  content: string;
+}
 
-    const response = await axios.post("http://localhost:8081/prompt", payload);
-    console.log("Prompt Response:", response.data);
+export async function generate(promptText: string, history: HistoryItem[] = []): Promise<{ initialUrls: string[], generator: AsyncGenerator<GenerateChunk, void, unknown> }> {
+  const payload = {
+    prompt: promptText,
+    history: history.length > 0 ? history : [],
+  };
 
-    const { content, urls } = response.data;
-    return { content, urls };
-  } catch (error) {
-    console.error("Error when sending prompt:", error);
-    throw new Error(`Failed to retrieve data: ${error.message}`);
+  const controller = new AbortController();
+  const response = await fetch("http://localhost:8081/prompt", {
+    method: "POST",
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+    signal: controller.signal
+  });
+
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+
+  const generator = responseGenerator(response);
+  const initialResponse = await generator.next();
+  let urls: string[];
+  if (!initialResponse.done && initialResponse.value && 'urls' in initialResponse.value) {
+    urls = initialResponse.value.urls;  // Now TypeScript knows 'urls' exists
   }
+
+  return { initialUrls: urls, generator: generator};
 }
 
 export async function list_connectors() {
