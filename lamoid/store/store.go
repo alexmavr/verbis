@@ -20,6 +20,10 @@ var (
 	stateClassName = "ConnectorState"
 )
 
+const (
+	MaxNumSearchResults = 5
+)
+
 func GetWeaviateClient() *weaviate.Client {
 	// Initialize Weaviate client
 	return weaviate.New(weaviate.Config{
@@ -78,7 +82,7 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 		Get().
 		WithClassName(chunkClassName).
 		WithHybrid(hybrid).
-		WithLimit(7).
+		WithLimit(MaxNumSearchResults).
 		WithFields(_chunk_fields...).
 		//		WithAutocut(1).
 		Do(ctx)

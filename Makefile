@@ -49,7 +49,7 @@ dist/weaviate:
 
 dist/rerank:
 	. $(VENV_DIR)/bin/activate
-	pyinstaller --onefile script/rerank.py --specpath dist/ --collect-all flashrank
+	pyinstaller --onefile script/rerank.py --specpath dist/ 
 
 lamoid:
 	# Ensure dist directory exists
@@ -68,8 +68,7 @@ builder-env:
 	python3 -m venv $(VENV_DIR)
 	. $(VENV_DIR)/bin/activate; \
 	pip install --upgrade pip; \
-	pip install llama-cpp-python[server]; \
-	pip install pyinstaller flashrank; \
+	pip install pyinstaller; \
 
 clean:
 	rm dist/weaviate dist/rerank dist/ollama dist/lamoid

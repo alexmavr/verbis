@@ -23,8 +23,8 @@ import (
 )
 
 var (
-	PromptLogFile           = ".lamoid/logs/prompt.log" // Relative to home
-	NumConcurrentInferences = 3
+	PromptLogFile        = ".lamoid/logs/prompt.log" // Relative to home
+	MaxNumRerankedChunks = 2
 )
 
 type API struct {
@@ -448,8 +448,8 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	}
 	rerankTime := time.Now()
 
-	// Only keep the highest ranked chunk
-	rerankedChunks = rerankedChunks[:1]
+	// Keep up to MaxNumRerankedChunks highest ranked chunks
+	rerankedChunks = rerankedChunks[:MaxNumRerankedChunks]
 
 	llmPrompt := MakePrompt(rerankedChunks, promptReq.Prompt)
 	log.Printf("LLM Prompt: %s", llmPrompt)

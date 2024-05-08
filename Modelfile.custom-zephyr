@@ -1,1 +1,1 @@
-FROM epoch/rank-zephyr:q4_k_m
+FROM epoch/rank-zephyr:Q2_K

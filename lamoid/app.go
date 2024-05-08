@@ -26,7 +26,6 @@ var (
 	httpClient          = &http.Client{Timeout: 10 * time.Second}
 	generationModelName = "custom-mistral"
 	embeddingsModelName = "nomic-embed-text"
-	rerankModelName     = "epoch/rank-zephyr:q4_k_m"
 	clean               = false
 	KeepAliveTime       = "20m"
 
@@ -128,7 +127,7 @@ func main() {
 		log.Fatalf("Failed to wait for ollama: %s\n", err)
 	}
 
-	err = initModels([]string{generationModelName, embeddingsModelName, rerankModelName})
+	err = initModels([]string{generationModelName, embeddingsModelName})
 	if err != nil {
 		log.Fatalf("Failed to initialize models: %s\n", err)
 	}
@@ -149,6 +148,14 @@ func main() {
 	if !strings.Contains(resp.Message.Content, "Paris") {
 		log.Fatalf("Response does not contain Paris: %v\n", resp.Message.Content)
 	}
+
+	// Perform a test rerank to download the model
+	rerankOutput, err := RunRerankModel(ctx, []byte{})
+	if err != nil {
+		log.Fatalf("Failed to run rerank model: %s\n", err)
+	}
+	log.Print(string(rerankOutput))
+	log.Print("Rerank model loaded successfully")
 
 	endTime := time.Now()
 

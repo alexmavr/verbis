@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -20,6 +21,7 @@ import (
 
 const (
 	CustomModelPrefix = "custom-"
+	rerankFileName    = "rerank"
 )
 
 func IsCustomModel(modelName string) bool {
@@ -164,8 +166,87 @@ func Rerank(ctx context.Context, chunks []*types.Chunk, query string) ([]*types.
 		return []*types.Chunk{}, nil
 	}
 
-	// TODO: context
-	return rerankLLM(chunks, query)
+	return rerankBERT(ctx, chunks, query)
+}
+
+// type used to pass chunks to BERT rerank models
+type Passage struct {
+	ID    int                    `json:"id"`
+	Text  string                 `json:"text"`
+	Meta  map[string]interface{} `json:"meta"`
+	Score float32                `json:"score"`
+}
+
+type RerankRequest struct {
+	Query    string    `json:"query"`
+	Passages []Passage `json:"passages"`
+}
+
+func rerankBERT(ctx context.Context, chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
+	passages := []Passage{}
+	for i, chunk := range chunks {
+		passages = append(passages, Passage{
+			ID:   i,
+			Text: chunk.Text,
+			Meta: map[string]interface{}{
+				"title": chunk.Name,
+			},
+		})
+	}
+
+	rerankRequest := RerankRequest{
+		Query:    query,
+		Passages: passages,
+	}
+	// Marshal data into JSON
+	jsonData, err := json.Marshal(rerankRequest)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling JSON: %v", err)
+	}
+
+	output, err := RunRerankModel(ctx, jsonData)
+	if err != nil {
+		return nil, fmt.Errorf("error running rerank model: %v", err)
+	}
+
+	// Unmarshal the output JSON data
+	var res []int
+	err = json.Unmarshal(output, &res)
+	if err != nil {
+		log.Printf("%s", string(output))
+		return nil, fmt.Errorf("error unmarshaling JSON: %v", err)
+	}
+
+	finalChunks := []*types.Chunk{}
+	for _, pid := range res {
+		finalChunks = append(finalChunks, chunks[pid])
+	}
+
+	return finalChunks, nil
+}
+
+func RunRerankModel(ctx context.Context, jsonData []byte) ([]byte, error) {
+	if len(jsonData) == 0 {
+		newData, err := json.Marshal(map[string]string{})
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling JSON: %v", err)
+		}
+		jsonData = newData
+	}
+	// Execute the Python script and pass JSON data to stdin
+	distPath, err := util.GetDistPath()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get dist path: %v", err)
+	}
+	rerankFilePath := filepath.Join(distPath, rerankFileName)
+	cmd := exec.CommandContext(ctx, rerankFilePath)
+	cmd.Stdin = bytes.NewReader(jsonData)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Print(string(output))
+		return nil, fmt.Errorf("error executing script: %v", err)
+	}
+	return output, nil
 }
 
 // ParseStringToIntArray takes a specially formatted string and returns an array of integers
@@ -192,6 +273,12 @@ func ParseStringToIntArray(input string) ([]int, error) {
 	return result, nil
 }
 
+// NOTE: rerankLLM is used for RankGPT style rerankers, which are bundled as
+// GGUF and ran by ollama. Not currently in use since pairwise rerankers are
+// faster and better performing
+const rerankModelName = "custom-zephyr"
+
+// Only used for Llama.cpp rerank models such as rerank-zephyr
 func rerankLLM(chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
 	messages, err := MakeRerankMessages(chunks, query)
 	if err != nil {

@@ -33,15 +33,14 @@ func GetDistPath() (string, error) {
 
 	err = binariesPresent(curDir)
 	if err != nil {
-		log.Printf("Did not find binaries binaries on %s, falling back to dist: %s", curDir, err)
 		curDir = filepath.Join(exeDir, "../dist")
 		err = binariesPresent(curDir)
 		if err != nil {
 			return "", fmt.Errorf("binaries not found in %s: %s", curDir, err)
 		}
 	}
-	log.Printf("Binaries found on %s", curDir)
 
+	log.Printf("Dist directory found on %s", curDir)
 	return curDir, nil
 }
 
