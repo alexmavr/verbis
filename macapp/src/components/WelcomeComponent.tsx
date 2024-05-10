@@ -16,6 +16,7 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
       try {
         await axios.get("http://localhost:8081/health");
         setLoading(false); // Turn off spinner on successful response
+        navigate(AppScreen.PROMPT); // Redirect to the prompt screen
       } catch (error) {
         console.error("Error checking health: ", error);
         setTimeout(checkHealth, 3000); // Retry after 3 seconds if the request fails
