@@ -165,7 +165,11 @@ func CreateConnectorStateClass(ctx context.Context, client *weaviate.Client, for
 		Vectorizer: "none",
 		Properties: []*models.Property{
 			{
-				Name:     "name",
+				Name:     "connector_id",
+				DataType: []string{"string"},
+			},
+			{
+				Name:     "type",
 				DataType: []string{"string"},
 			},
 			{
@@ -195,8 +199,8 @@ func CreateConnectorStateClass(ctx context.Context, client *weaviate.Client, for
 	return client.Schema().ClassCreator().WithClass(class).Do(ctx)
 }
 
-func LockConnector(ctx context.Context, client *weaviate.Client, name string) error {
-	state, err := GetConnectorState(ctx, client, name)
+func LockConnector(ctx context.Context, client *weaviate.Client, connectorID string) error {
+	state, err := GetConnectorState(ctx, client, connectorID)
 	if err != nil {
 		return err
 	}
@@ -211,7 +215,7 @@ func LockConnector(ctx context.Context, client *weaviate.Client, name string) er
 		case <-ctx.Done():
 			return fmt.Errorf("context cancelled")
 		case <-time.After(5 * time.Second):
-			state, err = GetConnectorState(ctx, client, name)
+			state, err = GetConnectorState(ctx, client, connectorID)
 			if err != nil {
 				return err
 			}
@@ -222,8 +226,8 @@ func LockConnector(ctx context.Context, client *weaviate.Client, name string) er
 	return UpdateConnectorState(ctx, client, state)
 }
 
-func UnlockConnector(ctx context.Context, client *weaviate.Client, name string) error {
-	state, err := GetConnectorState(ctx, client, name)
+func UnlockConnector(ctx context.Context, client *weaviate.Client, connectorID string) error {
+	state, err := GetConnectorState(ctx, client, connectorID)
 	if err != nil {
 		return err
 	}
@@ -239,9 +243,9 @@ func UnlockConnector(ctx context.Context, client *weaviate.Client, name string) 
 // Add or update the connector state in Weaviate
 func UpdateConnectorState(ctx context.Context, client *weaviate.Client, state *types.ConnectorState) error {
 	where := filters.Where().
-		WithPath([]string{"name"}).
+		WithPath([]string{"connector_id"}).
 		WithOperator(filters.Equal).
-		WithValueString(state.Name)
+		WithValueString(state.ConnectorID)
 
 	resp, err := client.GraphQL().Get().
 		WithClassName(stateClassName).
@@ -257,7 +261,8 @@ func UpdateConnectorState(ctx context.Context, client *weaviate.Client, state *t
 	if resp.Data["Get"] == nil || len(resp.Data["Get"].(map[string]interface{})[stateClassName].([]interface{})) == 0 {
 		log.Print("Creating new connector state")
 		_, err := client.Data().Creator().WithClassName(stateClassName).WithProperties(map[string]interface{}{
-			"name":         state.Name,
+			"connector_id": state.ConnectorID,
+			"type":         state.ConnectorType,
 			"syncing":      state.Syncing,
 			"auth_valid":   state.AuthValid,
 			"lastSync":     state.LastSync,
@@ -280,7 +285,8 @@ func UpdateConnectorState(ctx context.Context, client *weaviate.Client, state *t
 					WithID(objID).
 					WithClassName(stateClassName).
 					WithProperties(map[string]interface{}{
-			"name":         state.Name,
+			"connector_id": state.ConnectorID,
+			"type":         state.ConnectorType,
 			"syncing":      state.Syncing,
 			"auth_valid":   state.AuthValid,
 			"lastSync":     state.LastSync,
@@ -292,19 +298,73 @@ func UpdateConnectorState(ctx context.Context, client *weaviate.Client, state *t
 	return err
 }
 
+// Fetches all stored connector states from Weaviate, used to initialize the syncer after restart
+func AllConnectorStates(ctx context.Context, client *weaviate.Client) ([]*types.ConnectorState, error) {
+	resp, err := client.GraphQL().Get().
+		WithClassName(stateClassName).
+		WithFields(
+			[]graphql.Field{
+				{Name: "connector_id"},
+				{Name: "type"},
+				{Name: "syncing"},
+				{Name: "auth_valid"},
+				{Name: "lastSync"},
+				{Name: "numDocuments"},
+				{Name: "numChunks"},
+			}...).
+		Do(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.Data["Get"] == nil {
+		return nil, nil
+	}
+
+	get := resp.Data["Get"].(map[string]interface{})
+	states, ok := get["ConnectorState"].([]interface{})
+	if !ok {
+		return nil, nil
+	}
+
+	if len(states) == 0 {
+		return nil, nil
+	}
+
+	res := []*types.ConnectorState{}
+	for _, state := range states {
+		c := state.(map[string]interface{})
+		lastSync, err := time.Parse(time.RFC3339, c["lastSync"].(string))
+		if err != nil {
+			log.Printf("Failed to parse last sync time: %s\n", err)
+		}
+		res = append(res, &types.ConnectorState{
+			ConnectorID:   c["connector_id"].(string),
+			ConnectorType: c["type"].(string),
+			Syncing:       c["syncing"].(bool),
+			AuthValid:     c["auth_valid"].(bool),
+			LastSync:      lastSync,
+			NumDocuments:  int(c["numDocuments"].(float64)),
+			NumChunks:     int(c["numChunks"].(float64)),
+		})
+	}
+	return res, nil
+}
+
 // Retrieve the connector state from Weaviate
 // Does not return AuthValid as it can be inferred from the presence of a token
-func GetConnectorState(ctx context.Context, client *weaviate.Client, name string) (*types.ConnectorState, error) {
+func GetConnectorState(ctx context.Context, client *weaviate.Client, connectorID string) (*types.ConnectorState, error) {
 	where := filters.Where().
-		WithPath([]string{"name"}).
+		WithPath([]string{"connector_id"}).
 		WithOperator(filters.Equal).
-		WithValueString(name)
+		WithValueString(connectorID)
 
 	resp, err := client.GraphQL().Get().
 		WithClassName(stateClassName).
 		WithFields(
 			[]graphql.Field{
-				{Name: "name"},
+				{Name: "connector_id"},
+				{Name: "type"},
 				{Name: "syncing"},
 				{Name: "auth_valid"},
 				{Name: "lastSync"},
@@ -338,11 +398,12 @@ func GetConnectorState(ctx context.Context, client *weaviate.Client, name string
 	}
 
 	return &types.ConnectorState{
-		Name:         c["name"].(string),
-		Syncing:      c["syncing"].(bool),
-		AuthValid:    c["auth_valid"].(bool),
-		LastSync:     lastSync,
-		NumDocuments: int(c["numDocuments"].(float64)),
-		NumChunks:    int(c["numChunks"].(float64)),
+		ConnectorID:   c["connector_id"].(string),
+		ConnectorType: c["type"].(string),
+		Syncing:       c["syncing"].(bool),
+		AuthValid:     c["auth_valid"].(bool),
+		LastSync:      lastSync,
+		NumDocuments:  int(c["numDocuments"].(float64)),
+		NumChunks:     int(c["numChunks"].(float64)),
 	}, nil
 }

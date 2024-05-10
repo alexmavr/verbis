@@ -5,12 +5,16 @@ import (
 	"time"
 )
 
+type ConnectorType string
+
 const (
-	MaxChunkSize = 2000 // Maximum number of characters in a chunk
+	ConnectorTypeGoogleDrive ConnectorType = "googledrive"
 )
 
 type Connector interface {
-	Name() string
+	ID() string
+	Type() ConnectorType
+	User() string
 
 	// Init runs once when the connector is initially registered
 	// It is responsible for determining if the connector has valid auth from

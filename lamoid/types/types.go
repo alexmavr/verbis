@@ -16,12 +16,13 @@ type HistoryItem struct {
 }
 
 type ConnectorState struct {
-	Name         string    `json:"name"`
-	AuthValid    bool      `json:"auth_valid"`
-	Syncing      bool      `json:"syncing"`
-	LastSync     time.Time `json:"last_sync"`
-	NumDocuments int       `json:"num_documents"`
-	NumChunks    int       `json:"num_chunks"`
+	ConnectorID   string    `json:"connector_id"`
+	ConnectorType string    `json:"connector_type"`
+	AuthValid     bool      `json:"auth_valid"`
+	Syncing       bool      `json:"syncing"`
+	LastSync      time.Time `json:"last_sync"`
+	NumDocuments  int       `json:"num_documents"`
+	NumChunks     int       `json:"num_chunks"`
 }
 
 type Chunk struct {

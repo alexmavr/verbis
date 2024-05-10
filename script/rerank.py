@@ -185,7 +185,6 @@ class Passage:
         self.text = text
         self.meta = meta
 
-
 ranker = Ranker(model_name="ms-marco-TinyBERT-L-2-v2")
 
 # Read JSON input from stdin

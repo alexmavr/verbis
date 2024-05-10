@@ -33,9 +33,12 @@ type API struct {
 func (a *API) SetupRouter() *mux.Router {
 	r := mux.NewRouter()
 	r.HandleFunc("/connectors", a.connectorsList).Methods("GET")
-	r.HandleFunc("/connectors/{name}/init", a.connectorInit).Methods("GET")
-	r.HandleFunc("/connectors/{name}/auth_setup", a.connectorAuthSetup).Methods("GET")
-	r.HandleFunc("/connectors/{name}/callback", a.handleConnectorCallback).Methods("GET")
+	r.HandleFunc("/connectors/{type}/init", a.connectorInit).Methods("GET")
+	// TODO: auth_setup and callback are theoretically per connector and not per
+	// connector type. The ID of the connector should be inferred and passed as
+	// a state variable in the oauth flow.
+	r.HandleFunc("/connectors/{type}/auth_setup", a.connectorAuthSetup).Methods("GET")
+	r.HandleFunc("/connectors/{type}/callback", a.handleConnectorCallback).Methods("GET")
 	r.HandleFunc("/prompt", a.handlePrompt).Methods("POST")
 	r.HandleFunc("/health", a.health).Methods("GET")
 
@@ -73,14 +76,14 @@ func (a *API) connectorInit(w http.ResponseWriter, r *http.Request) {
 	// Should not error when called accidentally multiple times
 	// Can be re-invoked to re-init the connector (i.e. to reset stuck syncing state)
 	vars := mux.Vars(r)
-	connectorName, ok := vars["name"]
+	connectorType, ok := vars["type"]
 	if !ok {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("No connector name provided"))
 		return
 	}
 
-	conn, ok := connectors.AllConnectors[connectorName]
+	conn, ok := connectors.AllConnectors[connectorType]
 	if !ok {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Unknown connector name"))
@@ -104,14 +107,14 @@ func (a *API) connectorInit(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) connectorAuthSetup(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	connectorName, ok := vars["name"]
+	connectorType, ok := vars["type"]
 	if !ok {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("No connector name provided"))
 		return
 	}
 
-	conn, ok := connectors.AllConnectors[connectorName]
+	conn, ok := connectors.AllConnectors[connectorType]
 	if !ok {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Unknown connector name"))

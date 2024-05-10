@@ -9,7 +9,7 @@ const lamoid = app.isPackaged ? path.join(process.resourcesPath, 'ollama') : pat
 
 export async function google_init() {
   try {
-    const response = await axios.get('http://localhost:8081/connectors/google/init');
+    const response = await axios.get('http://localhost:8081/connectors/googledrive/init');
     console.log('Google Init Response:', response.data);
     // Additional logic based on response
   } catch (error) {
@@ -20,7 +20,7 @@ export async function google_init() {
 
 export async function google_auth_setup() {
   try {
-    const response = await axios.get('http://localhost:8081/connectors/google/auth_setup');
+    const response = await axios.get('http://localhost:8081/connectors/googledrive/auth_setup');
     console.log('Google Auth Setup Response:', response.data);
     // Additional logic based on response
   } catch (error) {

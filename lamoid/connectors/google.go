@@ -17,6 +17,8 @@ import (
 
 	//   "google.golang.org/api/calendar/v3"
 	//    "google.golang.org/api/gmail/v1"
+
+	"github.com/google/uuid"
 	"github.com/zalando/go-keyring"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
@@ -33,15 +35,25 @@ const (
 	MaxChunkSize   = 2000 // Maximum number of characters in a chunk
 )
 
-type GoogleConnector struct {
+type GoogleDriveConnector struct {
+	id   string
+	user string
 }
 
-func (g *GoogleConnector) Name() string {
-	return "Google Drive"
+func (g *GoogleDriveConnector) ID() string {
+	return g.id
 }
 
-func (g *GoogleConnector) Status(ctx context.Context) (*types.ConnectorState, error) {
-	state, err := store.GetConnectorState(ctx, store.GetWeaviateClient(), g.Name())
+func (g *GoogleDriveConnector) User() string {
+	return g.user
+}
+
+func (g *GoogleDriveConnector) Type() types.ConnectorType {
+	return types.ConnectorTypeGoogleDrive
+}
+
+func (g *GoogleDriveConnector) Status(ctx context.Context) (*types.ConnectorState, error) {
+	state, err := store.GetConnectorState(ctx, store.GetWeaviateClient(), g.ID())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get connector state: %v", err)
 	}
@@ -97,21 +109,24 @@ var scopes []string = []string{
 	drive.DriveReadonlyScope,
 }
 
-func (g *GoogleConnector) Init(ctx context.Context) error {
-
-	log.Printf("Initializing connector %s", g.Name())
-	state, err := store.GetConnectorState(ctx, store.GetWeaviateClient(), g.Name())
+func (g *GoogleDriveConnector) Init(ctx context.Context) error {
+	if g.id == "" {
+		g.id = uuid.New().String()
+	}
+	log.Printf("Initializing connector type: %s id: %s", g.Type(), g.ID())
+	state, err := store.GetConnectorState(ctx, store.GetWeaviateClient(), g.ID())
 	if err != nil {
 		return fmt.Errorf("failed to get connector state: %v", err)
 	}
 
 	if state == nil {
 		state = &types.ConnectorState{
-			Name: g.Name(),
+			ConnectorID: g.ID(),
 		}
 	}
 
 	state.Syncing = false
+	state.ConnectorType = string(g.Type())
 	token, err := tokenFromKeychain()
 	state.AuthValid = (err == nil && token != nil) // TODO: check for expiry of refresh token
 	log.Printf("token: %v, err: %v", token, err)
@@ -121,11 +136,11 @@ func (g *GoogleConnector) Init(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to set connector state: %v", err)
 	}
-	log.Printf("Initialized connector %s", g.Name())
+	log.Printf("Initialized connector type %s: %s", g.Type(), g.ID())
 	return nil
 }
 
-func (g *GoogleConnector) UpdateConnectorState(ctx context.Context, state *types.ConnectorState) error {
+func (g *GoogleDriveConnector) UpdateConnectorState(ctx context.Context, state *types.ConnectorState) error {
 	return store.UpdateConnectorState(ctx, store.GetWeaviateClient(), state)
 }
 
@@ -141,7 +156,7 @@ func get_config_from_json() (*oauth2.Config, error) {
 	return google.ConfigFromJSON(b, scopes...)
 }
 
-func (g *GoogleConnector) AuthSetup(ctx context.Context) error {
+func (g *GoogleDriveConnector) AuthSetup(ctx context.Context) error {
 	config, err := get_config_from_json()
 	if err != nil {
 		return fmt.Errorf("unable to get google config: %s", err)
@@ -160,7 +175,7 @@ func (g *GoogleConnector) AuthSetup(ctx context.Context) error {
 	return nil
 }
 
-func (g *GoogleConnector) AuthCallback(ctx context.Context, authCode string) error {
+func (g *GoogleDriveConnector) AuthCallback(ctx context.Context, authCode string) error {
 	config, err := get_config_from_json()
 	if err != nil {
 		return fmt.Errorf("unable to get google config: %s", err)
@@ -180,7 +195,7 @@ func (g *GoogleConnector) AuthCallback(ctx context.Context, authCode string) err
 	return nil
 }
 
-func (g *GoogleConnector) Sync(ctx context.Context, lastSync time.Time, resChan chan types.Chunk, errChan chan error) {
+func (g *GoogleDriveConnector) Sync(ctx context.Context, lastSync time.Time, resChan chan types.Chunk, errChan chan error) {
 	defer close(errChan)
 	defer close(resChan)
 

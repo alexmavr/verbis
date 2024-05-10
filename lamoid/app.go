@@ -46,8 +46,6 @@ func main() {
 
 	// Start syncer as separate goroutine
 	syncer := NewSyncer()
-	go syncer.Run(ctx)
-
 	if PosthogAPIKey == "n/a" {
 		log.Fatalf("Posthog API key not set\n")
 	}
@@ -145,6 +143,12 @@ func main() {
 	weavClient := store.GetWeaviateClient()
 	store.CreateChunkClass(ctx, weavClient, clean)
 	store.CreateConnectorStateClass(ctx, weavClient, clean)
+
+	err = syncer.Init(ctx)
+	if err != nil {
+		log.Fatalf("Failed to initialize syncer: %s\n", err)
+	}
+	go syncer.Run(ctx)
 
 	// Perform a test generation with ollama to load the model in memory
 	resp, err := chatWithModel("What is the capital of France? Respond in one word only", generationModelName, []types.HistoryItem{})

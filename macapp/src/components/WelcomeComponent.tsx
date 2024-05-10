@@ -43,14 +43,8 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
             <p className="mx-auto w-[65%] text-sm text-gray-400">
               Let's get you up and running.
             </p>
-            {/* <button
-              onClick={() => navigate(AppScreen.GOOGLE_INIT)}
-              className="no-drag rounded-dm mx-auto my-8 rounded-md bg-black px-4 py-2 text-sm text-white hover:brightness-110"
-            >
-              GOOGLE
-            </button> */}
             <button
-              onClick={() => navigate(AppScreen.SETTINGS)}
+              onClick={() => navigate(AppScreen.PROMPT)}
               className="no-drag rounded-dm mx-auto my-8 rounded-md bg-black px-4 py-2 text-sm text-white hover:brightness-110"
             >
               Continue
