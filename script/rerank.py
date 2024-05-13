@@ -1,6 +1,7 @@
 model_url = 'https://huggingface.co/prithivida/flashrank/resolve/main/{}.zip'
 
-default_cache_dir = "/var/tmp"
+home_dir = Path.home()
+default_cache_dir = home_dir / ".lamoid" / "models"
 default_model = "ms-marco-TinyBERT-L-2-v2"
 model_file_map = {
         "ms-marco-TinyBERT-L-2-v2": "flashrank-TinyBERT-L-2-v2.onnx",
