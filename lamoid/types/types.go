@@ -28,6 +28,7 @@ type ConnectorState struct {
 type Chunk struct {
 	Document `json:"document"`
 	Text     string `json:"text"`
+	Hash     string `json:"hash"`
 
 	// The following fields are only filled in when the chunk is a search result
 	Score        float64 `json:"score"`

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"regexp"
@@ -112,6 +114,12 @@ func cleanWhitespace(text string) string {
 	return strings.TrimSpace(text)
 }
 
+func hash(text string) string {
+	h := sha256.New()
+	h.Write([]byte(text))
+	return base64.URLEncoding.EncodeToString(h.Sum(nil))
+}
+
 func chunkAdder(ctx context.Context, c types.Connector, chunkChan chan types.Chunk, doneChan chan struct{}) {
 	// TODO: hold buffer and add vectors in batches
 	for chunk := range chunkChan {
@@ -122,6 +130,18 @@ func chunkAdder(ctx context.Context, c types.Connector, chunkChan chan types.Chu
 			log.Printf("Skipping short chunk: %s\n", saneChunk)
 			continue
 		}
+
+		chunkHash := hash(saneChunk)
+		exists, err := store.ChunkHashExists(ctx, store.GetWeaviateClient(), chunkHash)
+		if err != nil {
+			log.Printf("Failed to check chunk hash: %s\n", err)
+			continue
+		}
+		if exists {
+			log.Printf("Chunk already exists: %s\n", chunkHash)
+			continue
+		}
+
 		resp, err := EmbedFromModel(saneChunk)
 		if err != nil {
 			log.Printf("Failed to get embeddings: %s\n", err)
@@ -130,6 +150,8 @@ func chunkAdder(ctx context.Context, c types.Connector, chunkChan chan types.Chu
 		log.Printf("Received embeddings for chunk of length %d", len(saneChunk))
 		embedding := resp.Embedding
 		chunk.Text = saneChunk
+
+		chunk.Hash = chunkHash
 		err = store.AddVectors(ctx, store.GetWeaviateClient(), []types.AddVectorItem{
 			{
 				Chunk:  chunk,
@@ -159,6 +181,60 @@ func chunkAdder(ctx context.Context, c types.Connector, chunkChan chan types.Chu
 	close(doneChan)
 }
 
+func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *types.ConnectorState) error {
+	// TODO: replace with atomic get and set for syncing state
+	err := store.LockConnector(ctx, store.GetWeaviateClient(), c.ID())
+	if err != nil {
+		return fmt.Errorf("failed to lock connector %s: %s", c.ID(), err)
+	}
+	// TODO: unlock at end of for loop, not function return
+	defer store.UnlockConnector(ctx, store.GetWeaviateClient(), c.ID())
+
+	newSyncTime := time.Now()
+
+	chunkChan := make(chan types.Chunk) // closed by Sync
+	errChan := make(chan error)         // closed by Sync
+	doneChan := make(chan struct{})     // closed by chunkAdder
+
+	// TODO: rewrite as sync waitgroup
+	go chunkAdder(ctx, c, chunkChan, doneChan)
+	go c.Sync(ctx, state.LastSync, chunkChan, errChan)
+
+	select {
+	case <-ctx.Done():
+		// The sync time has not been updated, so the next sync will pick up the same chunks
+		state.Syncing = false
+		err = c.UpdateConnectorState(ctx, state)
+		if err != nil {
+			return fmt.Errorf("unable to update last sync for %s: %s", c.ID(), err)
+		}
+		break
+	case <-doneChan:
+		log.Printf("Sync complete for %s\n", c.ID())
+	case err := <-errChan:
+		if err != nil {
+			log.Printf("Error during sync for %s: %s\n", c.ID(), err)
+		}
+		log.Printf("ErrChan closed before DoneChan")
+	}
+	log.Printf("Sync for connector %s complete\n", c.ID())
+
+	log.Printf("NumChunks: %d, NumDocuments: %d\n", state.NumChunks, state.NumDocuments)
+
+	state, err = c.Status(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get status for %s: %s", c.ID(), err)
+	}
+
+	state.LastSync = newSyncTime
+	state.Syncing = false
+	err = c.UpdateConnectorState(ctx, state)
+	if err != nil {
+		return fmt.Errorf("unable to update last sync for %s: %s", c.ID(), err)
+	}
+	return nil
+}
+
 func (s *Syncer) SyncNow(ctx context.Context) error {
 	for _, c := range s.connectors {
 		log.Printf("Checking status for connector %s\n", c.ID())
@@ -182,50 +258,9 @@ func (s *Syncer) SyncNow(ctx context.Context) error {
 
 		if time.Since(state.LastSync) > s.staleThreshold {
 			log.Printf("Sync required for %s\n", c.ID())
-
-			// TODO: replace with atomic get and set for syncing state
-			err = store.LockConnector(ctx, store.GetWeaviateClient(), c.ID())
+			err = s.connectorSync(ctx, c, state)
 			if err != nil {
-				return fmt.Errorf("failed to lock connector %s: %s", c.ID(), err)
-			}
-			// TODO: unlock at end of for loop, not function return
-			defer store.UnlockConnector(ctx, store.GetWeaviateClient(), c.ID())
-
-			newSyncTime := time.Now()
-
-			chunkChan := make(chan types.Chunk) // closed by Sync
-			errChan := make(chan error)         // closed by Sync
-			doneChan := make(chan struct{})     // closed by chunkAdder
-
-			// TODO: rewrite as sync waitgroup
-			go chunkAdder(ctx, c, chunkChan, doneChan)
-			go c.Sync(ctx, state.LastSync, chunkChan, errChan)
-
-			select {
-			case <-ctx.Done():
-				return fmt.Errorf("context cancelled")
-			case <-doneChan:
-				log.Printf("Sync complete for %s\n", c.ID())
-			case err := <-errChan:
-				if err != nil {
-					log.Printf("Error during sync for %s: %s\n", c.ID(), err)
-				}
-				log.Printf("ErrChan closed before DoneChan")
-			}
-			log.Printf("Sync for connector %s complete\n", c.ID())
-
-			state, err := c.Status(ctx)
-			if err != nil {
-				return fmt.Errorf("failed to get status for %s: %s", c.ID(), err)
-			}
-
-			log.Printf("NumChunks: %d, NumDocuments: %d\n", state.NumChunks, state.NumDocuments)
-
-			state.LastSync = newSyncTime
-			state.Syncing = false
-			err = c.UpdateConnectorState(ctx, state)
-			if err != nil {
-				return fmt.Errorf("unable to update last sync for %s: %s", c.ID(), err)
+				return fmt.Errorf("failed to sync %s: %s", c.ID(), err)
 			}
 		}
 	}

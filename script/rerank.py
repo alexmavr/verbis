@@ -193,6 +193,7 @@ try:
     data = json.loads(input_data)
 except json.JSONDecodeError as e:
     print(f"Error decoding JSON: {e}")
+    exit(1)
 
 # Extracting query and passages data from JSON
 query = data.get('query')

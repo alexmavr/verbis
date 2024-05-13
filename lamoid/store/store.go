@@ -32,6 +32,34 @@ func GetWeaviateClient() *weaviate.Client {
 	})
 }
 
+func ChunkHashExists(ctx context.Context, client *weaviate.Client, hash string) (bool, error) {
+	where := filters.Where().
+		WithPath([]string{"hash"}).
+		WithOperator(filters.Equal).
+		WithValueString(hash)
+
+	resp, err := client.GraphQL().Get().
+		WithClassName(chunkClassName).
+		WithFields([]graphql.Field{{Name: "hash"}}...).
+		WithWhere(where).
+		Do(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	if resp.Data["Get"] == nil {
+		return false, nil
+	}
+
+	get := resp.Data["Get"].(map[string]interface{})
+	chunks, ok := get[chunkClassName].([]interface{})
+	if !ok {
+		return false, nil
+	}
+
+	return len(chunks) > 0, nil
+}
+
 func AddVectors(ctx context.Context, client *weaviate.Client, items []types.AddVectorItem) error {
 	log.Printf("Adding %d vectors to vector store", len(items))
 	objects := []*models.Object{}
@@ -40,6 +68,7 @@ func AddVectors(ctx context.Context, client *weaviate.Client, items []types.AddV
 			Class: chunkClassName,
 			Properties: map[string]string{
 				"chunk":      item.Chunk.Text,
+				"hash":       item.Chunk.Hash,
 				"docName":    item.Chunk.Document.Name,
 				"sourceURL":  item.Chunk.Document.SourceURL,
 				"sourceName": item.Chunk.Document.SourceName,
@@ -60,6 +89,7 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 
 	_chunk_fields := []graphql.Field{
 		{Name: "chunk"},
+		{Name: "hash"},
 		{Name: "docName"},
 		{Name: "sourceURL"},
 		{Name: "sourceName"},
@@ -124,6 +154,7 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 					UpdatedAt:  time.Now(),
 				},
 				Text:  c["chunk"].(string),
+				Hash:  c["hash"].(string),
 				Score: score,
 			})
 		}
