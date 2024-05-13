@@ -35,6 +35,13 @@ const (
 	MaxChunkSize   = 2000 // Maximum number of characters in a chunk
 )
 
+func NewGoogleDriveConnector() types.Connector {
+	return &GoogleDriveConnector{
+		id:   "",
+		user: "",
+	}
+}
+
 type GoogleDriveConnector struct {
 	id   string
 	user string
@@ -74,9 +81,10 @@ func getClient(ctx context.Context, config *oauth2.Config) (*http.Client, error)
 	return config.Client(ctx, tok), nil
 }
 
-func requestOauthWeb(config *oauth2.Config) error {
-	config.RedirectURL = "http://127.0.0.1:8081/connectors/google/callback"
-	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
+func (g *GoogleDriveConnector) requestOauthWeb(config *oauth2.Config) error {
+	config.RedirectURL = fmt.Sprintf("http://127.0.0.1:8081/connectors/%s/callback", g.ID())
+	log.Printf("Requesting token from web with redirectURL: %v", config.RedirectURL)
+	authURL := config.AuthCodeURL(g.ID(), oauth2.AccessTypeOffline)
 	fmt.Printf("Your browser has been opened to visit:\n%v\n", authURL)
 
 	// Open URL in the default browser
@@ -109,10 +117,16 @@ var scopes []string = []string{
 	drive.DriveReadonlyScope,
 }
 
-func (g *GoogleDriveConnector) Init(ctx context.Context) error {
+func (g *GoogleDriveConnector) Init(ctx context.Context, connectorID string) error {
+	if connectorID != "" {
+		// connectorID is passed only when Init is called to re-create the
+		// connector from a state object during initial load
+		g.id = connectorID
+	}
 	if g.id == "" {
 		g.id = uuid.New().String()
 	}
+
 	log.Printf("Initializing connector type: %s id: %s", g.Type(), g.ID())
 	state, err := store.GetConnectorState(ctx, store.GetWeaviateClient(), g.ID())
 	if err != nil {
@@ -120,16 +134,14 @@ func (g *GoogleDriveConnector) Init(ctx context.Context) error {
 	}
 
 	if state == nil {
-		state = &types.ConnectorState{
-			ConnectorID: g.ID(),
-		}
+		state = &types.ConnectorState{}
 	}
 
+	state.ConnectorID = g.ID()
 	state.Syncing = false
 	state.ConnectorType = string(g.Type())
 	token, err := tokenFromKeychain()
 	state.AuthValid = (err == nil && token != nil) // TODO: check for expiry of refresh token
-	log.Printf("token: %v, err: %v", token, err)
 	log.Printf("AuthValid: %v", state.AuthValid)
 
 	err = store.UpdateConnectorState(ctx, store.GetWeaviateClient(), state)
@@ -168,7 +180,7 @@ func (g *GoogleDriveConnector) AuthSetup(ctx context.Context) error {
 		return nil
 	}
 	log.Print("No token found in keychain. Getting token from web.")
-	err = requestOauthWeb(config)
+	err = g.requestOauthWeb(config)
 	if err != nil {
 		log.Printf("Unable to request token from web: %v", err)
 	}
@@ -181,7 +193,7 @@ func (g *GoogleDriveConnector) AuthCallback(ctx context.Context, authCode string
 		return fmt.Errorf("unable to get google config: %s", err)
 	}
 
-	config.RedirectURL = "http://127.0.0.1:8081/connectors/google/callback"
+	config.RedirectURL = fmt.Sprintf("http://127.0.0.1:8081/connectors/%s/callback", g.ID())
 	log.Printf("Config: %v", config)
 	tok, err := config.Exchange(ctx, authCode)
 	if err != nil {
@@ -217,18 +229,20 @@ func (g *GoogleDriveConnector) Sync(ctx context.Context, lastSync time.Time, res
 		return
 	}
 
-	err = listFiles(srv, lastSync, resChan)
+	err = g.listFiles(ctx, srv, lastSync, resChan)
 	if err != nil {
 		errChan <- fmt.Errorf("unable to list files: %v", err)
+		return
 	}
 }
 
-func listFiles(service *drive.Service, lastSync time.Time, resChan chan types.Chunk) error {
+func (g *GoogleDriveConnector) listFiles(ctx context.Context, service *drive.Service, lastSync time.Time, resChan chan types.Chunk) error {
 	pageToken := ""
 	for {
 		q := service.Files.List().
 			PageSize(10).
-			Fields("nextPageToken, files(id, name, webViewLink, createdTime, modifiedTime, mimeType)")
+			Fields("nextPageToken, files(id, name, webViewLink, createdTime, modifiedTime, mimeType)").
+			OrderBy("modifiedTime desc").Context(ctx)
 		if !lastSync.IsZero() {
 			q = q.Q("modifiedTime > '" + lastSync.Format(time.RFC3339) + "'")
 		}
@@ -281,11 +295,12 @@ func listFiles(service *drive.Service, lastSync time.Time, resChan chan types.Ch
 				chunk := types.Chunk{
 					Text: content[i:end],
 					Document: types.Document{
-						Name:       file.Name,
-						SourceURL:  file.WebViewLink,
-						SourceName: "Google Drive",
-						CreatedAt:  createdAt,
-						UpdatedAt:  updatedAt,
+						UniqueID:    file.Id,
+						Name:        file.Name,
+						SourceURL:   file.WebViewLink,
+						ConnectorID: g.ID(),
+						CreatedAt:   createdAt,
+						UpdatedAt:   updatedAt,
 					},
 				}
 				numChunks += 1

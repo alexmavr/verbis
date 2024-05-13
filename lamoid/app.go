@@ -26,7 +26,7 @@ var (
 	httpClient          = &http.Client{Timeout: 10 * time.Second}
 	generationModelName = "custom-mistral"
 	embeddingsModelName = "nomic-embed-text"
-	clean               = false
+	clean               = true
 	KeepAliveTime       = "20m"
 
 	PosthogAPIKey = "n/a" // Will be populated by linker from builder's env
@@ -141,6 +141,7 @@ func main() {
 
 	// Create indices for vector search
 	weavClient := store.GetWeaviateClient()
+	store.CreateDocumentClass(ctx, weavClient, clean)
 	store.CreateChunkClass(ctx, weavClient, clean)
 	store.CreateConnectorStateClass(ctx, weavClient, clean)
 

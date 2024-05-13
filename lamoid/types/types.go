@@ -35,9 +35,10 @@ type Chunk struct {
 	ExplainScore string  `json:"explain_score"`
 }
 type Document struct {
-	Name       string    `json:"name"`
-	SourceURL  string    `json:"source_url"`
-	SourceName string    `json:"source_name"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	UniqueID    string    `json:"unique_id"` // Uniquely identifies the document in the connector's context
+	Name        string    `json:"name"`
+	SourceURL   string    `json:"source_url"`
+	ConnectorID string    `json:"connector_id"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }

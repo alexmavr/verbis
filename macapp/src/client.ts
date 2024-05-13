@@ -12,15 +12,16 @@ export async function google_init() {
     const response = await axios.get('http://localhost:8081/connectors/googledrive/init');
     console.log('Google Init Response:', response.data);
     // Additional logic based on response
+    return response.data["id"]
   } catch (error) {
     console.error('Error in Google Init:', error);
     throw error; // Rethrow or handle as needed
   }
 }
 
-export async function google_auth_setup() {
+export async function google_auth_setup(connector_id: string) {
   try {
-    const response = await axios.get('http://localhost:8081/connectors/googledrive/auth_setup');
+    const response = await axios.get(`http://localhost:8081/connectors/${connector_id}/auth_setup`);
     console.log('Google Auth Setup Response:', response.data);
     // Additional logic based on response
   } catch (error) {
@@ -30,7 +31,7 @@ export async function google_auth_setup() {
 }
 
 
-export async function google_sync() {
+export async function force_sync() {
   try {
     const response = await axios.get('http://localhost:8081/sync/force');
     console.log('Force Sync Response:', response.data);

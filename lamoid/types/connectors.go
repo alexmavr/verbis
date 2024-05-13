@@ -11,15 +11,18 @@ const (
 	ConnectorTypeGoogleDrive ConnectorType = "googledrive"
 )
 
+type ConnectorConstructor func() Connector
 type Connector interface {
 	ID() string
 	Type() ConnectorType
 	User() string
 
-	// Init runs once when the connector is initially registered
-	// It is responsible for determining if the connector has valid auth from
-	// other connectors, and setting the initial state. It must be called before any of the other methods
-	Init(ctx context.Context) error
+	// Init runs in one of two cases:
+	// 1. When the connector is first created, where connectorID is ""
+	// 2. When the connector is being restored from state, where connectorID is the ID of the connector
+	// It is responsible for determining if the connector has valid auth
+	// and setting the initial state. It must be called before any of the other methods
+	Init(ctx context.Context, connectorID string) error
 
 	UpdateConnectorState(ctx context.Context, state *ConnectorState) error
 	Status(ctx context.Context) (*ConnectorState, error)

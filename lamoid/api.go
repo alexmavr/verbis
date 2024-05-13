@@ -37,8 +37,8 @@ func (a *API) SetupRouter() *mux.Router {
 	// TODO: auth_setup and callback are theoretically per connector and not per
 	// connector type. The ID of the connector should be inferred and passed as
 	// a state variable in the oauth flow.
-	r.HandleFunc("/connectors/{type}/auth_setup", a.connectorAuthSetup).Methods("GET")
-	r.HandleFunc("/connectors/{type}/callback", a.handleConnectorCallback).Methods("GET")
+	r.HandleFunc("/connectors/{connector_id}/auth_setup", a.connectorAuthSetup).Methods("GET")
+	r.HandleFunc("/connectors/{connector_id}/callback", a.handleConnectorCallback).Methods("GET")
 	r.HandleFunc("/prompt", a.handlePrompt).Methods("POST")
 	r.HandleFunc("/health", a.health).Methods("GET")
 
@@ -83,14 +83,16 @@ func (a *API) connectorInit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn, ok := connectors.AllConnectors[connectorType]
+	constructor, ok := connectors.AllConnectors[connectorType]
 	if !ok {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Unknown connector name"))
 		return
 	}
 
-	err := conn.Init(r.Context())
+	conn := constructor()
+
+	err := conn.Init(r.Context(), "")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to init connector: " + err.Error()))
@@ -103,21 +105,25 @@ func (a *API) connectorInit(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Failed to add connector: " + err.Error()))
 		return
 	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(fmt.Sprintf(`{"id": "%s"}`, conn.ID())))
 }
 
 func (a *API) connectorAuthSetup(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	connectorType, ok := vars["type"]
+	connectorID, ok := vars["connector_id"]
 	if !ok {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("No connector name provided"))
+		w.Write([]byte("No connector ID provided"))
 		return
 	}
 
-	conn, ok := connectors.AllConnectors[connectorType]
-	if !ok {
+	conn := a.Syncer.GetConnector(connectorID)
+	if conn == nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Unknown connector name"))
+		w.Write([]byte("Unknown connector ID"))
 		return
 	}
 	err := conn.AuthSetup(r.Context())
@@ -144,20 +150,26 @@ func (a *API) handleConnectorCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	vars := mux.Vars(r)
-	connectorName, ok := vars["name"]
+	connectorID, ok := vars["connector_id"]
 	if !ok {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("No connector name provided"))
 		return
 	}
 
-	conn, ok := connectors.AllConnectors[connectorName]
-	if !ok {
+	state := queryParts.Get("state")
+	// If any state is provided it must match the connector ID
+	if state != "" && state != connectorID {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Unknown connector name"))
+		w.Write([]byte("State does not match connector ID"))
 		return
 	}
 
+	conn := a.Syncer.GetConnector(connectorID)
+	if conn == nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Unknown connector ID"))
+	}
 	err := conn.AuthCallback(r.Context(), code)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

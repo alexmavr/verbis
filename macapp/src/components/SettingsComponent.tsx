@@ -3,7 +3,7 @@ import { AppScreen } from "../types";
 import {
   google_auth_setup,
   google_init,
-  google_sync,
+  force_sync,
   list_connectors,
 } from "../client";
 import { XMarkIcon } from "@heroicons/react/24/solid";
@@ -51,8 +51,8 @@ const SettingsComponent: React.FC<Props> = ({ navigate, navigateBack }) => {
           <button
             onClick={async () => {
               try {
-                await google_init();
-                await google_auth_setup();
+                let conn_id = await google_init();
+                await google_auth_setup(conn_id);
                 navigate(AppScreen.PROMPT);
               } catch (e) {
                 console.error("could not install: ", e);
@@ -77,7 +77,7 @@ const SettingsComponent: React.FC<Props> = ({ navigate, navigateBack }) => {
             <p>Last Sync: {connector.last_sync}</p>
             <p>Number of Documents: {connector.num_documents}</p>
             <p>Number of Chunks: {connector.num_chunks}</p>
-            <button onClick={google_sync}>Force Sync</button>
+            <button onClick={force_sync}>Force Sync</button>
           </div>
         ))}
       </div>

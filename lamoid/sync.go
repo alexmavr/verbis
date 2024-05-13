@@ -45,11 +45,12 @@ func (s *Syncer) Init(ctx context.Context) error {
 		return fmt.Errorf("failed to get connector states: %s", err)
 	}
 	for _, state := range states {
-		c, ok := connectors.AllConnectors[state.ConnectorType]
+		constructor, ok := connectors.AllConnectors[state.ConnectorType]
 		if !ok {
 			return fmt.Errorf("unknown connector type %s", state.ConnectorType)
 		}
-		err = c.Init(ctx)
+		c := constructor()
+		err = c.Init(ctx, state.ConnectorID)
 		if err != nil {
 			return fmt.Errorf("failed to init connector %s: %s", state.ConnectorID, err)
 		}
@@ -150,9 +151,8 @@ func chunkAdder(ctx context.Context, c types.Connector, chunkChan chan types.Chu
 		log.Printf("Received embeddings for chunk of length %d", len(saneChunk))
 		embedding := resp.Embedding
 		chunk.Text = saneChunk
-
 		chunk.Hash = chunkHash
-		err = store.AddVectors(ctx, store.GetWeaviateClient(), []types.AddVectorItem{
+		addResp, err := store.AddVectors(ctx, store.GetWeaviateClient(), []types.AddVectorItem{
 			{
 				Chunk:  chunk,
 				Vector: embedding,
@@ -168,8 +168,8 @@ func chunkAdder(ctx context.Context, c types.Connector, chunkChan chan types.Chu
 			log.Printf("Failed to get status: %s\n", err)
 			continue
 		}
-		state.NumChunks++
-		state.NumDocuments++
+		state.NumChunks += addResp.NumChunksAdded
+		state.NumDocuments += addResp.NumDocsAdded
 		err = c.UpdateConnectorState(ctx, state)
 		if err != nil {
 			log.Printf("Failed to update status: %s\n", err)
@@ -181,11 +181,12 @@ func chunkAdder(ctx context.Context, c types.Connector, chunkChan chan types.Chu
 	close(doneChan)
 }
 
-func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *types.ConnectorState) error {
+func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *types.ConnectorState, errChan chan<- error) {
 	// TODO: replace with atomic get and set for syncing state
 	err := store.LockConnector(ctx, store.GetWeaviateClient(), c.ID())
 	if err != nil {
-		return fmt.Errorf("failed to lock connector %s: %s", c.ID(), err)
+		errChan <- fmt.Errorf("failed to lock connector %s: %s", c.ID(), err)
+		return
 	}
 	// TODO: unlock at end of for loop, not function return
 	defer store.UnlockConnector(ctx, store.GetWeaviateClient(), c.ID())
@@ -193,12 +194,12 @@ func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *ty
 	newSyncTime := time.Now()
 
 	chunkChan := make(chan types.Chunk) // closed by Sync
-	errChan := make(chan error)         // closed by Sync
+	errChanSync := make(chan error)     // closed by Sync
 	doneChan := make(chan struct{})     // closed by chunkAdder
 
 	// TODO: rewrite as sync waitgroup
 	go chunkAdder(ctx, c, chunkChan, doneChan)
-	go c.Sync(ctx, state.LastSync, chunkChan, errChan)
+	go c.Sync(ctx, state.LastSync, chunkChan, errChanSync)
 
 	select {
 	case <-ctx.Done():
@@ -206,12 +207,13 @@ func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *ty
 		state.Syncing = false
 		err = c.UpdateConnectorState(ctx, state)
 		if err != nil {
-			return fmt.Errorf("unable to update last sync for %s: %s", c.ID(), err)
+			errChan <- fmt.Errorf("unable to update last sync for %s: %s", c.ID(), err)
+			return
 		}
 		break
 	case <-doneChan:
 		log.Printf("Sync complete for %s\n", c.ID())
-	case err := <-errChan:
+	case err := <-errChanSync:
 		if err != nil {
 			log.Printf("Error during sync for %s: %s\n", c.ID(), err)
 		}
@@ -223,19 +225,22 @@ func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *ty
 
 	state, err = c.Status(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get status for %s: %s", c.ID(), err)
+		errChan <- fmt.Errorf("failed to get status for %s: %s", c.ID(), err)
+		return
 	}
 
 	state.LastSync = newSyncTime
 	state.Syncing = false
 	err = c.UpdateConnectorState(ctx, state)
 	if err != nil {
-		return fmt.Errorf("unable to update last sync for %s: %s", c.ID(), err)
+		errChan <- fmt.Errorf("unable to update last sync for %s: %s", c.ID(), err)
+		return
 	}
-	return nil
+	close(errChan)
 }
 
 func (s *Syncer) SyncNow(ctx context.Context) error {
+	errChans := []chan error{}
 	for _, c := range s.connectors {
 		log.Printf("Checking status for connector %s\n", c.ID())
 		state, err := c.Status(ctx)
@@ -256,12 +261,19 @@ func (s *Syncer) SyncNow(ctx context.Context) error {
 			continue
 		}
 
+		errChan := make(chan error)
+		errChans = append(errChans, errChan)
+
 		if time.Since(state.LastSync) > s.staleThreshold {
 			log.Printf("Sync required for %s\n", c.ID())
-			err = s.connectorSync(ctx, c, state)
-			if err != nil {
-				return fmt.Errorf("failed to sync %s: %s", c.ID(), err)
-			}
+			go s.connectorSync(ctx, c, state, errChan)
+		}
+	}
+
+	for _, errChan := range errChans {
+		err := <-errChan
+		if err != nil {
+			return err
 		}
 	}
 

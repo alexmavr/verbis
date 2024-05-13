@@ -27,8 +27,8 @@ const ConnectorsComponent: React.FC<Props> = ({ navigate }) => {
           <button
             onClick={async () => {
               try {
-                await google_init();
-                await google_auth_setup();
+                let conn_id = await google_init();
+                await google_auth_setup(conn_id);
                 navigate(AppScreen.PROMPT);
               } catch (e) {
                 console.error("could not install: ", e);

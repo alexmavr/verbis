@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-openapi/strfmt"
+	"github.com/google/uuid"
 	"github.com/weaviate/weaviate-go-client/v4/weaviate"
 	"github.com/weaviate/weaviate-go-client/v4/weaviate/filters"
 	"github.com/weaviate/weaviate-go-client/v4/weaviate/graphql"
@@ -16,8 +18,9 @@ import (
 )
 
 var (
-	chunkClassName = "LamoidChunk"
-	stateClassName = "ConnectorState"
+	chunkClassName    = "LamoidChunk"
+	documentClassName = "Document"
+	stateClassName    = "ConnectorState"
 )
 
 const (
@@ -60,27 +63,135 @@ func ChunkHashExists(ctx context.Context, client *weaviate.Client, hash string) 
 	return len(chunks) > 0, nil
 }
 
-func AddVectors(ctx context.Context, client *weaviate.Client, items []types.AddVectorItem) error {
+func getDocumentIDFromUniqueID(ctx context.Context, client *weaviate.Client, uniqueID string) (string, error) {
+	where := filters.Where().
+		WithPath([]string{"unique_id"}).
+		WithOperator(filters.Equal).
+		WithValueString(uniqueID)
+
+	resp, err := client.GraphQL().Get().
+		WithClassName(documentClassName).
+		WithFields(
+			[]graphql.Field{
+				{
+					Name: "unique_id",
+				},
+				{
+					Name: "_additional",
+					Fields: []graphql.Field{
+						{Name: "id"},
+					},
+				},
+			}...,
+		).
+		WithWhere(where).
+		Do(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.Data["Get"] == nil {
+		return "", nil
+	}
+
+	get := resp.Data["Get"].(map[string]interface{})
+	docs, ok := get[documentClassName].([]interface{})
+	if !ok {
+		return "", nil
+	}
+
+	for _, doc := range docs {
+		m, ok := doc.(map[string]interface{})
+		if !ok {
+			log.Printf("Failed to parse document: %v\n", doc)
+			continue
+		}
+
+		storedID, ok := m["unique_id"].(string)
+		if !ok {
+			log.Printf("Failed to parse unique_id: %v\n", m)
+			continue
+		}
+		if storedID == uniqueID {
+			return m["_additional"].(map[string]interface{})["id"].(string), nil
+		}
+	}
+	return "", nil
+}
+
+type AddVectorResponse struct {
+	NumChunksAdded int
+	NumDocsAdded   int
+}
+
+func AddVectors(ctx context.Context, client *weaviate.Client, items []types.AddVectorItem) (*AddVectorResponse, error) {
 	log.Printf("Adding %d vectors to vector store", len(items))
 	objects := []*models.Object{}
+	references := []*models.BatchReference{}
+
 	for _, item := range items {
-		objects = append(objects, &models.Object{
+		// Look if a document with the same ID exists
+		docID, err := getDocumentIDFromUniqueID(ctx, client, item.Document.UniqueID)
+		if err != nil {
+			return nil, fmt.Errorf("unable to get document ID: %v", err)
+		}
+
+		var documentObj *models.Object
+		if docID == "" {
+			docID = uuid.NewString()
+			// Create a new document if it does not exist
+			documentObj = &models.Object{
+				Class: documentClassName,
+				ID:    strfmt.UUID(docID),
+				Properties: map[string]interface{}{
+					"unique_id":   item.Document.UniqueID,
+					"name":        item.Document.Name,
+					"sourceURL":   item.Document.SourceURL,
+					"connectorID": item.Document.ConnectorID,
+					"createdAt":   item.Document.CreatedAt.Format(time.RFC3339),
+					"updatedAt":   item.Document.UpdatedAt.Format(time.RFC3339),
+				},
+			}
+			objects = append(objects, documentObj)
+		}
+
+		// Create a new chunk
+		chunkObj := &models.Object{
 			Class: chunkClassName,
-			Properties: map[string]string{
-				"chunk":      item.Chunk.Text,
-				"hash":       item.Chunk.Hash,
-				"docName":    item.Chunk.Document.Name,
-				"sourceURL":  item.Chunk.Document.SourceURL,
-				"sourceName": item.Chunk.Document.SourceName,
-				"createdAt":  item.Chunk.Document.CreatedAt.String(),
-				"updatedAt":  item.Chunk.Document.UpdatedAt.String(),
+			ID:    strfmt.UUID(uuid.NewString()),
+			Properties: map[string]interface{}{
+				"chunk": item.Chunk.Text,
+				"hash":  item.Chunk.Hash,
 			},
 			Vector: item.Vector,
-		})
+		}
+		objects = append(objects, chunkObj)
+
+		// After objects are added to batch, create reference from chunk to document
+		ref := &models.BatchReference{
+			From: strfmt.URI(fmt.Sprintf("weaviate://localhost/%s/%s", chunkClassName, chunkObj.ID)),
+			To:   strfmt.URI(fmt.Sprintf("weaviate://localhost/%s/%s", documentClassName, docID)),
+		}
+		log.Printf("Adding reference: %s -> %s\n", ref.From, ref.To)
+		references = append(references, ref)
 	}
 
 	_, err := client.Batch().ObjectsBatcher().WithObjects(objects...).Do(ctx)
-	return err
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch objects: %v", err)
+	}
+
+	if len(references) > 0 {
+		_, err = client.Batch().ReferencesBatcher().WithReferences(references...).Do(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &AddVectorResponse{
+		NumChunksAdded: len(items),
+		NumDocsAdded:   len(objects) - len(items), // Total set of objects created versus the known num of chunks
+	}, nil
 }
 
 // Search for a vector in Weaviate
@@ -90,11 +201,13 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 	_chunk_fields := []graphql.Field{
 		{Name: "chunk"},
 		{Name: "hash"},
-		{Name: "docName"},
-		{Name: "sourceURL"},
-		{Name: "sourceName"},
-		{Name: "updatedAt"},
-		{Name: "createdAt"},
+		{Name: "document", Fields: []graphql.Field{
+			{Name: "name"},
+			{Name: "sourceURL"},
+			{Name: "connectorID"},
+			{Name: "createdAt"},
+			{Name: "updatedAt"},
+		}},
 		{Name: "_additional", Fields: []graphql.Field{
 			{Name: "score"},
 			{Name: "explainScore"},
@@ -104,7 +217,7 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 	hybrid := client.GraphQL().HybridArgumentBuilder().
 		WithQuery(query).
 		WithVector(vector).
-		WithProperties([]string{"chunk", "docName^2"}).
+		WithProperties([]string{"chunk", "document"}). // Ensure the "document" is included
 		WithAlpha(0.7).
 		WithFusionType(graphql.RelativeScore)
 
@@ -114,7 +227,6 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 		WithHybrid(hybrid).
 		WithLimit(MaxNumSearchResults).
 		WithFields(_chunk_fields...).
-		//		WithAutocut(1).
 		Do(ctx)
 	if err != nil {
 		return nil, err
@@ -133,8 +245,7 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 		for _, chunkMap := range chunks {
 			c := chunkMap.(map[string]interface{})
 
-			// Find similarity score
-			// TODO: refactor
+			// Parse additional info
 			addl := c["_additional"].(map[string]interface{})
 			scoreStr := addl["score"].(string)
 			log.Printf("ScoreStr: %s\n", scoreStr)
@@ -143,15 +254,19 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 				log.Printf("Failed to parse score: %s\n", err)
 				continue
 			}
-			log.Printf("Score: %f\n", score)
+
+			// Retrieve and parse document details from the linked Document
+			docData := c["document"].(map[string]interface{})
+			createdAt, _ := time.Parse(time.RFC3339, docData["createdAt"].(string))
+			updatedAt, _ := time.Parse(time.RFC3339, docData["updatedAt"].(string))
 
 			res = append(res, &types.Chunk{
 				Document: types.Document{
-					Name:       c["docName"].(string),
-					SourceURL:  c["sourceURL"].(string),
-					SourceName: c["sourceName"].(string),
-					CreatedAt:  time.Now(),
-					UpdatedAt:  time.Now(),
+					Name:        docData["name"].(string),
+					SourceURL:   docData["sourceURL"].(string),
+					ConnectorID: docData["connectorID"].(string),
+					CreatedAt:   createdAt,
+					UpdatedAt:   updatedAt,
 				},
 				Text:  c["chunk"].(string),
 				Hash:  c["hash"].(string),
@@ -163,7 +278,49 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 	return res, nil
 }
 
-// Create Weaviate schema for vector storage
+func CreateDocumentClass(ctx context.Context, client *weaviate.Client, force bool) error {
+	// DEBUG: attempt to delete the class, don't fail if it doesn't exist
+	if force {
+		client.Schema().ClassDeleter().WithClassName(documentClassName).Do(ctx)
+	}
+
+	class := &models.Class{
+		Class:      "Document",
+		Vectorizer: "none",
+		Properties: []*models.Property{
+			{
+				Name:     "name",
+				DataType: []string{"string"},
+			},
+			{
+				Name:     "sourceURL",
+				DataType: []string{"string"},
+			},
+			{
+				Name:     "connectorID",
+				DataType: []string{"string"},
+			},
+			{
+				Name:     "createdAt",
+				DataType: []string{"date"},
+			},
+			{
+				Name:     "updatedAt",
+				DataType: []string{"date"},
+			},
+		},
+	}
+
+	// Create the class in Weaviate
+	err := client.Schema().ClassCreator().WithClass(class).Do(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create chunk class: %v", err)
+	}
+
+	// Create the class in Weaviate
+	return nil
+}
+
 func CreateChunkClass(ctx context.Context, client *weaviate.Client, force bool) error {
 	// DEBUG: attempt to delete the class, don't fail if it doesn't exist
 	if force {
@@ -173,6 +330,20 @@ func CreateChunkClass(ctx context.Context, client *weaviate.Client, force bool) 
 	class := &models.Class{
 		Class:      chunkClassName,
 		Vectorizer: "none",
+		Properties: []*models.Property{
+			{
+				Name:     "chunk", // Assuming you store the chunk text under 'text'
+				DataType: []string{"string"},
+			},
+			{
+				Name:     "hash",
+				DataType: []string{"string"},
+			},
+			{
+				Name:     "document",
+				DataType: []string{"Document"},
+			},
+		},
 	}
 
 	// Create the class in Weaviate
