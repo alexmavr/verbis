@@ -1,6 +1,6 @@
 model_url = 'https://huggingface.co/prithivida/flashrank/resolve/main/{}.zip'
 
-default_cache_dir = "/tmp"
+default_cache_dir = "/var/tmp"
 default_model = "ms-marco-TinyBERT-L-2-v2"
 model_file_map = {
         "ms-marco-TinyBERT-L-2-v2": "flashrank-TinyBERT-L-2-v2.onnx",
@@ -189,11 +189,16 @@ ranker = Ranker(model_name="ms-marco-TinyBERT-L-2-v2")
 
 # Read JSON input from stdin
 input_data = sys.stdin.read()
+
+if input_data.strip() == "":
+    print("{}")
+    sys.exit(0)
+
 try:
     data = json.loads(input_data)
 except json.JSONDecodeError as e:
-    print(f"Error decoding JSON: {e}")
-    exit(1)
+    print(f"Error decoding JSON for {input_data}: {e}")
+    sys.exit(1)
 
 # Extracting query and passages data from JSON
 query = data.get('query')

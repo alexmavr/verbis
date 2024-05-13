@@ -302,13 +302,6 @@ func rerankBERT(ctx context.Context, chunks []*types.Chunk, query string) ([]*ty
 }
 
 func RunRerankModel(ctx context.Context, jsonData []byte) ([]byte, error) {
-	if len(jsonData) == 0 {
-		newData, err := json.Marshal(map[string]string{})
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling JSON: %v", err)
-		}
-		jsonData = newData
-	}
 	// Execute the Python script and pass JSON data to stdin
 	distPath, err := util.GetDistPath()
 	if err != nil {

@@ -48,8 +48,10 @@ dist/weaviate:
 	rm -rf $(TMP_DIR)
 
 dist/rerank:
-	. $(VENV_DIR)/bin/activate
-	python -OO -m PyInstaller --onedir script/rerank.py --specpath dist/ 
+	( \
+		source $(shell pwd)/.venv/bin/activate; \
+		python3 -OO -m PyInstaller --onedir script/rerank.py --specpath dist/ \
+	)
 
 lamoid:
 	# Ensure dist directory exists
