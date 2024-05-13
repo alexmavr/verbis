@@ -25,9 +25,9 @@ export default function () {
         {currentScreen == AppScreen.WELCOME && (
           <WelcomeComponent navigate={navigateToScreen} />
         )}
-        {currentScreen === AppScreen.GOOGLE_INIT && (
+        {/* {currentScreen === AppScreen.GOOGLE_INIT && (
           <ConnectorsComponent navigate={navigateToScreen} />
-        )}
+        )} */}
         {currentScreen === AppScreen.PROMPT && (
           <ChatComponent navigate={navigateToScreen} />
         )}
