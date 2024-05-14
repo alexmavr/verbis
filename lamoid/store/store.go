@@ -127,7 +127,6 @@ type AddVectorResponse struct {
 func AddVectors(ctx context.Context, client *weaviate.Client, items []types.AddVectorItem) (*AddVectorResponse, error) {
 	log.Printf("Adding %d vectors to vector store", len(items))
 	objects := []*models.Object{}
-	references := []*models.BatchReference{}
 
 	for _, item := range items {
 		// Look if a document with the same ID exists
@@ -140,6 +139,7 @@ func AddVectors(ctx context.Context, client *weaviate.Client, items []types.AddV
 		if docID == "" {
 			docID = uuid.NewString()
 			// Create a new document if it does not exist
+			log.Printf("Creating new document with ID: %s and Name: %s\n", docID, item.Document.Name)
 			documentObj = &models.Object{
 				Class: documentClassName,
 				ID:    strfmt.UUID(docID),
@@ -160,20 +160,13 @@ func AddVectors(ctx context.Context, client *weaviate.Client, items []types.AddV
 			Class: chunkClassName,
 			ID:    strfmt.UUID(uuid.NewString()),
 			Properties: map[string]interface{}{
-				"chunk": item.Chunk.Text,
-				"hash":  item.Chunk.Hash,
+				"chunk":      item.Chunk.Text,
+				"hash":       item.Chunk.Hash,
+				"documentid": docID,
 			},
 			Vector: item.Vector,
 		}
 		objects = append(objects, chunkObj)
-
-		// After objects are added to batch, create reference from chunk to document
-		ref := &models.BatchReference{
-			From: strfmt.URI(fmt.Sprintf("weaviate://localhost/%s/%s", chunkClassName, chunkObj.ID)),
-			To:   strfmt.URI(fmt.Sprintf("weaviate://localhost/%s/%s", documentClassName, docID)),
-		}
-		log.Printf("Adding reference: %s -> %s\n", ref.From, ref.To)
-		references = append(references, ref)
 	}
 
 	_, err := client.Batch().ObjectsBatcher().WithObjects(objects...).Do(ctx)
@@ -181,17 +174,26 @@ func AddVectors(ctx context.Context, client *weaviate.Client, items []types.AddV
 		return nil, fmt.Errorf("failed to batch objects: %v", err)
 	}
 
-	if len(references) > 0 {
-		_, err = client.Batch().ReferencesBatcher().WithReferences(references...).Do(ctx)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	return &AddVectorResponse{
 		NumChunksAdded: len(items),
 		NumDocsAdded:   len(objects) - len(items), // Total set of objects created versus the known num of chunks
 	}, nil
+}
+
+func getDocument(ctx context.Context, client *weaviate.Client, docid string) (map[string]interface{}, error) {
+	docs, err := client.Data().ObjectsGetter().
+		WithClassName(documentClassName).
+		WithID(docid).
+		Do(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(docs) == 0 {
+		return nil, fmt.Errorf("document with id %s not found", docid)
+	}
+
+	return docs[0].Properties.(map[string]interface{}), nil
 }
 
 // Search for a vector in Weaviate
@@ -201,23 +203,18 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 	_chunk_fields := []graphql.Field{
 		{Name: "chunk"},
 		{Name: "hash"},
-		{Name: "document", Fields: []graphql.Field{
-			{Name: "name"},
-			{Name: "sourceURL"},
-			{Name: "connectorID"},
-			{Name: "createdAt"},
-			{Name: "updatedAt"},
-		}},
+		{Name: "documentid"},
 		{Name: "_additional", Fields: []graphql.Field{
 			{Name: "score"},
 			{Name: "explainScore"},
 		}},
 	}
 
+	log.Printf("Searching for chunks with query: %s\n", query)
 	hybrid := client.GraphQL().HybridArgumentBuilder().
 		WithQuery(query).
 		WithVector(vector).
-		WithProperties([]string{"chunk", "document"}). // Ensure the "document" is included
+		WithProperties([]string{"chunk"}). // TODO: ensure the document title is included
 		WithAlpha(0.7).
 		WithFusionType(graphql.RelativeScore)
 
@@ -240,9 +237,11 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 			// return empty result
 			return res, nil
 		}
+		log.Print("In GET")
 
 		chunks := get[chunkClassName].([]interface{})
 		for _, chunkMap := range chunks {
+			log.Print("In CHUNK")
 			c := chunkMap.(map[string]interface{})
 
 			// Parse additional info
@@ -256,9 +255,19 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 			}
 
 			// Retrieve and parse document details from the linked Document
-			docData := c["document"].(map[string]interface{})
+			log.Print("In DOC")
+			docid, ok := c["documentid"].(string)
+			if !ok {
+				return nil, fmt.Errorf("documentid is nil")
+			}
+			docData, err := getDocument(ctx, client, docid)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get document: %v", err)
+			}
+			log.Print(docData)
 			createdAt, _ := time.Parse(time.RFC3339, docData["createdAt"].(string))
 			updatedAt, _ := time.Parse(time.RFC3339, docData["updatedAt"].(string))
+			log.Print("In APPEND")
 
 			res = append(res, &types.Chunk{
 				Document: types.Document{
@@ -274,6 +283,7 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 			})
 		}
 	}
+	log.Print("In RETURN")
 
 	return res, nil
 }
@@ -285,20 +295,20 @@ func CreateDocumentClass(ctx context.Context, client *weaviate.Client, force boo
 	}
 
 	class := &models.Class{
-		Class:      "Document",
+		Class:      documentClassName,
 		Vectorizer: "none",
 		Properties: []*models.Property{
 			{
 				Name:     "name",
-				DataType: []string{"string"},
+				DataType: []string{"text"},
 			},
 			{
 				Name:     "sourceURL",
-				DataType: []string{"string"},
+				DataType: []string{"text"},
 			},
 			{
 				Name:     "connectorID",
-				DataType: []string{"string"},
+				DataType: []string{"text"},
 			},
 			{
 				Name:     "createdAt",
@@ -332,16 +342,16 @@ func CreateChunkClass(ctx context.Context, client *weaviate.Client, force bool) 
 		Vectorizer: "none",
 		Properties: []*models.Property{
 			{
-				Name:     "chunk", // Assuming you store the chunk text under 'text'
-				DataType: []string{"string"},
+				Name:     "chunk",
+				DataType: []string{"text"},
 			},
 			{
 				Name:     "hash",
-				DataType: []string{"string"},
+				DataType: []string{"text"},
 			},
 			{
-				Name:     "document",
-				DataType: []string{"Document"},
+				Name:     "documentid",
+				DataType: []string{"text"},
 			},
 		},
 	}
@@ -368,11 +378,11 @@ func CreateConnectorStateClass(ctx context.Context, client *weaviate.Client, for
 		Properties: []*models.Property{
 			{
 				Name:     "connector_id",
-				DataType: []string{"string"},
+				DataType: []string{"text"},
 			},
 			{
 				Name:     "type",
-				DataType: []string{"string"},
+				DataType: []string{"text"},
 			},
 			{
 				Name:     "syncing",

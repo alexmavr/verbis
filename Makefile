@@ -1,6 +1,6 @@
 .PHONY: build lamoid macapp 
 
-WEAVIATE_VERSION := v1.24.9
+WEAVIATE_VERSION := v1.25.0
 OLLAMA_VERSION := v0.1.32
 DIST_DIR := ./dist
 TMP_DIR := /tmp/weaviate-installation

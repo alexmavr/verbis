@@ -142,8 +142,8 @@ func main() {
 	// Create indices for vector search
 	weavClient := store.GetWeaviateClient()
 	store.CreateDocumentClass(ctx, weavClient, clean)
-	store.CreateChunkClass(ctx, weavClient, clean)
 	store.CreateConnectorStateClass(ctx, weavClient, clean)
+	store.CreateChunkClass(ctx, weavClient, clean)
 
 	err = syncer.Init(ctx)
 	if err != nil {
