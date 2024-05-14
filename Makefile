@@ -73,4 +73,6 @@ builder-env:
 	pip install pyinstaller; \
 
 clean:
-	rm dist/weaviate dist/rerank dist/ollama dist/lamoid
+	rm dist/weaviate dist/ollama dist/lamoid
+	rm -r dist/rerank
+
