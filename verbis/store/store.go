@@ -617,3 +617,46 @@ func GetConnectorState(ctx context.Context, client *weaviate.Client, connectorID
 		NumChunks:     int(c["numChunks"].(float64)),
 	}, nil
 }
+
+func DeleteDocumentChunks(ctx context.Context, client *weaviate.Client, uniqueID string, connectorID string) error {
+	docid, err := getDocumentIDFromUniqueID(ctx, client, uniqueID)
+	if err != nil {
+		return err
+	}
+
+	if docid == "" {
+		// Document doesn't already exist, skip
+		return nil
+	}
+
+	resp, err := client.Batch().ObjectsBatchDeleter().
+		WithClassName(chunkClassName).
+		WithOutput("verbose").
+		WithWhere(filters.Where().
+			WithPath([]string{"documentid"}).
+			WithOperator(filters.Equal).
+			WithValueText(docid)).
+		Do(ctx)
+	if err != nil {
+		return fmt.Errorf("unable to delete chunks: %v", err)
+	}
+
+	log.Printf("%+v", resp)
+
+	numDeletedChunks := resp.Results.Successful
+
+	// Reduce the chunk count for the connector
+
+	state, err := GetConnectorState(ctx, client, connectorID)
+	if err != nil {
+		return fmt.Errorf("unable to get connector state: %v", err)
+	}
+
+	state.NumChunks = state.NumChunks - int(numDeletedChunks)
+	err = UpdateConnectorState(ctx, client, state)
+	if err != nil {
+		return fmt.Errorf("unable to update connector state: %v", err)
+	}
+
+	return nil
+}

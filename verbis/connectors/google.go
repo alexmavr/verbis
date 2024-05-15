@@ -283,7 +283,20 @@ func (g *GoogleDriveConnector) listFiles(ctx context.Context, service *drive.Ser
 			}
 
 			numChunks := 0
-			// TODO: process documents as well
+			document := types.Document{
+				UniqueID:    file.Id,
+				Name:        file.Name,
+				SourceURL:   file.WebViewLink,
+				ConnectorID: g.ID(),
+				CreatedAt:   createdAt,
+				UpdatedAt:   updatedAt,
+			}
+
+			err = store.DeleteDocumentChunks(ctx, store.GetWeaviateClient(), document.UniqueID, g.ID())
+			if err != nil {
+				// Not a fatal error, just log it and leave the old chunks behind
+				log.Printf("Unable to delete chunks for document %s: %v", document.UniqueID, err)
+			}
 
 			// Split contents into chunks of MaxChunkSize characters
 			for i := 0; i < len(content); i += MaxChunkSize {
@@ -293,15 +306,8 @@ func (g *GoogleDriveConnector) listFiles(ctx context.Context, service *drive.Ser
 				}
 
 				chunk := types.Chunk{
-					Text: content[i:end],
-					Document: types.Document{
-						UniqueID:    file.Id,
-						Name:        file.Name,
-						SourceURL:   file.WebViewLink,
-						ConnectorID: g.ID(),
-						CreatedAt:   createdAt,
-						UpdatedAt:   updatedAt,
-					},
+					Text:     content[i:end],
+					Document: document,
 				}
 				numChunks += 1
 				log.Printf("Processing chunk %d of document %s", numChunks, file.Name)
