@@ -78,5 +78,5 @@ builder-env:
 	)
 
 clean:
-	rm dist/weaviate dist/ollama dist/lamoid
+	rm dist/weaviate dist/ollama dist/verbis
 	rm -r dist/rerank
