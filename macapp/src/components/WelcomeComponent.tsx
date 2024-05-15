@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import verbisIcon from "../verbis.svg";
+import VerbisIcon from "../verbis.svg";
 import { AppScreen } from "../types";
 import axios from "axios";
 import { CogIcon } from "@heroicons/react/24/solid";
@@ -54,7 +54,7 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
         )}
       </div>
       <div className="mx-auto">
-        <verbisIcon />
+        <VerbisIcon />
       </div>
     </>
   );
