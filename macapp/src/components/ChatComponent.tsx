@@ -1,5 +1,5 @@
 import { getCurrentWindow } from "@electron/remote";
-import { PaperAirplaneIcon } from "@heroicons/react/24/solid";
+import { PaperAirplaneIcon, PencilSquareIcon } from "@heroicons/react/24/solid";
 import React, { useEffect, useRef, useState } from "react";
 import { generate } from "../client";
 import { CogIcon } from "@heroicons/react/24/solid";
@@ -82,44 +82,53 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
     return () => {
       controller.abort(); // Abort fetch on cleanup
     };
-  }, []); 
+  }, []);
+
+  const startNewConversation = () => {
+    // Reset the conversation state
+    setConversation([]);
+    // TODO Create a new Conversation session with the API
+  };
 
   const triggerPrompt = async () => {
     setLoading(true); // Show loading state
     setPromptText(""); // Clear input after sending
-  
+
     const previousPrompt = promptText.trim();
     if (!previousPrompt) return; // Do nothing if the prompt is empty
-  
+
     const history = conversation.map((item) => ({
       role: item.role,
       content: item.content,
     }));
-  
+
     const assistantResponseIndex = conversation.length + 1; // zero-indexed, user + assistant message from now
 
     try {
-      const { initialUrls, generator } = await generate(previousPrompt, history);
+      const { initialUrls, generator } = await generate(
+        previousPrompt,
+        history
+      );
       // Create an entry for the assistant's response to accumulate content
-      setConversation(conv => [
+      setConversation((conv) => [
         ...conv,
         { role: "user", content: previousPrompt },
         {
           role: "assistant",
           content: "",
           urls: initialUrls,
-        }
+        },
       ]);
 
       let accumulatedContent = "";
       // Process each generated chunk as it arrives
       for await (const chunk of generator) {
         accumulatedContent += chunk.content;
-        setConversation(conv => {
+        setConversation((conv) => {
           const newConv = [...conv];
           newConv[assistantResponseIndex] = {
             ...newConv[assistantResponseIndex],
-            content: accumulatedContent
+            content: accumulatedContent,
           };
           return newConv;
         });
@@ -131,13 +140,20 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
       setLoading(false);
     }
   };
-  
+
   return (
     <>
-      <div className="fixed right-4 top-4">
-        <button onClick={() => navigate(AppScreen.SETTINGS)}>
-          <CogIcon className="h-6 w-6" />
-        </button>
+      <div>
+        <div className="fixed left-4 top-4">
+          <button onClick={() => startNewConversation()}>
+            <PencilSquareIcon className="h-6 w-6" />
+          </button>
+        </div>
+        <div className="fixed right-4 top-4">
+          <button onClick={() => navigate(AppScreen.SETTINGS)}>
+            <CogIcon className="h-6 w-6" />
+          </button>
+        </div>
       </div>
       <div className="flex h-screen flex-col justify-between">
         <h1 className="mt-4 text-center text-2xl tracking-tight text-gray-900">
