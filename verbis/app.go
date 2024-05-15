@@ -17,9 +17,9 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/posthog/posthog-go"
 
-	"github.com/epochlabs-ai/verbis/verbis/store"
-	"github.com/epochlabs-ai/verbis/verbis/types"
-	"github.com/epochlabs-ai/verbis/verbis/util"
+	"github.com/verbis-ai/verbis/verbis/store"
+	"github.com/verbis-ai/verbis/verbis/types"
+	"github.com/verbis-ai/verbis/verbis/util"
 )
 
 var (

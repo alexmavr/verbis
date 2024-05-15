@@ -14,11 +14,11 @@ import (
 	"github.com/weaviate/weaviate-go-client/v4/weaviate/graphql"
 	"github.com/weaviate/weaviate/entities/models"
 
-	"github.com/epochlabs-ai/verbis/verbis/types"
+	"github.com/verbis-ai/verbis/verbis/types"
 )
 
 var (
-	chunkClassName    = "verbisChunk"
+	chunkClassName    = "VerbisChunk"
 	documentClassName = "Document"
 	stateClassName    = "ConnectorState"
 )
@@ -237,11 +237,9 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 			// return empty result
 			return res, nil
 		}
-		log.Print("In GET")
 
 		chunks := get[chunkClassName].([]interface{})
 		for _, chunkMap := range chunks {
-			log.Print("In CHUNK")
 			c := chunkMap.(map[string]interface{})
 
 			// Parse additional info

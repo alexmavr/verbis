@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/epochlabs-ai/verbis/verbis/types"
-	"github.com/epochlabs-ai/verbis/verbis/util"
+	"github.com/verbis-ai/verbis/verbis/types"
+	"github.com/verbis-ai/verbis/verbis/util"
 )
 
 const (

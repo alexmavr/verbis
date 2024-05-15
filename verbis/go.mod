@@ -1,4 +1,4 @@
-module github.com/epochlabs-ai/verbis/verbis
+module github.com/verbis-ai/verbis/verbis
 
 go 1.22.2
 

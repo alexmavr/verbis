@@ -1,7 +1,7 @@
 package connectors
 
 import (
-	"github.com/epochlabs-ai/verbis/verbis/types"
+	"github.com/verbis-ai/verbis/verbis/types"
 )
 
 var AllConnectors = map[string]types.ConnectorConstructor{

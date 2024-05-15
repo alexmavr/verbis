@@ -23,9 +23,9 @@ import (
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
 
-	"github.com/epochlabs-ai/verbis/verbis/store"
-	"github.com/epochlabs-ai/verbis/verbis/types"
-	"github.com/epochlabs-ai/verbis/verbis/util"
+	"github.com/verbis-ai/verbis/verbis/store"
+	"github.com/verbis-ai/verbis/verbis/types"
+	"github.com/verbis-ai/verbis/verbis/util"
 )
 
 const (
