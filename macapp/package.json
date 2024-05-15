@@ -1,8 +1,8 @@
 {
-  "name": "lamoid",
-  "productName": "Lamoid",
+  "name": "verbis",
+  "productName": "verbis",
   "version": "0.0.0",
-  "description": "lamoid",
+  "description": "verbis",
   "main": ".webpack/main",
   "scripts": {
     "start": "NODE_ENV=development electron-forge start",

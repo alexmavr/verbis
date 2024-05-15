@@ -5,7 +5,7 @@ import axios from 'axios';
 import { json } from 'stream/consumers';
 
 const app = process && process.type === 'renderer' ? require('@electron/remote').app : require('electron').app
-const lamoid = app.isPackaged ? path.join(process.resourcesPath, 'ollama') : path.resolve(process.cwd(), '..', 'lamoid')
+const verbis = app.isPackaged ? path.join(process.resourcesPath, 'ollama') : path.resolve(process.cwd(), '..', 'verbis')
 
 export async function google_init() {
   try {

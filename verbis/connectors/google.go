@@ -23,15 +23,15 @@ import (
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
 
-	"github.com/epochlabs-ai/lamoid/lamoid/store"
-	"github.com/epochlabs-ai/lamoid/lamoid/types"
-	"github.com/epochlabs-ai/lamoid/lamoid/util"
+	"github.com/epochlabs-ai/verbis/verbis/store"
+	"github.com/epochlabs-ai/verbis/verbis/types"
+	"github.com/epochlabs-ai/verbis/verbis/util"
 )
 
 const (
 	credentialFile = "credentials.json"
 	tokenKey       = "user-google-oauth-token"
-	keyringService = "LamoidApp"
+	keyringService = "verbisApp"
 	MaxChunkSize   = 2000 // Maximum number of characters in a chunk
 )
 

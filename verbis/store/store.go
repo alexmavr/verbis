@@ -14,11 +14,11 @@ import (
 	"github.com/weaviate/weaviate-go-client/v4/weaviate/graphql"
 	"github.com/weaviate/weaviate/entities/models"
 
-	"github.com/epochlabs-ai/lamoid/lamoid/types"
+	"github.com/epochlabs-ai/verbis/verbis/types"
 )
 
 var (
-	chunkClassName    = "LamoidChunk"
+	chunkClassName    = "verbisChunk"
 	documentClassName = "Document"
 	stateClassName    = "ConnectorState"
 )

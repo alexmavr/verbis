@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/epochlabs-ai/lamoid/lamoid/connectors"
-	"github.com/epochlabs-ai/lamoid/lamoid/store"
-	"github.com/epochlabs-ai/lamoid/lamoid/types"
+	"github.com/epochlabs-ai/verbis/verbis/connectors"
+	"github.com/epochlabs-ai/verbis/verbis/store"
+	"github.com/epochlabs-ai/verbis/verbis/types"
 )
 
 const (

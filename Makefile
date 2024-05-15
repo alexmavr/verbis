@@ -1,4 +1,4 @@
-.PHONY: build lamoid macapp 
+.PHONY: build verbis macapp 
 
 WEAVIATE_VERSION := v1.25.0
 OLLAMA_VERSION := v0.1.32
@@ -53,26 +53,30 @@ dist/rerank:
 		python3 -OO -m PyInstaller --onedir script/rerank.py --specpath dist/ \
 	)
 
-lamoid:
+verbis: dist/rerank dist/weaviate dist/ollama
 	# Ensure dist directory exists
 	mkdir -p $(DIST_DIR)
 	# Modelfile is needed for any custom model execution
 	cp Modelfile.* dist/
 
 	echo "$(LDFLAGS)"
-	pushd lamoid && go build -ldflags="$(LDFLAGS)" -o ../$(DIST_DIR)/lamoid . && popd
+	pushd verbis && go build -ldflags="$(LDFLAGS)" -o ../$(DIST_DIR)/verbis . && popd
 
-macapp: lamoid dist/ollama dist/weaviate dist/rerank
+macapp: verbis dist/ollama dist/weaviate dist/rerank
 	pushd macapp && npm install && npm run package && popd
 
 # If we need to build llama.cpp, need Xcode
 builder-env:
 	python3 -m venv $(VENV_DIR)
-	. $(VENV_DIR)/bin/activate; \
-	pip install --upgrade pip; \
-	pip install pyinstaller; \
+	( \
+		source $(shell pwd)/.venv/bin/activate; \
+		pip3 install --upgrade pip; \
+		pip3 install poetry; \
+		pushd script; \
+		poetry install; \
+		popd \
+	)
 
 clean:
 	rm dist/weaviate dist/ollama dist/lamoid
 	rm -r dist/rerank
-

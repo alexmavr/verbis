@@ -17,9 +17,9 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/posthog/posthog-go"
 
-	"github.com/epochlabs-ai/lamoid/lamoid/store"
-	"github.com/epochlabs-ai/lamoid/lamoid/types"
-	"github.com/epochlabs-ai/lamoid/lamoid/util"
+	"github.com/epochlabs-ai/verbis/verbis/store"
+	"github.com/epochlabs-ai/verbis/verbis/types"
+	"github.com/epochlabs-ai/verbis/verbis/util"
 )
 
 var (
@@ -120,7 +120,7 @@ func main() {
 			weaviatePath,
 			[]string{"--host", "0.0.0.0", "--port", "8088", "--scheme", "http"},
 			[]string{
-				"PERSISTENCE_DATA_PATH=/tmp/lamoid",
+				"PERSISTENCE_DATA_PATH=/tmp/verbis",
 				"AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true",
 			},
 		},

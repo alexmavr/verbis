@@ -1,4 +1,4 @@
-module github.com/epochlabs-ai/lamoid/lamoid
+module github.com/epochlabs-ai/verbis/verbis
 
 go 1.22.2
 

@@ -16,7 +16,7 @@ const config: ForgeConfig = {
     asar: true,
     icon: "./assets/icon.icns",
     extraResource: [
-      "../dist/lamoid",
+      "../dist/verbis",
       "../dist/ollama",
       "../dist/weaviate",
       "../dist/credentials.json",

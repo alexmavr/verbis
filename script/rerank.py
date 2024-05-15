@@ -1,16 +1,3 @@
-model_url = 'https://huggingface.co/prithivida/flashrank/resolve/main/{}.zip'
-
-home_dir = Path.home()
-default_cache_dir = home_dir / ".lamoid" / "models"
-default_model = "ms-marco-TinyBERT-L-2-v2"
-model_file_map = {
-        "ms-marco-TinyBERT-L-2-v2": "flashrank-TinyBERT-L-2-v2.onnx",
-        "ms-marco-MiniLM-L-12-v2": "flashrank-MiniLM-L-12-v2_Q.onnx",
-        "ms-marco-MultiBERT-L-12": "flashrank-MultiBERT-L12_Q.onnx",
-        "rank-T5-flan": "flashrank-rankt5_Q.onnx",
-        "ce-esci-MiniLM-L12-v2": "flashrank-ce-esci-MiniLM-L12-v2_Q.onnx",
-        }
-
 import sys
 import json
 from pathlib import Path
@@ -23,6 +10,20 @@ import requests
 from tqdm import tqdm
 import collections
 from typing import Optional, List, Dict, Any
+
+model_url = 'https://huggingface.co/prithivida/flashrank/resolve/main/{}.zip'
+
+home_dir = Path.home()
+default_cache_dir = home_dir / ".verbis" / "models"
+default_model = "ms-marco-TinyBERT-L-2-v2"
+model_file_map = {
+        "ms-marco-TinyBERT-L-2-v2": "flashrank-TinyBERT-L-2-v2.onnx",
+        "ms-marco-MiniLM-L-12-v2": "flashrank-MiniLM-L-12-v2_Q.onnx",
+        "ms-marco-MultiBERT-L-12": "flashrank-MultiBERT-L12_Q.onnx",
+        "rank-T5-flan": "flashrank-rankt5_Q.onnx",
+        "ce-esci-MiniLM-L12-v2": "flashrank-ce-esci-MiniLM-L12-v2_Q.onnx",
+        }
+
 
 class RerankRequest:
     """ Represents a reranking request with a query and a list of passages. 

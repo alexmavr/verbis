@@ -13,13 +13,13 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/posthog/posthog-go"
 
-	"github.com/epochlabs-ai/lamoid/lamoid/connectors"
-	"github.com/epochlabs-ai/lamoid/lamoid/store"
-	"github.com/epochlabs-ai/lamoid/lamoid/types"
+	"github.com/epochlabs-ai/verbis/verbis/connectors"
+	"github.com/epochlabs-ai/verbis/verbis/store"
+	"github.com/epochlabs-ai/verbis/verbis/types"
 )
 
 var (
-	PromptLogFile        = ".lamoid/logs/prompt.log" // Relative to home
+	PromptLogFile        = ".verbis/logs/prompt.log" // Relative to home
 	MaxNumRerankedChunks = 1
 )
 

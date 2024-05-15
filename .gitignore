@@ -1,7 +1,7 @@
 dist/*
 build/*
 .DS_Store
-lamoid/lamoid
+verbis/verbis
 credentials.json
 .build.env
 .venv/

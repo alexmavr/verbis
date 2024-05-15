@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import LamoidIcon from "../lamoid.svg";
+import verbisIcon from "../verbis.svg";
 import { AppScreen } from "../types";
 import axios from "axios";
 import { CogIcon } from "@heroicons/react/24/solid";
@@ -35,10 +35,10 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
       </div>
       <div className="mx-auto text-center">
         <h1 className="mb-6 mt-4 text-2xl tracking-tight text-gray-900">
-          Welcome to Lamoid
+          Welcome to verbis
         </h1>
         {loading ? (
-          <div className="spinner">Lamoid is still starting...</div>
+          <div className="spinner">verbis is still starting...</div>
         ) : (
           <>
             <p className="mx-auto w-[65%] text-sm text-gray-400">
@@ -54,7 +54,7 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
         )}
       </div>
       <div className="mx-auto">
-        <LamoidIcon />
+        <verbisIcon />
       </div>
     </>
   );

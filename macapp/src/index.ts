@@ -19,7 +19,7 @@ const logger = winston.createLogger({
   transports: [
     new winston.transports.Console(),
     new winston.transports.File({
-      filename: path.join(app.getPath('home'), '.lamoid', 'logs', 'server.log'),
+      filename: path.join(app.getPath('home'), '.verbis', 'logs', 'server.log'),
       maxsize: 1024 * 1024 * 20,
       maxFiles: 5,
     }),
@@ -97,7 +97,7 @@ function trayIconPath() {
 function updateTray() {
   // For some reason it hangs on first run 
   const menu = Menu.buildFromTemplate([
-    { role: 'quit', label: 'Quit Lamoid', accelerator: 'Command+Q' },
+    { role: 'quit', label: 'Quit verbis', accelerator: 'Command+Q' },
   ])
 
   if (!tray) {
@@ -112,8 +112,8 @@ let proc: ChildProcess = null
 
 function server() {
   const binary = app.isPackaged
-    ? path.join(process.resourcesPath, 'lamoid')
-    : path.resolve(process.cwd(), '..', 'lamoid')
+    ? path.join(process.resourcesPath, 'verbis')
+    : path.resolve(process.cwd(), '..', 'verbis')
 
   proc = spawn(binary, [])
 
@@ -143,7 +143,7 @@ app.on('before-quit', () => {
 })
 
 function init() {
- logger.info('Starting Lamoid')
+ logger.info('Starting verbis')
  //updateTray()
 
   if (process.platform === 'darwin' && !isDevelopment) {
@@ -153,7 +153,7 @@ function init() {
         const chosen = dialog.showMessageBoxSync({
           type: 'question',
           buttons: ['Move to Applications', 'Do Not Move'],
-          message: 'Lamoid works best when run from the Applications directory.',
+          message: 'verbis works best when run from the Applications directory.',
           defaultId: 0,
           cancelId: 1,
         })
@@ -167,7 +167,7 @@ function init() {
                     type: 'info',
                     message: 'Cannot move to Applications directory',
                     detail:
-                      'Another version of Lamoid is currently running from your Applications directory. Close it first and try again.',
+                      'Another version of verbis is currently running from your Applications directory. Close it first and try again.',
                   })
                 }
                 return true
