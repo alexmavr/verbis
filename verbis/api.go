@@ -39,6 +39,7 @@ func (a *API) SetupRouter() *mux.Router {
 	// a state variable in the oauth flow.
 	r.HandleFunc("/connectors/{connector_id}/auth_setup", a.connectorAuthSetup).Methods("GET")
 	r.HandleFunc("/connectors/{connector_id}/callback", a.handleConnectorCallback).Methods("GET")
+	r.HandleFunc("/connectors/auth_complete", a.authComplete).Methods("GET")
 	r.HandleFunc("/prompt", a.handlePrompt).Methods("POST")
 	r.HandleFunc("/health", a.health).Methods("GET")
 
@@ -72,6 +73,12 @@ func (a *API) connectorsList(w http.ResponseWriter, r *http.Request) {
 	w.Write(b)
 }
 
+func (a *API) authComplete(w http.ResponseWriter, r *http.Request) {
+	// TODO: render page telling the user to go back to the desktop app
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Auth complete"))
+}
+
 func (a *API) connectorInit(w http.ResponseWriter, r *http.Request) {
 	// Should not error when called accidentally multiple times
 	// Can be re-invoked to re-init the connector (i.e. to reset stuck syncing state)
@@ -90,8 +97,10 @@ func (a *API) connectorInit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create a new connector object and initialize it
+	// The Init method is responsible for picking up existing configuration from
+	// the store, and discovering credentials
 	conn := constructor()
-
 	err := conn.Init(r.Context(), "")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -99,6 +108,7 @@ func (a *API) connectorInit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Add the connector to the syncer so that it may start syncing
 	err = a.Syncer.AddConnector(conn)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -185,12 +195,17 @@ func (a *API) handleConnectorCallback(w http.ResponseWriter, r *http.Request) {
 	if conn == nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Unknown connector ID"))
+		return
 	}
 	err := conn.AuthCallback(r.Context(), code)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to authenticate with Google: " + err.Error()))
+		return
 	}
+
+	// TODO: Render a done page
+	w.Write([]byte("Google authentication is complete, you may close this tab and return to the Verbis desktop app"))
 }
 
 func (a *API) forceSync(w http.ResponseWriter, r *http.Request) {

@@ -26,7 +26,7 @@ var (
 	httpClient          = &http.Client{Timeout: 10 * time.Second}
 	generationModelName = "custom-mistral"
 	embeddingsModelName = "nomic-embed-text"
-	clean               = false
+	clean               = true
 	KeepAliveTime       = "20m"
 
 	PosthogAPIKey = "n/a" // Will be populated by linker from builder's env

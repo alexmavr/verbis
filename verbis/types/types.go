@@ -17,6 +17,7 @@ type HistoryItem struct {
 
 type ConnectorState struct {
 	ConnectorID   string    `json:"connector_id"`
+	User          string    `json:"user"`
 	ConnectorType string    `json:"connector_type"`
 	AuthValid     bool      `json:"auth_valid"`
 	Syncing       bool      `json:"syncing"`

@@ -383,6 +383,10 @@ func CreateConnectorStateClass(ctx context.Context, client *weaviate.Client, for
 				DataType: []string{"text"},
 			},
 			{
+				Name:     "user",
+				DataType: []string{"text"},
+			},
+			{
 				Name:     "syncing",
 				DataType: []string{"boolean"},
 			},
@@ -473,6 +477,7 @@ func UpdateConnectorState(ctx context.Context, client *weaviate.Client, state *t
 		_, err := client.Data().Creator().WithClassName(stateClassName).WithProperties(map[string]interface{}{
 			"connector_id": state.ConnectorID,
 			"type":         state.ConnectorType,
+			"user":         state.User,
 			"syncing":      state.Syncing,
 			"auth_valid":   state.AuthValid,
 			"lastSync":     state.LastSync,
@@ -497,6 +502,7 @@ func UpdateConnectorState(ctx context.Context, client *weaviate.Client, state *t
 					WithProperties(map[string]interface{}{
 			"connector_id": state.ConnectorID,
 			"type":         state.ConnectorType,
+			"user":         state.User,
 			"syncing":      state.Syncing,
 			"auth_valid":   state.AuthValid,
 			"lastSync":     state.LastSync,
@@ -516,6 +522,7 @@ func AllConnectorStates(ctx context.Context, client *weaviate.Client) ([]*types.
 			[]graphql.Field{
 				{Name: "connector_id"},
 				{Name: "type"},
+				{Name: "user"},
 				{Name: "syncing"},
 				{Name: "auth_valid"},
 				{Name: "lastSync"},
@@ -551,6 +558,7 @@ func AllConnectorStates(ctx context.Context, client *weaviate.Client) ([]*types.
 		res = append(res, &types.ConnectorState{
 			ConnectorID:   c["connector_id"].(string),
 			ConnectorType: c["type"].(string),
+			User:          c["user"].(string),
 			Syncing:       c["syncing"].(bool),
 			AuthValid:     c["auth_valid"].(bool),
 			LastSync:      lastSync,
@@ -575,6 +583,7 @@ func GetConnectorState(ctx context.Context, client *weaviate.Client, connectorID
 			[]graphql.Field{
 				{Name: "connector_id"},
 				{Name: "type"},
+				{Name: "user"},
 				{Name: "syncing"},
 				{Name: "auth_valid"},
 				{Name: "lastSync"},
@@ -610,6 +619,7 @@ func GetConnectorState(ctx context.Context, client *weaviate.Client, connectorID
 	return &types.ConnectorState{
 		ConnectorID:   c["connector_id"].(string),
 		ConnectorType: c["type"].(string),
+		User:          c["user"].(string),
 		Syncing:       c["syncing"].(bool),
 		AuthValid:     c["auth_valid"].(bool),
 		LastSync:      lastSync,

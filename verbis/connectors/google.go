@@ -2,6 +2,7 @@ package connectors
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -11,13 +12,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
-
-	//   "google.golang.org/api/calendar/v3"
-	//    "google.golang.org/api/gmail/v1"
-
-	"github.com/google/uuid"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
 
@@ -91,6 +88,7 @@ func (g *GoogleDriveConnector) requestOauthWeb(config *oauth2.Config) error {
 var scopes []string = []string{
 	drive.DriveMetadataReadonlyScope,
 	drive.DriveReadonlyScope,
+	"https://www.googleapis.com/auth/userinfo.email",
 }
 
 func (g *GoogleDriveConnector) Init(ctx context.Context, connectorID string) error {
@@ -115,6 +113,7 @@ func (g *GoogleDriveConnector) Init(ctx context.Context, connectorID string) err
 
 	state.ConnectorID = g.ID()
 	state.Syncing = false
+	// state.User is unknown until auth is complete
 	state.ConnectorType = string(g.Type())
 	token, err := keychain.TokenFromKeychain(g.ID(), g.Type())
 	state.AuthValid = (err == nil && token != nil) // TODO: check for expiry of refresh token
@@ -182,9 +181,44 @@ func (g *GoogleDriveConnector) AuthCallback(ctx context.Context, authCode string
 		return fmt.Errorf("unable to save token to keychain: %v", err)
 	}
 
-	// TODO: redirect to a "done" page - don't just render it because the
-	// authorization code is shown in the browser URL
-	return nil
+	client := config.Client(ctx, tok)
+	email, err := getUserEmail(client)
+	if err != nil {
+		return fmt.Errorf("unable to get user email: %v", err)
+	}
+	log.Printf("User email: %s", email)
+	g.user = email
+
+	state, err := g.Status(ctx)
+	if err != nil {
+		return fmt.Errorf("unable to get connector state: %v", err)
+	}
+
+	state.User = g.User()
+	return g.UpdateConnectorState(ctx, state)
+}
+
+func getUserEmail(client *http.Client) (string, error) {
+	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo?alt=json")
+	if err != nil {
+		return "", fmt.Errorf("unable to get user info: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to get user info: status %s", resp.Status)
+	}
+
+	var userInfo struct {
+		Email string `json:"email"`
+	}
+
+	err = json.NewDecoder(resp.Body).Decode(&userInfo)
+	if err != nil {
+		return "", fmt.Errorf("unable to decode user info: %v", err)
+	}
+
+	return userInfo.Email, nil
 }
 
 func (g *GoogleDriveConnector) Sync(ctx context.Context, lastSync time.Time, resChan chan types.Chunk, errChan chan error) {

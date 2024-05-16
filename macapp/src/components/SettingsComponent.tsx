@@ -69,15 +69,16 @@ const SettingsComponent: React.FC<Props> = ({ navigate, navigateBack }) => {
             Your browser will open to configure the OAuth credentials.
           </p>
         </div>
+        <button className="sync-button" onClick={force_sync}>Force Sync</button>
         {Object.values(connectorList).map((connector, index) => (
           <div key={index} className="mb-2 border-b-2">
-            <h2>{connector.name}</h2>
+            <h2>{connector.type.toString()}</h2>
+            <h4>{connector.user.toString()} </h4>
             <p>Auth Valid: {connector.auth_valid.toString()}</p>
             <p>Syncing: {connector.syncing.toString()}</p>
             <p>Last Sync: {connector.last_sync}</p>
             <p>Number of Documents: {connector.num_documents}</p>
             <p>Number of Chunks: {connector.num_chunks}</p>
-            <button onClick={force_sync}>Force Sync</button>
           </div>
         ))}
       </div>
