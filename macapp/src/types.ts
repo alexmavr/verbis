@@ -4,3 +4,8 @@ export enum AppScreen {
   CONNECTORS,
   SETTINGS,
 }
+
+export interface ResultSource {
+  title: string;
+  url: string;
+}

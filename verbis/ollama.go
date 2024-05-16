@@ -229,13 +229,18 @@ func chatWithModel(prompt string, model string, history []types.HistoryItem) (*A
 	return &apiResponse, nil
 }
 
-func urlsFromChunks(chunks []*types.Chunk) []string {
-	urls := []string{}
+func sourcesFromChunks(chunks []*types.Chunk) []map[string]string {
+	sources := []map[string]string{}
 	for _, chunk := range chunks {
-		urls = append(urls, chunk.SourceURL)
+		sourceObj := map[string]string{
+			"title": chunk.Name,
+			"url":   chunk.SourceURL,
+		}
+		sources = append(sources, sourceObj)
 	}
-	return urls
+	return sources
 }
+
 
 func Rerank(ctx context.Context, chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
 	if len(chunks) == 0 {

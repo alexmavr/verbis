@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { generate } from "../client";
 import { CogIcon } from "@heroicons/react/24/solid";
 import SettingsComponent from "./SettingsComponent";
-import { AppScreen } from "../types";
+import { AppScreen, ResultSource } from "../types";
 
 interface Props {
   navigate: (screen: AppScreen) => void;
@@ -19,6 +19,14 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
   const countRef = useRef(0); // To keep track of the ellipsis state
   const [conversation, setConversation] = useState([]);
   const controller = new AbortController(); // For handling cancellation
+
+  // Function to truncate string
+  const truncateString = (str: string, maxLength: number) => {
+    if (str.length <= maxLength) {
+      return str;
+    }
+    return str.substring(0, maxLength) + "...";
+  };
 
   const smoothScrollToBottom = () => {
     const element = conversationContainer.current;
@@ -105,7 +113,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
     const assistantResponseIndex = conversation.length + 1; // zero-indexed, user + assistant message from now
 
     try {
-      const { initialUrls, generator } = await generate(
+      const { sources: sources, generator } = await generate(
         previousPrompt,
         history
       );
@@ -116,7 +124,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
         {
           role: "assistant",
           content: "",
-          urls: initialUrls,
+          sources: sources,
         },
       ]);
 
@@ -170,24 +178,28 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
               <div key={index} className={`mb-1 rounded p-1 ${item.role}`}>
                 <div className="p-2">
                   {item.content}
-                  <p>
-                    {item.hasOwnProperty("urls") &&
-                      item.urls.map((url: string, urlIndex: number) => (
-                        <a
-                          key={urlIndex}
-                          href={url}
-                          target="none"
-                          className="mr-1 text-blue-600 underline visited:text-purple-600 hover:text-blue-800"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            require("electron").shell.openExternal(url);
-                          }}
-                        >
-                          {urlIndex + 1}
-                        </a>
-                      ))}
-                  </p>
+                  {item.hasOwnProperty("sources") &&
+                    item.sources.map(
+                      (source: ResultSource, sourceIndex: number) => (
+                        <p>
+                          <a
+                            key={sourceIndex}
+                            href={source.url}
+                            target="none"
+                            className="mr-1 text-blue-600 underline visited:text-purple-600 hover:text-blue-800"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              require("electron").shell.openExternal(
+                                source.url
+                              );
+                            }}
+                          >
+                            {truncateString(source.title, 30)}
+                          </a>
+                        </p>
+                      )
+                    )}
                 </div>
               </div>
             ))}

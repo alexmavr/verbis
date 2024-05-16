@@ -20,7 +20,7 @@ import (
 
 var (
 	PromptLogFile        = ".verbis/logs/prompt.log" // Relative to home
-	MaxNumRerankedChunks = 1
+	MaxNumRerankedChunks = 3
 )
 
 type API struct {
@@ -361,7 +361,7 @@ type PromptRequest struct {
 }
 
 type StreamResponseHeader struct {
-	SourceURLs []string `json:"urls"` // Only returned on the first response
+	Sources []map[string]string `json:"sources"` // Only returned on the first response
 }
 
 func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
@@ -440,7 +440,7 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 
 	// First write the header response
 	err = json.NewEncoder(w).Encode(StreamResponseHeader{
-		SourceURLs: urlsFromChunks(rerankedChunks),
+		Sources: sourcesFromChunks(rerankedChunks),
 	})
 	if err != nil {
 		http.Error(w, "Failed to write response", http.StatusInternalServerError)
