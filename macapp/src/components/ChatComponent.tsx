@@ -181,9 +181,8 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
                   {item.hasOwnProperty("sources") &&
                     item.sources.map(
                       (source: ResultSource, sourceIndex: number) => (
-                        <p>
+                        <p key={sourceIndex}>
                           <a
-                            key={sourceIndex}
                             href={source.url}
                             target="none"
                             className="mr-1 text-blue-600 underline visited:text-purple-600 hover:text-blue-800"
