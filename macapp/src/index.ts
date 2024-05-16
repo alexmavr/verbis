@@ -67,7 +67,6 @@ function firstRunWindow() {
       contextIsolation: false,
     },
   })
-  welcomeWindow.webContents.openDevTools(); // TODO: this is debug only
 
   require('@electron/remote/main').enable(welcomeWindow.webContents)
 
@@ -76,6 +75,16 @@ function firstRunWindow() {
   welcomeWindow.on('closed', () => {
     if (process.platform === 'darwin') {
       app.dock.hide()
+    }
+  })
+
+  welcomeWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12' && input.type === 'keyDown') {
+      if (welcomeWindow.webContents.isDevToolsOpened()) {
+        welcomeWindow.webContents.closeDevTools()
+      } else {
+        welcomeWindow.webContents.openDevTools()
+      }
     }
   })
 }
@@ -90,8 +99,8 @@ function trayIconPath() {
       ? path.join(assetPath, 'iconDarkUpdateTemplate.png')
       : path.join(assetPath, 'iconDarkTemplate.png')
     : updateAvailable
-    ? path.join(assetPath, 'iconUpdateTemplate.png')
-    : path.join(assetPath, 'iconTemplate.png')
+      ? path.join(assetPath, 'iconUpdateTemplate.png')
+      : path.join(assetPath, 'iconTemplate.png')
 }
 
 function updateTray() {
@@ -143,8 +152,8 @@ app.on('before-quit', () => {
 })
 
 function init() {
- logger.info('Starting verbis')
- //updateTray()
+  logger.info('Starting verbis')
+  //updateTray()
 
   if (process.platform === 'darwin' && !isDevelopment) {
     if (app.isPackaged) {
