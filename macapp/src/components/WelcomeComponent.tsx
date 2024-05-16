@@ -33,12 +33,12 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
           <CogIcon className="h-6 w-6" />
         </button>
       </div>
-      <div className="mx-auto text-center">
+      <div className="flex h-screen flex-col items-center justify-center text-center">
         <h1 className="mb-6 mt-4 text-2xl tracking-tight text-gray-900">
-          Welcome to verbis
+          Welcome to Verbis
         </h1>
         {loading ? (
-          <div className="spinner">verbis is still starting...</div>
+          <div className="spinner">Verbis is still starting...</div>
         ) : (
           <>
             <p className="mx-auto w-[65%] text-sm text-gray-400">
@@ -52,9 +52,9 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
             </button>
           </>
         )}
-      </div>
-      <div className="mx-auto">
-        <VerbisIcon />
+        <div className="mt-8">
+          <VerbisIcon className="h-24 w-24" />
+        </div>
       </div>
     </>
   );
