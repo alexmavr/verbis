@@ -2,7 +2,6 @@ package connectors
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -19,10 +18,10 @@ import (
 	//    "google.golang.org/api/gmail/v1"
 
 	"github.com/google/uuid"
-	"github.com/zalando/go-keyring"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
 
+	"github.com/verbis-ai/verbis/verbis/keychain"
 	"github.com/verbis-ai/verbis/verbis/store"
 	"github.com/verbis-ai/verbis/verbis/types"
 	"github.com/verbis-ai/verbis/verbis/util"
@@ -30,8 +29,6 @@ import (
 
 const (
 	credentialFile = "credentials.json"
-	tokenKey       = "user-google-oauth-token"
-	keyringService = "verbisApp"
 	MaxChunkSize   = 2000 // Maximum number of characters in a chunk
 )
 
@@ -72,9 +69,9 @@ func (g *GoogleDriveConnector) Status(ctx context.Context) (*types.ConnectorStat
 	return state, nil
 }
 
-func getClient(ctx context.Context, config *oauth2.Config) (*http.Client, error) {
+func (g *GoogleDriveConnector) getClient(ctx context.Context, config *oauth2.Config) (*http.Client, error) {
 	// Token from Keychain
-	tok, err := tokenFromKeychain()
+	tok, err := keychain.TokenFromKeychain(g.ID(), g.Type())
 	if err != nil {
 		return nil, err
 	}
@@ -89,27 +86,6 @@ func (g *GoogleDriveConnector) requestOauthWeb(config *oauth2.Config) error {
 
 	// Open URL in the default browser
 	return exec.Command("open", authURL).Start()
-}
-
-func tokenFromKeychain() (*oauth2.Token, error) {
-	tokenJSON, err := keyring.Get(keyringService, tokenKey)
-	if err != nil {
-		return nil, err
-	}
-	var token oauth2.Token
-	err = json.Unmarshal([]byte(tokenJSON), &token)
-	return &token, err
-}
-
-func saveTokenToKeychain(token *oauth2.Token) {
-	bytes, err := json.Marshal(token)
-	if err != nil {
-		log.Fatalf("Unable to marshal token %v", err)
-	}
-	err = keyring.Set(keyringService, tokenKey, string(bytes))
-	if err != nil {
-		log.Fatalf("Unable to save token to keychain %v", err)
-	}
 }
 
 var scopes []string = []string{
@@ -140,7 +116,7 @@ func (g *GoogleDriveConnector) Init(ctx context.Context, connectorID string) err
 	state.ConnectorID = g.ID()
 	state.Syncing = false
 	state.ConnectorType = string(g.Type())
-	token, err := tokenFromKeychain()
+	token, err := keychain.TokenFromKeychain(g.ID(), g.Type())
 	state.AuthValid = (err == nil && token != nil) // TODO: check for expiry of refresh token
 	log.Printf("AuthValid: %v", state.AuthValid)
 
@@ -173,7 +149,7 @@ func (g *GoogleDriveConnector) AuthSetup(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("unable to get google config: %s", err)
 	}
-	_, err = tokenFromKeychain()
+	_, err = keychain.TokenFromKeychain(g.ID(), g.Type())
 	if err == nil {
 		// TODO: check for expiry of refresh token
 		log.Print("Token found in keychain.")
@@ -187,6 +163,7 @@ func (g *GoogleDriveConnector) AuthSetup(ctx context.Context) error {
 	return nil
 }
 
+// TODO: handle token expiries
 func (g *GoogleDriveConnector) AuthCallback(ctx context.Context, authCode string) error {
 	config, err := get_config_from_json()
 	if err != nil {
@@ -200,7 +177,10 @@ func (g *GoogleDriveConnector) AuthCallback(ctx context.Context, authCode string
 		return fmt.Errorf("unable to retrieve token from web: %v", err)
 	}
 
-	saveTokenToKeychain(tok)
+	err = keychain.SaveTokenToKeychain(tok, g.ID(), g.Type())
+	if err != nil {
+		return fmt.Errorf("unable to save token to keychain: %v", err)
+	}
 
 	// TODO: redirect to a "done" page - don't just render it because the
 	// authorization code is shown in the browser URL
@@ -217,7 +197,7 @@ func (g *GoogleDriveConnector) Sync(ctx context.Context, lastSync time.Time, res
 		return
 	}
 
-	client, err := getClient(ctx, config)
+	client, err := g.getClient(ctx, config)
 	if err != nil {
 		errChan <- fmt.Errorf("unable to get client: %v", err)
 		return
@@ -292,6 +272,7 @@ func (g *GoogleDriveConnector) listFiles(ctx context.Context, service *drive.Ser
 				UpdatedAt:   updatedAt,
 			}
 
+			// TODO: ideally this should live at the top level but we need to refactor the syncer first
 			err = store.DeleteDocumentChunks(ctx, store.GetWeaviateClient(), document.UniqueID, g.ID())
 			if err != nil {
 				// Not a fatal error, just log it and leave the old chunks behind

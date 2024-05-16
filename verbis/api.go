@@ -132,6 +132,22 @@ func (a *API) connectorAuthSetup(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Failed to perform initial auth with google: " + err.Error()))
 		return
 	}
+
+	state, err := conn.Status(r.Context())
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to get connector state: " + err.Error()))
+		return
+	}
+
+	state.AuthValid = true
+	err = conn.UpdateConnectorState(r.Context(), state)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to update connector state: " + err.Error()))
+		return
+	}
+
 }
 
 func (a *API) handleConnectorCallback(w http.ResponseWriter, r *http.Request) {
