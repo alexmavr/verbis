@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { generate } from "../client";
 import { CogIcon } from "@heroicons/react/24/solid";
 import SettingsComponent from "./SettingsComponent";
+import GDriveLogo from "../../assets/connectors/gdrive.svg";
 import { AppScreen, ResultSource } from "../types";
 
 interface Props {
@@ -181,7 +182,8 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
                   {item.hasOwnProperty("sources") &&
                     item.sources.map(
                       (source: ResultSource, sourceIndex: number) => (
-                        <p key={sourceIndex}>
+                        <div key={sourceIndex} className="flex items-center">
+                          <GDriveLogo className="mr-2 h-4 w-4" />
                           <a
                             href={source.url}
                             target="none"
@@ -196,7 +198,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
                           >
                             {truncateString(source.title, 30)}
                           </a>
-                        </p>
+                        </div>
                       )
                     )}
                 </div>
