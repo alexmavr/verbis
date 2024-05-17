@@ -35,6 +35,7 @@ const SettingsComponent: React.FC<Props> = ({ navigate, navigateBack }) => {
     return () => clearInterval(intervalId);
   }, []);
 
+
   return (
     <div>
       <div className="fixed right-4 top-4">
