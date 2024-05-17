@@ -41,7 +41,7 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
           <VerbisIcon className="h-24 w-24" />
         </div>
         {loading ? (
-          <div className="spinner">Verbis is still starting...</div>
+          <div className="spinner mt-8">Verbis is still starting...</div>
         ) : (
           <>
             <p className="mx-auto w-[65%] text-sm text-gray-400">
