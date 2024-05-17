@@ -37,6 +37,9 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
         <h1 className="mb-6 mt-4 text-2xl tracking-tight text-gray-900">
           Welcome to Verbis
         </h1>
+        <div className={`mt-8 ${loading ? "loading" : ""}`}>
+          <VerbisIcon className="h-24 w-24" />
+        </div>
         {loading ? (
           <div className="spinner">Verbis is still starting...</div>
         ) : (
@@ -52,9 +55,6 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
             </button>
           </>
         )}
-        <div className="mt-8">
-          <VerbisIcon className="h-24 w-24" />
-        </div>
       </div>
     </>
   );

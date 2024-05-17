@@ -114,3 +114,32 @@ spinner {
     transform: rotate(360deg);
   }
 }
+
+    @keyframes colorCycle {
+      0% {
+        fill: #7241FF;
+      }
+      33% {
+        fill: #B388FF;
+      }
+      66% {
+        fill: #8C9EFF;
+      }
+      100% {
+        fill: #7241FF;
+      }
+    }
+
+    .loading .triangle1 {
+      animation: colorCycle 2s infinite;
+    }
+
+    .loading .triangle2 {
+      animation: colorCycle 2s infinite;
+      animation-delay: 0.67s; /* (2s / 3) to evenly distribute the delays */
+    }
+
+    .loading .triangle3 {
+      animation: colorCycle 2s infinite;
+      animation-delay: 1.34s; /* (2s / 3) * 2 to evenly distribute the delays */
+    }
