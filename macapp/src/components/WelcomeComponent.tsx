@@ -14,9 +14,15 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
   useEffect(() => {
     const checkHealth = async () => {
       try {
-        await axios.get("http://localhost:8081/health");
-        setLoading(false); // Turn off spinner on successful response
-        navigate(AppScreen.PROMPT); // Redirect to the prompt screen
+        const response = await axios.get("http://localhost:8081/health");
+        const data = response.data;
+
+        if (data.boot_state === 'generating') {
+          setLoading(false); // Turn off spinner on successful response
+          navigate(AppScreen.PROMPT); // Redirect to the prompt screen
+        } else {
+          setTimeout(checkHealth, 3000); // Retry after 3 seconds if the request fails
+        }
       } catch (error) {
         console.error("Error checking health: ", error);
         setTimeout(checkHealth, 3000); // Retry after 3 seconds if the request fails

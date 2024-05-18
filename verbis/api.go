@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,7 +24,7 @@ var (
 
 type API struct {
 	Syncer            *Syncer
-	Context           context.Context
+	Context           *BootContext
 	Posthog           posthog.Client
 	PosthogDistinctID string
 }
@@ -52,7 +51,7 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 	// TODO: check for health of subprocesses
 	// TODO: return state of syncs and model downloads, to be used during init
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("OK"))
+	w.Write([]byte(fmt.Sprintf("{\"boot_state\": \"%s\"}", a.Context.State)))
 }
 
 func (a *API) connectorsList(w http.ResponseWriter, r *http.Request) {

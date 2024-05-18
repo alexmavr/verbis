@@ -89,9 +89,9 @@ func BootOnboard() (*BootContext, error) {
 
 	api := API{
 		Syncer:            syncer,
-		Context:           ctx,
 		Posthog:           postHogClient,
 		PosthogDistinctID: bootCtx.PosthogDistinctID,
+		Context:           bootCtx,
 	}
 	router := api.SetupRouter()
 
@@ -163,6 +163,7 @@ func BootOnboard() (*BootContext, error) {
 		log.Fatal(server.ListenAndServe())
 	}()
 
+	bootCtx.State = BootStateOnboard
 	return bootCtx, nil
 }
 
@@ -293,6 +294,7 @@ func BootSyncing(ctx *BootContext) error {
 	}
 	go ctx.Syncer.Run(ctx)
 
+	ctx.State = BootStateSyncing
 	return nil
 }
 
@@ -347,6 +349,7 @@ func BootGen(ctx *BootContext) error {
 		log.Fatalf("Failed to enqueue event: %s\n", err)
 	}
 
+	ctx.State = BootStateGen
 	return nil
 }
 
