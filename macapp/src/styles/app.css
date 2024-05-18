@@ -137,7 +137,7 @@ spinner {
     transform-origin: center;
   }
   50% {
-    transform: scale(0.95);
+    transform: scale(0.9);
     transform-origin: center;
   }
 }
@@ -147,10 +147,10 @@ spinner {
 }
 
 .loading .triangle2 {
-  animation: colorCycle 1.5s infinite, pulse 1.5s infinite;
-  animation-delay: 0.5s; /* (2s / 3) to evenly distribute the delays */
+  animation: colorCycle 1.5s infinite 0.5s, pulse 1.5s infinite 0.5s;
+  /* delay = 2s / 3 */
 }
 .loading .triangle3 {
-  animation: colorCycle 1.5s infinite, pulse 1.5s infinite;
-  animation-delay: 1s; /* (2s / 3) * 2 to evenly distribute the delays */
+  animation: colorCycle 1.5s infinite 1s, pulse 1.5s infinite 1s;
+  /* delay = (2s / 3) * 2 */
 }
