@@ -10,23 +10,23 @@ body {
 
 /* For WebKit browsers */
 ::-webkit-scrollbar {
-    width: 8px; /* Vertical scrollbar width */
-    height: 8px; /* Horizontal scrollbar height */
+  width: 8px; /* Vertical scrollbar width */
+  height: 8px; /* Horizontal scrollbar height */
 }
 
 ::-webkit-scrollbar-track {
-    background: transparent; /* Track background */
+  background: transparent; /* Track background */
 }
 
 ::-webkit-scrollbar-thumb {
-    background-color: rgba(0, 0, 0, 0.2); /* Thumb color */
-    border-radius: 4px; /* Roundness of the scrollbar thumb */
+  background-color: rgba(0, 0, 0, 0.2); /* Thumb color */
+  border-radius: 4px; /* Roundness of the scrollbar thumb */
 }
 
 /* For Firefox */
 * {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
 }
 
 .drag {
@@ -115,31 +115,53 @@ spinner {
   }
 }
 
-    @keyframes colorCycle {
-      0% {
-        fill: #7241FF;
-      }
-      33% {
-        fill: #B388FF;
-      }
-      66% {
-        fill: #8C9EFF;
-      }
-      100% {
-        fill: #7241FF;
-      }
-    }
+@keyframes colorCycle {
+  0% {
+    fill: #7241ff;
+  }
+  33% {
+    fill: #b388ff;
+  }
+  66% {
+    fill: #8c9eff;
+  }
+  100% {
+    fill: #7241ff;
+  }
+}
 
-    .loading .triangle1 {
-      animation: colorCycle 2s infinite;
-    }
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    transform-origin: center;
+  }
+  50% {
+    transform: scale(0.95);
+    transform-origin: center;
+  }
+}
 
-    .loading .triangle2 {
-      animation: colorCycle 2s infinite;
-      animation-delay: 0.67s; /* (2s / 3) to evenly distribute the delays */
-    }
+.loading .triangle1 {
+  animation: colorCycle 1.5s infinite, pulse 1.5s infinite;
+}
 
-    .loading .triangle3 {
-      animation: colorCycle 2s infinite;
-      animation-delay: 1.34s; /* (2s / 3) * 2 to evenly distribute the delays */
-    }
+.triangle1 {
+  filter: url(#drop-shadow);
+}
+
+.loading .triangle2 {
+  animation: colorCycle 1.5s infinite, pulse 1.5s infinite;
+  animation-delay: 0.5s; /* (2s / 3) to evenly distribute the delays */
+}
+.triangle2 {
+  filter: url(#drop-shadow);
+}
+
+.loading .triangle3 {
+  animation: colorCycle 1.5s infinite, pulse 1.5s infinite;
+  animation-delay: 1s; /* (2s / 3) * 2 to evenly distribute the delays */
+}
+.triangle3 {
+  filter: url(#drop-shadow);
+}
