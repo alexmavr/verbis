@@ -279,28 +279,6 @@ func pullModel(name string, stream bool) error {
 	return nil
 }
 
-func waitForOllama(ctx context.Context) error {
-	ollama_url := "http://localhost:11434"
-
-	// Poll the ollama URL every 5 seconds until the context is cancelled
-	for {
-		resp, err := httpClient.Get(ollama_url)
-		log.Print(resp)
-		if err == nil {
-			log.Printf("Ollama is up and running")
-			resp.Body.Close()
-			return nil
-		}
-		select {
-		case <-time.After(5 * time.Second):
-			log.Printf("Waited 5 sec")
-			continue
-		case <-ctx.Done():
-			return fmt.Errorf("context cancelled during wait: %w", ctx.Err())
-		}
-	}
-}
-
 // Struct to define the request payload
 type EmbedRequestPayload struct {
 	Model  string `json:"model"`

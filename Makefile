@@ -80,3 +80,6 @@ builder-env:
 clean:
 	rm dist/weaviate dist/ollama dist/verbis
 	rm -r dist/rerank build/*
+
+kill:
+	pkill -9 weaviate ollama verbis
