@@ -34,14 +34,14 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
         </button>
       </div>
       <div className="flex h-screen flex-col items-center justify-center text-center">
-        <h1 className="mb-6 mt-4 text-2xl tracking-tight text-gray-900">
+        <h1 className="m-4 text-2xl tracking-tight text-gray-900">
           Welcome to Verbis
         </h1>
-        <div className={`mt-8 ${loading ? "loading" : ""}`}>
+        <div className={`mt-4 ${loading ? "loading" : ""}`}>
           <VerbisIcon className="h-24 w-24" />
         </div>
         {loading ? (
-          <div className="spinner mt-8">Verbis is still starting...</div>
+          <div className="spinner mt-8">Verbis is starting...</div>
         ) : (
           <>
             <p className="mx-auto w-[65%] text-sm text-gray-400">

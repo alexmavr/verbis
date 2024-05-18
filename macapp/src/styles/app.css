@@ -117,16 +117,16 @@ spinner {
 
 @keyframes colorCycle {
   0% {
-    fill: #7241ff;
+    fill: #7183F4;
   }
   33% {
-    fill: #b388ff;
+    fill: #A68BF8;
   }
   66% {
-    fill: #8c9eff;
+    fill: #EC72F9;
   }
   100% {
-    fill: #7241ff;
+    fill: #7183F4;
   }
 }
 
@@ -146,22 +146,11 @@ spinner {
   animation: colorCycle 1.5s infinite, pulse 1.5s infinite;
 }
 
-.triangle1 {
-  filter: url(#drop-shadow);
-}
-
 .loading .triangle2 {
   animation: colorCycle 1.5s infinite, pulse 1.5s infinite;
   animation-delay: 0.5s; /* (2s / 3) to evenly distribute the delays */
 }
-.triangle2 {
-  filter: url(#drop-shadow);
-}
-
 .loading .triangle3 {
   animation: colorCycle 1.5s infinite, pulse 1.5s infinite;
   animation-delay: 1s; /* (2s / 3) * 2 to evenly distribute the delays */
-}
-.triangle3 {
-  filter: url(#drop-shadow);
 }
