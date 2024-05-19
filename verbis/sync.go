@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -83,6 +84,15 @@ func (s *Syncer) GetConnectorStates(ctx context.Context) ([]*types.ConnectorStat
 		}
 		states = append(states, state)
 	}
+
+	// Sort by connector type and user
+	sort.Slice(states, func(i, j int) bool {
+		if states[i].ConnectorType == states[j].ConnectorType {
+			return states[i].User < states[j].User
+		}
+		return states[i].ConnectorType < states[j].ConnectorType
+	})
+
 	return states, nil
 }
 
