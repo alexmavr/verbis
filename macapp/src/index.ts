@@ -55,18 +55,18 @@ app.on('ready', () => {
 function firstRunWindow() {
   // Create the browser window.
   welcomeWindow = new BrowserWindow({
-    width: 800,
-    height: 1000,
-    frame: true,
-    fullscreenable: true,
-    resizable: true,
+    width: 600,
+    height: 800,
+    frame: false,
+    fullscreenable: false,
+    resizable: false,
     movable: true,
     show: false,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
     },
-  })
+  });
 
   require('@electron/remote/main').enable(welcomeWindow.webContents)
 

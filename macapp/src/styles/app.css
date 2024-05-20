@@ -4,7 +4,7 @@
 
 html,
 body {
-  background: transparent;
+  /* background: transparent; */
   scroll-behavior: smooth;
 }
 
