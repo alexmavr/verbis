@@ -232,6 +232,17 @@ func chatWithModel(prompt string, model string, history []types.HistoryItem) (*A
 func sourcesFromChunks(chunks []*types.Chunk) []map[string]string {
 	sources := []map[string]string{}
 	for _, chunk := range chunks {
+		skip := false
+		for _, source := range sources {
+			if source["url"] == chunk.SourceURL {
+				// Avoid duplicate document links
+				skip = true
+				break
+			}
+		}
+		if skip {
+			continue
+		}
 		sourceObj := map[string]string{
 			"title": chunk.Name,
 			"url":   chunk.SourceURL,
@@ -240,7 +251,6 @@ func sourcesFromChunks(chunks []*types.Chunk) []map[string]string {
 	}
 	return sources
 }
-
 
 func Rerank(ctx context.Context, chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
 	if len(chunks) == 0 {
