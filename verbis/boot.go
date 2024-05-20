@@ -283,7 +283,7 @@ func BootSyncing(ctx *BootContext) error {
 		log.Fatalf("Failed to wait for ollama: %s\n", err)
 	}
 
-	err = initModels([]string{generationModelName, embeddingsModelName})
+	err = initModels([]string{embeddingsModelName})
 	if err != nil {
 		log.Fatalf("Failed to initialize models: %s\n", err)
 	}
@@ -299,6 +299,11 @@ func BootSyncing(ctx *BootContext) error {
 }
 
 func BootGen(ctx *BootContext) error {
+	err := initModels([]string{generationModelName})
+	if err != nil {
+		log.Fatalf("Failed to initialize models: %s\n", err)
+	}
+
 	// Perform a test generation with ollama to load the model in memory
 	resp, err := chatWithModel("What is the capital of France? Respond in one word only", generationModelName, []types.HistoryItem{})
 	if err != nil {

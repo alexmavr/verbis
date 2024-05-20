@@ -24,6 +24,10 @@ import (
 const (
 	CustomModelPrefix = "custom-"
 	rerankDistPath    = "rerank/rerank"
+
+	MaxNumRerankedChunks      = 3
+	RerankNoResultScoreCutoff = 0.1
+	RerankSoloScoreCliff      = 0.2
 )
 
 func IsCustomModel(modelName string) bool {
@@ -301,19 +305,65 @@ func rerankBERT(ctx context.Context, chunks []*types.Chunk, query string) ([]*ty
 	}
 
 	// Unmarshal the output JSON data
-	var res []int
+	var res RerankResponse
 	err = json.Unmarshal(output, &res)
 	if err != nil {
 		log.Printf("%s", string(output))
 		return nil, fmt.Errorf("error unmarshaling JSON: %v", err)
 	}
 
+	finalItems := RerankPrune(res)
+
 	finalChunks := []*types.Chunk{}
-	for _, pid := range res {
-		finalChunks = append(finalChunks, chunks[pid])
+	for _, item := range finalItems {
+		finalChunks = append(finalChunks, chunks[item.ID])
 	}
 
 	return finalChunks, nil
+}
+
+// RerankPrune selects the top N chunks from the reranked list
+func RerankPrune(items []RerankResponseItem) []RerankResponseItem {
+	if len(items) == 0 {
+		return nil
+	}
+	if len(items) <= MaxNumRerankedChunks {
+		return items
+	}
+
+	subset := []RerankResponseItem{} // Start with the highest score item.
+	for i := 0; i < len(items); i++ {
+		if len(subset) >= MaxNumRerankedChunks || items[i].Score < RerankNoResultScoreCutoff {
+			break
+		}
+
+		if len(subset) == 0 {
+			subset = append(subset, items[i])
+		}
+
+		previousItem := subset[len(subset)-1]
+		if previousItem.Score-items[i].Score > RerankSoloScoreCliff {
+			break
+		}
+
+		subset = append(subset, items[i])
+	}
+
+	return subset
+}
+
+type RerankResponse []RerankResponseItem
+
+// Define the struct that matches the JSON structure
+type Meta struct {
+	Title string `json:"title"`
+}
+
+type RerankResponseItem struct {
+	ID    int     `json:"id"`
+	Text  string  `json:"text"`
+	Meta  Meta    `json:"meta"`
+	Score float64 `json:"score"`
 }
 
 func RunRerankModel(ctx context.Context, jsonData []byte) ([]byte, error) {
@@ -479,18 +529,18 @@ func MakePrompt(chunks []*types.Chunk, query string) string {
 	var builder strings.Builder
 
 	// Append introduction to guide the model's focus
-	builder.WriteString("You are a personal chat assistant and you have to answer the following user query: ")
+	builder.WriteString("Answer the following question as concisely as possible: ")
 	builder.WriteString(query)
 
 	if len(chunks) == 0 {
 		builder.WriteString(`\nNo relevant documents were found to answer the
-		user query. You may answer the query based on historical chat but you
+		question. You may answer the query question on the chat history but you
 		should prefer to say you don't know if you're not sure.`)
 		return builder.String()
 	}
 
-	builder.WriteString(`You may only use information from the following
-	documents to answer the user query. If none of them are relevant say you
+	builder.WriteString(`\n You may only use information from the following
+	documents to answer the question. If none of them are relevant say you
 	don't know. Answer directly and succintly, keeping a professional tone`)
 
 	// Loop through each data chunk and append it followed by a newline

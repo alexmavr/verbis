@@ -213,5 +213,5 @@ if not query or not passages:
 rerank_request = RerankRequest(query=query, passages=passages)
 results = ranker.rerank(rerank_request)
 
-result = [result['id'] for result in results]
-print(json.dumps(result))
+# result = [result['id'] for result in results]
+print(json.dumps(results))

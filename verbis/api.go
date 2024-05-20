@@ -18,8 +18,7 @@ import (
 )
 
 var (
-	PromptLogFile        = ".verbis/logs/prompt.log" // Relative to home
-	MaxNumRerankedChunks = 3
+	PromptLogFile = ".verbis/logs/prompt.log" // Relative to home
 )
 
 type API struct {
@@ -417,10 +416,6 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rerankTime := time.Now()
-
-	if len(rerankedChunks) > MaxNumRerankedChunks {
-		rerankedChunks = rerankedChunks[:MaxNumRerankedChunks]
-	}
 
 	llmPrompt := MakePrompt(rerankedChunks, promptReq.Prompt)
 	log.Printf("LLM Prompt: %s", llmPrompt)
