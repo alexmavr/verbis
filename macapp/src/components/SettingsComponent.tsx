@@ -54,7 +54,7 @@ const SettingsComponent: React.FC<Props> = ({ navigate, navigateBack }) => {
               try {
                 let conn_id = await google_init();
                 await google_auth_setup(conn_id);
-                navigate(AppScreen.PROMPT);
+                navigate(AppScreen.CHAT);
               } catch (e) {
                 console.error("could not install: ", e);
               } finally {

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import WelcomeComponent from "./WelcomeComponent";
 import ChatComponent from "./ChatComponent";
-import ConnectorsComponent from "./ConnectorsComponent";
 import { AppScreen } from "../types";
 import SettingsComponent from "./SettingsComponent";
 
@@ -25,10 +24,7 @@ export default function () {
         {currentScreen == AppScreen.WELCOME && (
           <WelcomeComponent navigate={navigateToScreen} />
         )}
-        {/* {currentScreen === AppScreen.GOOGLE_INIT && (
-          <ConnectorsComponent navigate={navigateToScreen} />
-        )} */}
-        {currentScreen === AppScreen.PROMPT && (
+        {currentScreen === AppScreen.CHAT && (
           <ChatComponent navigate={navigateToScreen} />
         )}
         {currentScreen === AppScreen.SETTINGS && (

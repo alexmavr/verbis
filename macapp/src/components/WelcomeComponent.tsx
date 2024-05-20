@@ -17,9 +17,9 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
         const response = await axios.get("http://localhost:8081/health");
         const data = response.data;
 
-        if (data.boot_state === 'generating') {
+        if (data.boot_state === "generating") {
           setLoading(false); // Turn off spinner on successful response
-          navigate(AppScreen.PROMPT); // Redirect to the prompt screen
+          navigate(AppScreen.CHAT); // Redirect to the prompt screen
         } else {
           setTimeout(checkHealth, 3000); // Retry after 3 seconds if the request fails
         }
@@ -54,7 +54,7 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
               Let's get you up and running.
             </p>
             <button
-              onClick={() => navigate(AppScreen.PROMPT)}
+              onClick={() => navigate(AppScreen.CHAT)}
               className="no-drag rounded-dm mx-auto my-8 rounded-md bg-black px-4 py-2 text-sm text-white hover:brightness-110"
             >
               Continue
