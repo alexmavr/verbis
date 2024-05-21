@@ -41,7 +41,10 @@ type BootContext struct {
 }
 
 type Timers struct {
-	StartTime time.Time
+	StartTime   time.Time
+	OnboardTime time.Time
+	SyncingTime time.Time
+	GenTime     time.Time
 }
 
 func NewBootContext(ctx context.Context) *BootContext {
@@ -164,6 +167,7 @@ func BootOnboard() (*BootContext, error) {
 	}()
 
 	bootCtx.State = BootStateOnboard
+	bootCtx.OnboardTime = time.Now()
 	return bootCtx, nil
 }
 
@@ -295,6 +299,7 @@ func BootSyncing(ctx *BootContext) error {
 	go ctx.Syncer.Run(ctx)
 
 	ctx.State = BootStateSyncing
+	ctx.SyncingTime = time.Now()
 	return nil
 }
 
@@ -324,8 +329,6 @@ func BootGen(ctx *BootContext) error {
 	log.Print(string(rerankOutput))
 	log.Print("Rerank model loaded successfully")
 
-	endTime := time.Now()
-
 	// Identify user to posthog
 	systemStats, err := getSystemStats()
 	if err != nil {
@@ -343,12 +346,16 @@ func BootGen(ctx *BootContext) error {
 		log.Fatalf("Failed to enqueue identify event: %s\n", err)
 	}
 
+	ctx.GenTime = time.Now()
 	err = ctx.PosthogClient.Enqueue(posthog.Capture{
 		DistinctId: ctx.PosthogDistinctID,
 		Event:      "Started",
 		Properties: posthog.NewProperties().
 			// TODO: connector states
-			Set("start_duration", endTime.Sub(ctx.StartTime).String()),
+			Set("boot_total_duration", ctx.GenTime.Sub(ctx.StartTime).String()).
+			Set("boot_onboard_duration", ctx.OnboardTime.Sub(ctx.StartTime).String()).
+			Set("boot_syncing_duration", ctx.SyncingTime.Sub(ctx.OnboardTime).String()).
+			Set("boot_gen_duration", ctx.GenTime.Sub(ctx.SyncingTime).String()),
 	})
 	if err != nil {
 		log.Fatalf("Failed to enqueue event: %s\n", err)
