@@ -1,11 +1,10 @@
-import { getCurrentWindow } from "@electron/remote";
 import { PaperAirplaneIcon, PencilSquareIcon } from "@heroicons/react/24/solid";
 import React, { useEffect, useRef, useState } from "react";
 import { generate } from "../client";
 import { CogIcon } from "@heroicons/react/24/solid";
-import SettingsComponent from "./SettingsComponent";
 import GDriveLogo from "../../assets/connectors/gdrive.svg";
 import { AppScreen, ResultSource } from "../types";
+import ThemeSwitcher from "./ThemeSwitcher";
 
 interface Props {
   navigate: (screen: AppScreen) => void;
@@ -159,15 +158,16 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
           </button>
         </div>
         <div className="fixed right-4 top-4">
+          <ThemeSwitcher />
           <button onClick={() => navigate(AppScreen.SETTINGS)}>
             <CogIcon className="h-6 w-6" />
           </button>
         </div>
       </div>
       <div className="flex h-screen flex-col justify-between">
-        <h1 className="mt-4 text-center text-2xl tracking-tight text-gray-900">
+        {/* <h1 className="mt-4 text-center text-2xl tracking-tight text-gray-900">
           Prompt to your heart's desire
-        </h1>
+        </h1> */}
 
         {/* Conversation history */}
         {conversation.length > 0 && (

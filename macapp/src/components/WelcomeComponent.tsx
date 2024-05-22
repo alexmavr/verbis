@@ -38,7 +38,7 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
         <h1 className="m-4 text-2xl tracking-tight text-gray-900">
           Welcome to Verbis AI
         </h1>
-        <div className={`mt-4 ${loading ? "loading" : ""}`}>
+        <div className={`mt-4 ${loading ? "verbis-loading" : ""}`}>
           <VerbisIcon className="h-24 w-24" />
         </div>
         {loading ? (

@@ -37,14 +37,6 @@ body {
   -webkit-app-region: no-drag;
 }
 
-/* .blink {
-  -webkit-animation: 1s blink step-end infinite;
-  -moz-animation: 1s blink step-end infinite;
-  -ms-animation: 1s blink step-end infinite;
-  -o-animation: 1s blink step-end infinite;
-  animation: 1s blink step-end infinite;
-} */
-
 spinner {
   display: flex;
   justify-content: center;
@@ -133,15 +125,15 @@ spinner {
   }
 }
 
-.loading .triangle1 {
+.verbis-loading .triangle1 {
   animation: colorCycle 1.5s infinite, pulse 1.5s infinite;
 }
 
-.loading .triangle2 {
+.verbis-loading .triangle2 {
   animation: colorCycle 1.5s infinite 0.5s, pulse 1.5s infinite 0.5s;
   /* delay = 2s / 3 */
 }
-.loading .triangle3 {
+.verbis-loading .triangle3 {
   animation: colorCycle 1.5s infinite 1s, pulse 1.5s infinite 1s;
   /* delay = (2s / 3) * 2 */
 }

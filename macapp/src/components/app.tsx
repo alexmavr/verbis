@@ -20,7 +20,7 @@ export default function () {
 
   return (
     <div className="drag">
-      <div className="mx-auto flex min-h-screen w-full flex-col justify-between bg-slate-100 px-4">
+      <div className="mx-auto flex min-h-screen w-full flex-col justify-between px-4">
         {currentScreen == AppScreen.WELCOME && (
           <WelcomeComponent navigate={navigateToScreen} />
         )}
