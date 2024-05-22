@@ -3,6 +3,7 @@ import WelcomeComponent from "./WelcomeComponent";
 import ChatComponent from "./ChatComponent";
 import { AppScreen } from "../types";
 import SettingsComponent from "./SettingsComponent";
+import NavbarComponent from "./NavbarComponent";
 
 export default function () {
   const [currentScreen, setCurrentScreen] = useState<AppScreen>(
@@ -20,6 +21,13 @@ export default function () {
 
   return (
     <div className="drag">
+      {currentScreen != AppScreen.WELCOME && (
+        <NavbarComponent
+          navigate={navigateToScreen}
+          navigateBack={navigateBack}
+          currentScreen={currentScreen}
+        />
+      )}
       <div className="mx-auto flex min-h-screen w-full flex-col justify-between px-4">
         {currentScreen == AppScreen.WELCOME && (
           <WelcomeComponent navigate={navigateToScreen} />

@@ -38,11 +38,6 @@ const SettingsComponent: React.FC<Props> = ({ navigate, navigateBack }) => {
 
   return (
     <div>
-      <div className="fixed right-4 top-4">
-        <button onClick={() => navigateBack()}>
-          <XMarkIcon className="h-6 w-6" />
-        </button>
-      </div>
       <div className="flex h-screen flex-col justify-between">
         <h1 className="mt-4 text-center text-2xl tracking-tight text-gray-900">
           Settings

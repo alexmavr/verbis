@@ -151,33 +151,18 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
 
   return (
     <>
-      <div>
-        <div className="fixed left-4 top-4">
-          <button onClick={() => startNewConversation()}>
-            <PencilSquareIcon className="h-6 w-6" />
-          </button>
-        </div>
-        <div className="fixed right-4 top-4">
-          <ThemeSwitcher />
-          <button onClick={() => navigate(AppScreen.SETTINGS)}>
-            <CogIcon className="h-6 w-6" />
-          </button>
-        </div>
+      <div className="fixed left-4 top-4">
+        <button onClick={() => startNewConversation()}>
+          <PencilSquareIcon className="h-6 w-6" />
+        </button>
       </div>
-      <div className="flex h-screen flex-col justify-between">
-        {/* <h1 className="mt-4 text-center text-2xl tracking-tight text-gray-900">
-          Prompt to your heart's desire
-        </h1> */}
-
+      <div className="">
         {/* Conversation history */}
         {conversation.length > 0 && (
-          <div
-            ref={conversationContainer}
-            className="mt-5 overflow-auto overflow-y-auto pb-20 pr-2"
-          >
+          <div ref={conversationContainer} className="">
             {conversation.map((item, index) => (
-              <div key={index} className={`mb-1 rounded p-1 ${item.role}`}>
-                <div className="p-2">
+              <div key={index} className="${item.role} mb-1 rounded p-1">
+                <div className="">
                   {item.content}
                   {item.hasOwnProperty("sources") &&
                     item.sources.map(

@@ -51,24 +51,6 @@ spinner {
   color: black;
 }
 
-.conversation-container {
-  /* max-height: 300px; */
-  overflow-y: auto;
-  /* border: 1px solid #ccc; */
-  /* padding: 10px; */
-  margin-top: 20px;
-}
-
-.user {
-  align-self: flex-end;
-  background-color: #dcf8c6;
-}
-
-.assistant {
-  align-self: flex-start;
-  background-color: #ebebeb;
-}
-
 @keyframes blink {
   from,
   to {

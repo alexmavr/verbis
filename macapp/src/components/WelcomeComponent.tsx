@@ -35,16 +35,12 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
   return (
     <>
       <div className="flex h-screen flex-col items-center justify-center text-center">
-        <h1 className="m-4 text-2xl tracking-tight text-gray-900">
-          Welcome to Verbis AI
-        </h1>
+        <h1 className="m-4 text-2xl tracking-tight">Welcome to Verbis AI</h1>
         <div className={`mt-4 ${loading ? "verbis-loading" : ""}`}>
           <VerbisIcon className="h-24 w-24" />
         </div>
         {loading ? (
-          <p className="mx-auto mt-8 w-[65%] text-gray-700">
-            Setting things up...
-          </p>
+          <p className="mx-auto mt-8 w-[65%]">Setting things up...</p>
         ) : (
           <>
             {/* TODO: Unreachable code if we auto redirect to Prompt screen on load. Clean up */}
