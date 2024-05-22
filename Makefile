@@ -69,7 +69,7 @@ dist/rerank:
 		python3 -OO -m PyInstaller --onedir script/rerank.py --specpath dist/ \
 	)
 
-verbis: dist/rerank dist/weaviate dist/ollama dist/parse dist/pdftotext
+verbis: dist/rerank dist/weaviate dist/ollama dist/pdftotext
 	# Ensure dist directory exists
 	mkdir -p $(DIST_DIR)
 	# Modelfile is needed for any custom model execution
@@ -78,7 +78,7 @@ verbis: dist/rerank dist/weaviate dist/ollama dist/parse dist/pdftotext
 	echo "$(LDFLAGS)"
 	pushd verbis && go build -ldflags="$(LDFLAGS)" -o ../$(DIST_DIR)/verbis . && popd
 
-macapp: verbis dist/ollama dist/weaviate dist/rerank dist/parse
+macapp: verbis dist/ollama dist/weaviate dist/rerank
 	pushd macapp && npm install && npm run package && popd
 
 builder-env:
