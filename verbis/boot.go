@@ -22,6 +22,10 @@ import (
 	"github.com/verbis-ai/verbis/verbis/util"
 )
 
+const (
+	WeaviatePersistDir = ".verbis/synced_data"
+)
+
 type BootState string
 
 const (
@@ -130,6 +134,11 @@ func BootOnboard() (*BootContext, error) {
 	ollamaPath := filepath.Join(path, util.OllamaFile)
 	weaviatePath := filepath.Join(path, util.WeaviateFile)
 
+	weaviatePersistDir, err := GetWeaviatePersistDir()
+	if err != nil {
+		log.Fatalf("Failed to get Weaviate persist directory: %s\n", err)
+	}
+
 	commands := []CmdSpec{
 		{
 			ollamaPath,
@@ -141,7 +150,7 @@ func BootOnboard() (*BootContext, error) {
 			[]string{"--host", "0.0.0.0", "--port", "8088", "--scheme", "http"},
 			[]string{
 				"LIMIT_RESOURCES=true",
-				"PERSISTENCE_DATA_PATH=/tmp/verbis",
+				"PERSISTENCE_DATA_PATH=" + weaviatePersistDir,
 				"AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true",
 			},
 		},
@@ -386,6 +395,15 @@ func waitForWeaviate(ctx context.Context) error {
 			return fmt.Errorf("context cancelled during wait: %w", ctx.Err())
 		}
 	}
+}
+
+func GetWeaviatePersistDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("unable to get user home directory: %w", err)
+	}
+	return filepath.Join(home, WeaviatePersistDir), nil
+
 }
 
 func Halt(bootCtx *BootContext, sigChan chan os.Signal, cancel context.CancelFunc) {
