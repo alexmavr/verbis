@@ -153,40 +153,65 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
     <>
       <div className="fixed left-4 top-4">
         <button onClick={() => startNewConversation()}>
-          <PencilSquareIcon className="h-6 w-6" />
+          <PencilSquareIcon className="h-5 w-5" />
         </button>
       </div>
-      <div className="">
+      <div className="mt-20">
         {/* Conversation history */}
         {conversation.length > 0 && (
           <div ref={conversationContainer} className="">
             {conversation.map((item, index) => (
-              <div key={index} className="${item.role} mb-1 rounded p-1">
-                <div className="">
-                  {item.content}
-                  {item.hasOwnProperty("sources") &&
-                    item.sources.map(
-                      (source: ResultSource, sourceIndex: number) => (
-                        <div key={sourceIndex} className="flex items-center">
-                          <GDriveLogo className="mr-2 h-4 w-4" />
-                          <a
-                            href={source.url}
-                            target="none"
-                            className="mr-1 text-blue-600 underline visited:text-purple-600 hover:text-blue-800"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              require("electron").shell.openExternal(
-                                source.url
-                              );
-                            }}
-                          >
-                            {truncateString(source.title, 30)}
-                          </a>
+              <div key={index} className={`${item.role}`}>
+                {item.role === "user" ? (
+                  // User message
+                  <div className="flex justify-end">
+                    <div className="card w-96 border-1 bg-base-100">
+                      <div className="card-body !p-4">
+                        <p>{item.content}</p>
+                        <div className="card-actions justify-end">
+                          {/* TODO: Feedback actions */}
                         </div>
-                      )
-                    )}
-                </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  // Assitant message
+                  <div>
+                    <div className="avatar">
+                      {/* <div className="w-12 rounded-full">
+                        <img src="https://img.daisyui.com/images/stock/photo-1534528741775-53994a69daeb.jpg" />
+                      </div> */}
+                    </div>
+                    <div className="">
+                      {item.content}
+                      {item.hasOwnProperty("sources") &&
+                        item.sources.map(
+                          (source: ResultSource, sourceIndex: number) => (
+                            <div
+                              key={sourceIndex}
+                              className="flex items-center"
+                            >
+                              <GDriveLogo className="mr-2 h-4 w-4" />
+                              <a
+                                href={source.url}
+                                target="none"
+                                className="mr-1 text-blue-600 underline visited:text-purple-600 hover:text-blue-800"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  require("electron").shell.openExternal(
+                                    source.url
+                                  );
+                                }}
+                              >
+                                {truncateString(source.title, 30)}
+                              </a>
+                            </div>
+                          )
+                        )}
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

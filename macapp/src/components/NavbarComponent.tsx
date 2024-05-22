@@ -16,7 +16,7 @@ const NavbarComponent: React.FC<Props> = ({
   currentScreen,
 }) => {
   return (
-    <div className="navbar bg-base-100">
+    <div className="navbar fixed border-b bg-base-100 px-2 py-0">
       <div className="navbar-start"></div>
       <div className="navbar-center">
         <VerbisIcon className="h-6 w-6" />
