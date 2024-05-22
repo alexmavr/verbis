@@ -37,15 +37,6 @@ body {
   -webkit-app-region: no-drag;
 }
 
-/* A button that contrasts with a white background on a settings page */
-.sync-button {
-  background-color: #4a5568;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 5px;
-}
-
 /* .blink {
   -webkit-animation: 1s blink step-end infinite;
   -moz-animation: 1s blink step-end infinite;

@@ -70,7 +70,7 @@ const SettingsComponent: React.FC<Props> = ({ navigate, navigateBack }) => {
             Your browser will open to configure the OAuth credentials.
           </p>
         </div>
-        <button className="sync-button" onClick={force_sync}>
+        <button className="btn-neutral btn" onClick={force_sync}>
           Force Sync
         </button>
         {Object.values(connectorList).map((connector, index) => (

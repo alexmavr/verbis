@@ -46,6 +46,7 @@
     "chmodr": "^1.2.0",
     "copy-webpack-plugin": "^11.0.0",
     "css-loader": "^6.8.1",
+    "daisyui": "^4.11.1",
     "electron": "25.9.2",
     "eslint": "^8.43.0",
     "eslint-plugin-import": "^2.27.5",
