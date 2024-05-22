@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from "react";
-import { SunIcon, MoonIcon } from "@heroicons/react/24/solid";
-
-type Theme = "light" | "dark" | "system";
+import React, { useState, useEffect, useRef } from "react";
 
 const ThemeSwitcher: React.FC = () => {
+  // TODO - when theme changed, persist in local storage and respect for subsequent pages and sections.
+
   return (
     <label className="swap swap-rotate">
       {/* this hidden checkbox controls the state */}
