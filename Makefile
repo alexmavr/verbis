@@ -69,19 +69,6 @@ dist/rerank:
 		python3 -OO -m PyInstaller --onedir script/rerank.py --specpath dist/ \
 	)
 
-dist/parse:
-	( \
-		export PATH="$(pyenv root)/shims:$(PATH)"; \
-		source ~/.zshrc || true; \
-		eval "$$(pyenv init --path)"; \
-		eval "$$(pyenv init -)"; \
-		eval "$$(pyenv virtualenv-init -)"; \
-		pyenv activate $(VENV_NAME); \
-		pyenv local $(VENV_NAME); \
-		python3 -OO -m PyInstaller script/parse.spec --distpath dist/ \
-	)
-
-
 verbis: dist/rerank dist/weaviate dist/ollama dist/parse dist/pdftotext
 	# Ensure dist directory exists
 	mkdir -p $(DIST_DIR)

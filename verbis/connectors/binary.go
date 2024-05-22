@@ -43,9 +43,8 @@ func ParseBinaryFile(ctx context.Context, request *ParseRequest) (string, error)
 	}
 
 	path := filepath.Join(distPath, pdfToTextPath)
-	cmd := exec.CommandContext(ctx, path, "-layout", request.Path, "-")
+	cmd := exec.CommandContext(ctx, path, "-simple", request.Path, "-")
 	output, err := cmd.CombinedOutput()
-	log.Print(string(output))
 	if err != nil {
 		log.Print(string(output))
 		return "", fmt.Errorf("error executing script: %v", err)

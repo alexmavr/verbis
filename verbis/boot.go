@@ -140,6 +140,7 @@ func BootOnboard() (*BootContext, error) {
 			weaviatePath,
 			[]string{"--host", "0.0.0.0", "--port", "8088", "--scheme", "http"},
 			[]string{
+				"LIMIT_RESOURCES=true",
 				"PERSISTENCE_DATA_PATH=/tmp/verbis",
 				"AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true",
 			},
