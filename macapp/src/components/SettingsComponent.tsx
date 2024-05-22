@@ -45,7 +45,7 @@ const SettingsComponent: React.FC<Props> = ({ navigate, navigateBack }) => {
       </div>
       <div className="flex h-screen flex-col justify-between">
         <h1 className="mt-4 text-center text-2xl tracking-tight text-gray-900">
-          Settings Screen
+          Settings
         </h1>
         <div className="mx-auto">
           <h2>Google Setup</h2>

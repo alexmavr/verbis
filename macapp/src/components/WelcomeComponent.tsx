@@ -34,24 +34,22 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
 
   return (
     <>
-      {/* <div className="fixed right-4 top-4">
-        <button onClick={() => navigate(AppScreen.SETTINGS)}>
-          <CogIcon className="h-6 w-6" />
-        </button>
-      </div> */}
       <div className="flex h-screen flex-col items-center justify-center text-center">
-        {/* <h1 className="m-4 text-2xl tracking-tight text-gray-900">
-          Welcome to Verbis
-        </h1> */}
+        <h1 className="m-4 text-2xl tracking-tight text-gray-900">
+          Welcome to Verbis AI
+        </h1>
         <div className={`mt-4 ${loading ? "loading" : ""}`}>
           <VerbisIcon className="h-24 w-24" />
         </div>
         {loading ? (
-          <div className="spinner mt-8">Verbis is starting...</div>
+          <p className="mx-auto mt-8 w-[65%] text-gray-700">
+            Setting things up...
+          </p>
         ) : (
           <>
-            <p className="mx-auto w-[65%] text-sm text-gray-400">
-              Let's get you up and running.
+            {/* TODO: Unreachable code if we auto redirect to Prompt screen on load. Clean up */}
+            <p className="mx-auto mt-8 w-[65%] text-sm text-gray-400">
+              We're ready for you!
             </p>
             <button
               onClick={() => navigate(AppScreen.CHAT)}
