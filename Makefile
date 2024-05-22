@@ -11,7 +11,7 @@ OLLAMA_BIN := ollama-darwin
 OLLAMA_URL := https://github.com/ollama/ollama/releases/download/$(OLLAMA_VERSION)/$(OLLAMA_BIN)
 
 # Builder environment
-PYTHON_VERSION := 3.11.9
+PYTHON_VERSION := 3.12
 VENV_NAME := verbis-dev
 
 PACKAGE := main
