@@ -19,6 +19,8 @@ const config: ForgeConfig = {
       "../dist/verbis",
       "../dist/ollama",
       "../dist/weaviate",
+      "../dist/lib",
+      "../dist/pdftotext",
       "../dist/credentials.json",
       "../dist/Modelfile.custom-mistral",
       "../dist/rerank",

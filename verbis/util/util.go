@@ -5,6 +5,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 )
 
 var (
@@ -62,4 +64,17 @@ func binariesPresent(path string) error {
 	}
 
 	return nil
+}
+
+func CleanWhitespace(text string) string {
+	// The UTF-8 BOM is sometimes present in text files, and should be removed
+	bom := []byte{0xEF, 0xBB, 0xBF}
+	text = strings.TrimPrefix(text, string(bom))
+
+	// Replace internal sequences of whitespace with a single space
+	spacePattern := regexp.MustCompile(`\s+`)
+	text = spacePattern.ReplaceAllString(text, " ")
+	// Trim leading and trailing whitespace
+	// If the initial text was all whitespace, it should return an empty string
+	return strings.TrimSpace(text)
 }

@@ -275,11 +275,14 @@ func (g *GoogleDriveConnector) listFiles(ctx context.Context, service *drive.Ser
 			} else if file.MimeType == "application/vnd.google-apps.spreadsheet" {
 				content, err = exportFile(service, file.Id, "application/csv")
 			} else {
-				//content, err = downloadFile(service, file.Id)
-				log.Printf("binary file found: %s with mimeType: %s", file.Name, file.MimeType)
+				content, err = downloadAndParseBinaryFile(ctx, service, file)
+				if err != nil {
+					log.Printf("Error processing binary file %s: %v", file.Name, err)
+					continue
+				}
 			}
 			if err != nil {
-				log.Printf("Error processing file %s: %v", file.Name, err)
+				log.Printf("Error exporting file %s: %v", file.Name, err)
 				continue
 			}
 
@@ -338,20 +341,6 @@ func (g *GoogleDriveConnector) listFiles(ctx context.Context, service *drive.Ser
 	return nil
 }
 
-// TODO: download PDFs and parse with unstructured
-func downloadFile(service *drive.Service, fileId string) (string, error) {
-	resp, err := service.Files.Get(fileId).Download()
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
-}
-
 func exportFile(service *drive.Service, fileId string, mimeType string) (string, error) {
 	resp, err := service.Files.Export(fileId, mimeType).Download()
 	if err != nil {
@@ -363,4 +352,69 @@ func exportFile(service *drive.Service, fileId string, mimeType string) (string,
 		return "", err
 	}
 	return string(data), nil
+}
+
+func downloadFile(service *drive.Service, fileId string) (string, error) {
+	resp, err := service.Files.Get(fileId).Download()
+	if err != nil {
+		return "", fmt.Errorf("failed to download file: %v", err)
+	}
+	defer resp.Body.Close()
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get user home directory: %v", err)
+	}
+
+	tempDir := filepath.Join(homeDir, ".verbis", "tmp")
+	err = os.MkdirAll(tempDir, os.ModePerm)
+	if err != nil {
+		return "", fmt.Errorf("failed to create temporary directory: %v", err)
+	}
+
+	tempFilePath := filepath.Join(tempDir, fileId)
+	outFile, err := os.Create(tempFilePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to create temporary file: %v", err)
+	}
+	defer outFile.Close()
+
+	_, err = io.Copy(outFile, resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to write file to disk: %v", err)
+	}
+
+	return tempFilePath, nil
+}
+
+func downloadAndParseBinaryFile(ctx context.Context, service *drive.Service, file *drive.File) (string, error) {
+	_, ok := SupportedMimeTypes[file.MimeType]
+	if !ok {
+		log.Printf("Unsupported MIME type: %s", file.MimeType)
+		return "", nil
+	}
+	log.Printf("Processing binary file: %s", file.Name)
+
+	tempFilePath, err := downloadFile(service, file.Id)
+	if err != nil {
+		return "", fmt.Errorf("failed to download file: %v", err)
+	}
+	log.Printf("Finished downloading binary file: %s", file.Name)
+
+	request := &ParseRequest{
+		Type: file.MimeType,
+		Path: tempFilePath,
+	}
+	content, err1 := ParseBinaryFile(ctx, request)
+	err2 := os.Remove(tempFilePath) // Delete the file after processing
+	log.Printf("Finished parsing binary file %s", file.Name)
+
+	if err1 != nil {
+		return "", fmt.Errorf("failed to parse binary file: %v", err)
+	}
+	if err2 != nil {
+		log.Printf("Error deleting file %s: %v", tempFilePath, err)
+	}
+
+	return content, nil
 }

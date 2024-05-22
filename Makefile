@@ -1,5 +1,7 @@
 .PHONY: build verbis macapp 
 
+SHELL=/bin/zsh
+
 WEAVIATE_VERSION := v1.25.0
 OLLAMA_VERSION := v0.1.32
 DIST_DIR := ./dist
@@ -8,7 +10,9 @@ ZIP_FILE := weaviate-$(WEAVIATE_VERSION)-darwin-all.zip
 OLLAMA_BIN := ollama-darwin
 OLLAMA_URL := https://github.com/ollama/ollama/releases/download/$(OLLAMA_VERSION)/$(OLLAMA_BIN)
 
-VENV_DIR := .venv
+# Builder environment
+PYTHON_VERSION := 3.11.9
+VENV_NAME := verbis-dev
 
 PACKAGE := main
 
@@ -47,13 +51,38 @@ dist/weaviate:
 	# Remove the temporary directory and the zip file
 	rm -rf $(TMP_DIR)
 
+dist/pdftotext:
+	brew install poppler
+	mkdir -p dist/pdftotext
+	mkdir -p dist/lib
+	cp /opt/homebrew/bin/pdftotext dist/pdftotext/pdftotext
+	cp /opt/homebrew/lib/libpoppler.136.dylib dist/lib/libpoppler.136.dylib
+
 dist/rerank:
 	( \
-		source $(shell pwd)/.venv/bin/activate; \
+		export PATH="$(pyenv root)/shims:$(PATH)"; \
+		source ~/.zshrc || true; \
+		eval "$$(pyenv init --path)"; \
+		eval "$$(pyenv init -)"; \
+		eval "$$(pyenv virtualenv-init -)"; \
+		pyenv activate $(VENV_NAME); \
 		python3 -OO -m PyInstaller --onedir script/rerank.py --specpath dist/ \
 	)
 
-verbis: dist/rerank dist/weaviate dist/ollama
+dist/parse:
+	( \
+		export PATH="$(pyenv root)/shims:$(PATH)"; \
+		source ~/.zshrc || true; \
+		eval "$$(pyenv init --path)"; \
+		eval "$$(pyenv init -)"; \
+		eval "$$(pyenv virtualenv-init -)"; \
+		pyenv activate $(VENV_NAME); \
+		pyenv local $(VENV_NAME); \
+		python3 -OO -m PyInstaller script/parse.spec --distpath dist/ \
+	)
+
+
+verbis: dist/rerank dist/weaviate dist/ollama dist/parse dist/pdftotext
 	# Ensure dist directory exists
 	mkdir -p $(DIST_DIR)
 	# Modelfile is needed for any custom model execution
@@ -62,19 +91,25 @@ verbis: dist/rerank dist/weaviate dist/ollama
 	echo "$(LDFLAGS)"
 	pushd verbis && go build -ldflags="$(LDFLAGS)" -o ../$(DIST_DIR)/verbis . && popd
 
-macapp: verbis dist/ollama dist/weaviate dist/rerank
+macapp: verbis dist/ollama dist/weaviate dist/rerank dist/parse
 	pushd macapp && npm install && npm run package && popd
 
-# If we need to build llama.cpp, need Xcode
 builder-env:
-	python3 -m venv $(VENV_DIR)
+	brew install pyenv pyenv-virtualenv
+	pyenv install -s $(PYTHON_VERSION)
+	# Properly initialize pyenv and pyenv-virtualenv in a subshell
 	( \
-		source $(shell pwd)/.venv/bin/activate; \
-		pip3 install --upgrade pip; \
-		pip3 install poetry; \
-		pushd script; \
+		export PATH="$(pyenv root)/shims:$(PATH)"; \
+		source ~/.zshrc || true; \
+		eval "$$(pyenv init --path)"; \
+		eval "$$(pyenv init -)"; \
+		eval "$$(pyenv virtualenv-init -)"; \
+		pyenv virtualenv $(PYTHON_VERSION) $(VENV_NAME); \
+		pyenv activate $(VENV_NAME); \
+		pip install --upgrade pip; \
+		pip install poetry; \
+		cd script; \
 		poetry install; \
-		popd \
 	)
 
 clean:

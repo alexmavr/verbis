@@ -6,14 +6,13 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
-	"regexp"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/verbis-ai/verbis/verbis/connectors"
 	"github.com/verbis-ai/verbis/verbis/store"
 	"github.com/verbis-ai/verbis/verbis/types"
+	"github.com/verbis-ai/verbis/verbis/util"
 )
 
 const (
@@ -112,19 +111,6 @@ func (s *Syncer) Run(ctx context.Context) error {
 	}
 }
 
-func cleanWhitespace(text string) string {
-	// The UTF-8 BOM is sometimes present in text files, and should be removed
-	bom := []byte{0xEF, 0xBB, 0xBF}
-	text = strings.TrimPrefix(text, string(bom))
-
-	// Replace internal sequences of whitespace with a single space
-	spacePattern := regexp.MustCompile(`\s+`)
-	text = spacePattern.ReplaceAllString(text, " ")
-	// Trim leading and trailing whitespace
-	// If the initial text was all whitespace, it should return an empty string
-	return strings.TrimSpace(text)
-}
-
 func hash(text string) string {
 	h := sha256.New()
 	h.Write([]byte(text))
@@ -135,7 +121,7 @@ func chunkAdder(ctx context.Context, c types.Connector, chunkChan chan types.Chu
 	// TODO: hold buffer and add vectors in batches
 	for chunk := range chunkChan {
 		log.Printf("Received chunk of length %d\n", len(chunk.Text))
-		saneChunk := cleanWhitespace(chunk.Text)
+		saneChunk := util.CleanWhitespace(chunk.Text)
 		log.Printf("Sanitized chunk to length %d\n", len(saneChunk))
 		if len(saneChunk) < MinChunkSize {
 			log.Printf("Skipping short chunk: %s\n", saneChunk)
