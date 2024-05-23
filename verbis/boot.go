@@ -143,7 +143,11 @@ func BootOnboard() (*BootContext, error) {
 		{
 			ollamaPath,
 			[]string{"serve"},
-			[]string{"OLLAMA_KEEP_ALIVE=" + KeepAliveTime},
+			[]string{
+				"OLLAMA_KEEP_ALIVE=" + KeepAliveTime,
+				"OLLAMA_MAX_LOADED_MODELS=2",
+				"OLLAMA_NUM_PARALLEL=5",
+			},
 		},
 		{
 			weaviatePath,
