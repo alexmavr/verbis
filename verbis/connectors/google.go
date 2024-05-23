@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -250,6 +251,72 @@ func (g *GoogleDriveConnector) Sync(ctx context.Context, lastSync time.Time, res
 	}
 }
 
+func (g *GoogleDriveConnector) processFile(ctx context.Context, service *drive.Service, file *drive.File, resChan chan types.Chunk) {
+	var content string
+	var err error
+	if file.MimeType == "application/vnd.google-apps.document" {
+		content, err = exportFile(service, file.Id, "text/plain")
+	} else if file.MimeType == "application/vnd.google-apps.spreadsheet" {
+		content, err = exportFile(service, file.Id, "application/csv")
+	} else {
+		content, err = downloadAndParseBinaryFile(ctx, service, file)
+		if err != nil {
+			log.Printf("Error processing binary file %s: %v", file.Name, err)
+			return
+		}
+	}
+	if err != nil {
+		log.Printf("Error exporting file %s: %v", file.Name, err)
+		return
+	}
+
+	log.Printf("Document: %s, %s, %s", file.Name, file.CreatedTime, file.ModifiedTime)
+	createdAt, err := time.Parse(time.RFC3339, file.CreatedTime)
+	if err != nil {
+		log.Printf("Error parsing created time %s: %v", file.CreatedTime, err)
+		createdAt = time.Now()
+	}
+
+	updatedAt, err := time.Parse(time.RFC3339, file.ModifiedTime)
+	if err != nil {
+		log.Printf("Error parsing modified time %s: %v", file.ModifiedTime, err)
+		updatedAt = time.Now()
+	}
+
+	numChunks := 0
+	document := types.Document{
+		UniqueID:    file.Id,
+		Name:        file.Name,
+		SourceURL:   file.WebViewLink,
+		ConnectorID: g.ID(),
+		CreatedAt:   createdAt,
+		UpdatedAt:   updatedAt,
+	}
+
+	// TODO: ideally this should live at the top level but we need to refactor the syncer first
+	err = store.DeleteDocumentChunks(ctx, store.GetWeaviateClient(), document.UniqueID, g.ID())
+	if err != nil {
+		// Not a fatal error, just log it and leave the old chunks behind
+		log.Printf("Unable to delete chunks for document %s: %v", document.UniqueID, err)
+	}
+
+	// Split contents into chunks of MaxChunkSize characters
+	for i := 0; i < len(content); i += MaxChunkSize {
+		end := i + MaxChunkSize
+		if end > len(content) {
+			end = len(content)
+		}
+
+		// TODO: add chunk overlaps
+		chunk := types.Chunk{
+			Text:     content[i:end],
+			Document: document,
+		}
+		numChunks += 1
+		log.Printf("Processing chunk %d of document %s", numChunks, file.Name)
+		resChan <- chunk
+	}
+}
 func (g *GoogleDriveConnector) listFiles(ctx context.Context, service *drive.Service, lastSync time.Time, resChan chan types.Chunk) error {
 	pageToken := ""
 	for {
@@ -268,70 +335,16 @@ func (g *GoogleDriveConnector) listFiles(ctx context.Context, service *drive.Ser
 			return fmt.Errorf("unable to retrieve files: %v", err)
 		}
 
+		// Max parallelism is number of files per page (10)
+		wg := sync.WaitGroup{}
 		for _, file := range r.Files {
-			var content string
-			if file.MimeType == "application/vnd.google-apps.document" {
-				content, err = exportFile(service, file.Id, "text/plain")
-			} else if file.MimeType == "application/vnd.google-apps.spreadsheet" {
-				content, err = exportFile(service, file.Id, "application/csv")
-			} else {
-				content, err = downloadAndParseBinaryFile(ctx, service, file)
-				if err != nil {
-					log.Printf("Error processing binary file %s: %v", file.Name, err)
-					continue
-				}
-			}
-			if err != nil {
-				log.Printf("Error exporting file %s: %v", file.Name, err)
-				continue
-			}
-
-			log.Printf("Document: %s, %s, %s", file.Name, file.CreatedTime, file.ModifiedTime)
-			createdAt, err := time.Parse(time.RFC3339, file.CreatedTime)
-			if err != nil {
-				log.Printf("Error parsing created time %s: %v", file.CreatedTime, err)
-				createdAt = time.Now()
-			}
-
-			updatedAt, err := time.Parse(time.RFC3339, file.ModifiedTime)
-			if err != nil {
-				log.Printf("Error parsing modified time %s: %v", file.ModifiedTime, err)
-				updatedAt = time.Now()
-			}
-
-			numChunks := 0
-			document := types.Document{
-				UniqueID:    file.Id,
-				Name:        file.Name,
-				SourceURL:   file.WebViewLink,
-				ConnectorID: g.ID(),
-				CreatedAt:   createdAt,
-				UpdatedAt:   updatedAt,
-			}
-
-			// TODO: ideally this should live at the top level but we need to refactor the syncer first
-			err = store.DeleteDocumentChunks(ctx, store.GetWeaviateClient(), document.UniqueID, g.ID())
-			if err != nil {
-				// Not a fatal error, just log it and leave the old chunks behind
-				log.Printf("Unable to delete chunks for document %s: %v", document.UniqueID, err)
-			}
-
-			// Split contents into chunks of MaxChunkSize characters
-			for i := 0; i < len(content); i += MaxChunkSize {
-				end := i + MaxChunkSize
-				if end > len(content) {
-					end = len(content)
-				}
-
-				chunk := types.Chunk{
-					Text:     content[i:end],
-					Document: document,
-				}
-				numChunks += 1
-				log.Printf("Processing chunk %d of document %s", numChunks, file.Name)
-				resChan <- chunk
-			}
+			wg.Add(1)
+			go func(f *drive.File) {
+				defer wg.Done()
+				g.processFile(ctx, service, f, resChan)
+			}(file)
 		}
+		wg.Wait()
 
 		pageToken = r.NextPageToken
 		if pageToken == "" {

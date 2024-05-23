@@ -117,7 +117,12 @@ func hash(text string) string {
 	return base64.URLEncoding.EncodeToString(h.Sum(nil))
 }
 
-func chunkAdder(ctx context.Context, c types.Connector, chunkChan chan types.Chunk, doneChan chan struct{}) {
+type chunkCount struct {
+	numChunks    int
+	numDocuments int
+}
+
+func chunkAdder(ctx context.Context, c types.Connector, chunkChan chan types.Chunk, countChan chan chunkCount, doneChan chan struct{}) {
 	// TODO: hold buffer and add vectors in batches
 	for chunk := range chunkChan {
 		log.Printf("Received chunk of length %d\n", len(chunk.Text))
@@ -159,22 +164,69 @@ func chunkAdder(ctx context.Context, c types.Connector, chunkChan chan types.Chu
 		}
 		log.Printf("Added vectors")
 
-		state, err := c.Status(ctx)
-		if err != nil {
-			log.Printf("Failed to get status: %s\n", err)
-			continue
-		}
-		state.NumChunks += addResp.NumChunksAdded
-		state.NumDocuments += addResp.NumDocsAdded
-		err = c.UpdateConnectorState(ctx, state)
-		if err != nil {
-			log.Printf("Failed to update status: %s\n", err)
-			continue
+		countChan <- chunkCount{
+			numChunks:    addResp.NumChunksAdded,
+			numDocuments: addResp.NumDocsAdded,
 		}
 		log.Printf("Added vectors for chunk: %s\n", chunk.SourceURL)
 	}
+
 	log.Printf("Chunk channel closed")
 	close(doneChan)
+}
+
+func chunkCounter(ctx context.Context, c types.Connector, countChan chan chunkCount) {
+	updateEvery := 10
+
+	counts := []chunkCount{}
+	for count := range countChan {
+		counts = append(counts, count)
+		if len(counts) < updateEvery {
+			continue
+		}
+
+		numChunks := 0
+		numDocs := 0
+		for _, prevCount := range counts {
+			numChunks += prevCount.numChunks
+			numDocs += prevCount.numDocuments
+		}
+		counts = []chunkCount{}
+		state, err := c.Status(ctx)
+		if err != nil {
+			log.Printf("Failed to get status: %s\n", err)
+			return
+		}
+		state.NumChunks += numChunks
+		state.NumDocuments += numDocs
+		err = c.UpdateConnectorState(ctx, state)
+		if err != nil {
+			log.Printf("Failed to update status: %s\n", err)
+			return
+		}
+	}
+
+	if len(counts) == 0 {
+		return
+	}
+	numChunks := 0
+	numDocs := 0
+	for _, prevCount := range counts {
+		numChunks += prevCount.numChunks
+		numDocs += prevCount.numDocuments
+	}
+	state, err := c.Status(ctx)
+	if err != nil {
+		log.Printf("Failed to get status: %s\n", err)
+		return
+	}
+	state.NumChunks += numChunks
+	state.NumDocuments += numDocs
+	err = c.UpdateConnectorState(ctx, state)
+	if err != nil {
+		log.Printf("Failed to update status: %s\n", err)
+		return
+	}
 }
 
 func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *types.ConnectorState, errChan chan<- error) {
@@ -192,9 +244,11 @@ func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *ty
 	chunkChan := make(chan types.Chunk) // closed by Sync
 	errChanSync := make(chan error)     // closed by Sync
 	doneChan := make(chan struct{})     // closed by chunkAdder
+	countChan := make(chan chunkCount)  // closed by chunkCounter
 
 	// TODO: rewrite as sync waitgroup
-	go chunkAdder(ctx, c, chunkChan, doneChan)
+	go chunkAdder(ctx, c, chunkChan, countChan, doneChan)
+	go chunkCounter(ctx, c, countChan)
 	go c.Sync(ctx, state.LastSync, chunkChan, errChanSync)
 
 	select {

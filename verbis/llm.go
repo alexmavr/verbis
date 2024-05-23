@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -28,6 +29,12 @@ const (
 	MaxNumRerankedChunks      = 3
 	RerankNoResultScoreCutoff = 0.1
 	RerankSoloScoreCliff      = 0.2
+)
+
+var (
+	httpClient = &http.Client{
+		Timeout: 10 * time.Second,
+	}
 )
 
 func IsCustomModel(modelName string) bool {
@@ -569,4 +576,81 @@ func WritePromptLog(prompt string) error {
 	// Write the prompt to the file
 	_, err = file.WriteString("\n===\n" + prompt + "\n")
 	return err
+}
+
+// Struct to define the request payload
+type EmbedRequestPayload struct {
+	Model  string `json:"model"`
+	Prompt string `json:"prompt"`
+}
+
+// Struct to define the API response format
+type EmbedApiResponse struct {
+	Embedding []float32 `json:"embedding"`
+}
+
+// Function to call ollama model
+func EmbedFromModel(prompt string) (*EmbedApiResponse, error) {
+	// URL of the API endpoint
+	url := "http://localhost:11434/api/embeddings"
+
+	// Create the payload
+	payload := EmbedRequestPayload{
+		Model:  embeddingsModelName,
+		Prompt: prompt,
+	}
+
+	// Marshal the payload into JSON
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a new HTTP request
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, err
+	}
+
+	// Set the appropriate headers
+	req.Header.Set("Content-Type", "application/json")
+
+	maxRetries := 3
+	initialBackoff := 2 * time.Second
+	var response *http.Response
+	var responseData []byte
+	for i := 0; i < maxRetries; i++ {
+		// Make the HTTP request using the default client
+		response, err = httpClient.Do(req)
+		if err != nil {
+			// Check if the error is a timeout
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+				// Wait for a backoff period before retrying
+				time.Sleep(initialBackoff * time.Duration(i+1))
+				continue
+			}
+			return nil, err
+		}
+		defer response.Body.Close()
+
+		// Read the response body
+		responseData, err = io.ReadAll(response.Body)
+		if err != nil {
+			return nil, err
+		}
+		break
+	}
+
+	if response == nil {
+		return nil, errors.New("failed to get a response after retries")
+	}
+
+	// Unmarshal JSON data into ApiResponse struct
+	var apiResponse EmbedApiResponse
+	if err := json.Unmarshal(responseData, &apiResponse); err != nil {
+		return nil, err
+	}
+
+	// Return the structured response
+	return &apiResponse, nil
 }

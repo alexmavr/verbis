@@ -278,67 +278,6 @@ func pullModel(name string, stream bool) error {
 }
 
 // Struct to define the request payload
-type EmbedRequestPayload struct {
-	Model  string `json:"model"`
-	Prompt string `json:"prompt"`
-}
-
-// Struct to define the API response format
-type EmbedApiResponse struct {
-	Embedding []float32 `json:"embedding"`
-}
-
-// Function to call ollama model
-func EmbedFromModel(prompt string) (*EmbedApiResponse, error) {
-	// URL of the API endpoint
-	url := "http://localhost:11434/api/embeddings"
-
-	// Create the payload
-	payload := EmbedRequestPayload{
-		Model:  embeddingsModelName,
-		Prompt: prompt,
-	}
-
-	// Marshal the payload into JSON
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a new HTTP request
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, err
-	}
-
-	// Set the appropriate headers
-	req.Header.Set("Content-Type", "application/json")
-
-	// Make the HTTP request using the default client
-	client := &http.Client{}
-	response, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer response.Body.Close()
-
-	// Read the response body
-	responseData, err := io.ReadAll(response.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	// Unmarshal JSON data into ApiResponse struct
-	var apiResponse EmbedApiResponse
-	if err := json.Unmarshal(responseData, &apiResponse); err != nil {
-		return nil, err
-	}
-
-	// Return the structured response
-	return &apiResponse, nil
-}
-
-// Struct to define the request payload
 type RequestPayload struct {
 	Model     string              `json:"model"`
 	Messages  []types.HistoryItem `json:"messages"`
@@ -372,6 +311,7 @@ type StreamResponseHeader struct {
 }
 
 func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Start of handlePrompt")
 	startTime := time.Now()
 	var promptReq PromptRequest
 	defer r.Body.Close()
