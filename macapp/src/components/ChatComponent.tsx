@@ -151,21 +151,24 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
 
   return (
     <>
-      <div className="fixed left-4 top-4">
+      <div className="fixed left-5 top-5">
         <button onClick={() => startNewConversation()}>
-          <PencilSquareIcon className="h-5 w-5" />
+          <PencilSquareIcon className="h-6 w-6" />
         </button>
       </div>
-      <div className="mt-20">
+      <div
+        ref={conversationContainer}
+        className="mt-20 flex h-[calc(100vh-100px)] flex-col overflow-y-auto pb-20"
+      >
         {/* Conversation history */}
         {conversation.length > 0 && (
-          <div ref={conversationContainer} className="">
+          <div className="mr-4 mt-auto flex flex-col">
             {conversation.map((item, index) => (
               <div key={index} className={`${item.role}`}>
                 {item.role === "user" ? (
                   // User message
                   <div className="flex justify-end">
-                    <div className="card w-96 border-1 bg-base-100">
+                    <div className="card w-96 border-1 bg-base-200">
                       <div className="card-body !p-4">
                         <p>{item.content}</p>
                         <div className="card-actions justify-end">
@@ -176,13 +179,13 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
                   </div>
                 ) : (
                   // Assitant message
-                  <div>
-                    <div className="avatar">
-                      {/* <div className="w-12 rounded-full">
-                        <img src="https://img.daisyui.com/images/stock/photo-1534528741775-53994a69daeb.jpg" />
-                      </div> */}
-                    </div>
-                    <div className="">
+                  <div className="m-4">
+                    {/* <div className="avatar">
+                      <div className="w-12 rounded-full">
+                        <img src="file://../../assets/iconTemplate.png" />
+                      </div>
+                    </div> */}
+                    <div className="text-justify">
                       {item.content}
                       {item.hasOwnProperty("sources") &&
                         item.sources.map(
@@ -191,6 +194,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
                               key={sourceIndex}
                               className="flex items-center"
                             >
+                              {/* TODO: Render logo of source */}
                               <GDriveLogo className="mr-2 h-4 w-4" />
                               <a
                                 href={source.url}
