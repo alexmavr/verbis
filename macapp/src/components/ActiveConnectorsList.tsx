@@ -1,7 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { force_sync, list_connectors } from "../client";
 import GDriveLogo from "../../assets/connectors/gdrive.svg";
-import { ArrowPathIcon } from "@heroicons/react/24/solid";
+import {
+  ArrowPathIcon,
+  CheckCircleIcon,
+  ExclamationCircleIcon,
+} from "@heroicons/react/24/solid";
+import { formatDistanceToNow } from "date-fns";
 
 const appLogos = {
   googledrive: GDriveLogo,
@@ -39,12 +44,11 @@ const ActiveConnectorsList: React.FC = () => {
                 </label>
               </th> */}
               <th></th>
+              <th></th>
               <th>Connector</th>
               <th>Account</th>
               <th># Docs</th>
               <th># Chunks</th>
-              <th>Auth Valid</th>
-              <th>Syncing</th>
               <th>Last Sync</th>
             </tr>
           </thead>
@@ -56,6 +60,14 @@ const ActiveConnectorsList: React.FC = () => {
                     <input type="checkbox" className="checkbox" />
                   </label>
                 </th> */}
+                <td>
+                  {connector.auth_valid.toString()}
+                  {connector.auth_valid ? (
+                    <CheckCircleIcon className="h-5 w-5" />
+                  ) : (
+                    <ExclamationCircleIcon className="h-5 w-5" />
+                  )}
+                </td>
                 <td>
                   <button className="rounded-full" onClick={force_sync}>
                     <ArrowPathIcon
@@ -69,9 +81,11 @@ const ActiveConnectorsList: React.FC = () => {
                 <td>{connector.user.toString()}</td>
                 <td>{connector.num_documents}</td>
                 <td>{connector.num_chunks}</td>
-                <td>{connector.auth_valid.toString()}</td>
-                <td>{connector.syncing.toString()}</td>
-                <td>{connector.last_sync}</td>
+                <td>
+                  {formatDistanceToNow(new Date(connector.last_sync), {
+                    addSuffix: true,
+                  })}
+                </td>
               </tr>
             ))}
           </tbody>
