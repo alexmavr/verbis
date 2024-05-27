@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -24,6 +25,7 @@ import (
 
 const (
 	WeaviatePersistDir = ".verbis/synced_data"
+	masterLogPath      = ".verbis/logs/full.log"
 )
 
 type BootState string
@@ -42,6 +44,7 @@ type BootContext struct {
 	PosthogDistinctID string
 	PosthogClient     posthog.Client
 	Syncer            *Syncer
+	Logfile           *os.File
 }
 
 type Timers struct {
@@ -64,11 +67,27 @@ func NewBootContext(ctx context.Context) *BootContext {
 }
 
 func BootOnboard() (*BootContext, error) {
+	path, err := GetMasterLogDir()
+	if err != nil {
+		log.Fatalf("Failed to get master log directory: %s", err)
+	}
+
+	// Open a file for logging
+	logFile, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("Failed to open log file: %s", err)
+	}
+
+	os.Stderr = logFile
+	os.Stdout = logFile
+	log.SetOutput(logFile)
+
 	// Main context attacked to application runtime, everything in the
 	// background should terminate when cancelled
 	ctx, cancel := context.WithCancel(context.Background())
 
 	bootCtx := NewBootContext(ctx)
+	bootCtx.Logfile = logFile
 
 	// Define the commands to be executed
 	sigChan := make(chan os.Signal, 1)
@@ -127,7 +146,7 @@ func BootOnboard() (*BootContext, error) {
 		}
 	}()
 
-	path, err := util.GetDistPath()
+	path, err = util.GetDistPath()
 	if err != nil {
 		log.Fatalf("Failed to get dist path: %s\n", err)
 	}
@@ -161,7 +180,7 @@ func BootOnboard() (*BootContext, error) {
 	}
 
 	// Start subprocesses
-	startSubprocesses(ctx, commands)
+	startSubprocesses(ctx, commands, logFile, logFile)
 
 	err = waitForWeaviate(ctx)
 	if err != nil {
@@ -251,13 +270,13 @@ type CmdSpec struct {
 	Env  []string
 }
 
-func startSubprocesses(ctx context.Context, commands []CmdSpec) {
+func startSubprocesses(ctx context.Context, commands []CmdSpec, stdout *os.File, stderr *os.File) {
 	for _, cmdConfig := range commands {
 		go func(c CmdSpec) {
 			cmd := exec.Command(c.Name, c.Args...)
 			cmd.Env = append(os.Environ(), c.Env...)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
+			cmd.Stdout = stdout
+			cmd.Stderr = stderr
 
 			if err := cmd.Start(); err != nil {
 				log.Printf("Error starting command %s: %s\n", c.Name, err)
@@ -407,7 +426,6 @@ func GetWeaviatePersistDir() (string, error) {
 		return "", fmt.Errorf("unable to get user home directory: %w", err)
 	}
 	return filepath.Join(home, WeaviatePersistDir), nil
-
 }
 
 func Halt(bootCtx *BootContext, sigChan chan os.Signal, cancel context.CancelFunc) {
@@ -415,4 +433,30 @@ func Halt(bootCtx *BootContext, sigChan chan os.Signal, cancel context.CancelFun
 	cancel()
 	close(sigChan)
 	defer bootCtx.PosthogClient.Close()
+}
+
+func GetMasterLogDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("unable to get user home directory: %w", err)
+	}
+	return filepath.Join(home, masterLogPath), nil
+}
+
+type myWriter struct {
+	io.Writer
+}
+
+func (m *myWriter) Write(p []byte) (n int, err error) {
+	n, err = m.Writer.Write(p)
+
+	if flusher, ok := m.Writer.(interface{ Flush() }); ok {
+		flusher.Flush()
+	} else if syncer := m.Writer.(interface{ Sync() error }); ok {
+		// Preserve original error
+		if err2 := syncer.Sync(); err2 != nil && err == nil {
+			err = err2
+		}
+	}
+	return
 }
