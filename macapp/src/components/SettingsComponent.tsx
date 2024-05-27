@@ -8,6 +8,7 @@ import {
 } from "../client";
 import { XMarkIcon } from "@heroicons/react/24/solid";
 import { getCurrentWindow } from "@electron/remote";
+import ActiveConnectorsList from "./ActiveConnectorsList";
 import GDriveLogo from "../../assets/connectors/gdrive.svg";
 import DropboxLogo from "../../assets/connectors/dropbox.svg";
 import MSTeamsLogo from "../../assets/connectors/ms_teams.svg";
@@ -143,51 +144,17 @@ const AppCatalog: React.FC = () => {
   );
 };
 
-interface Props {
-  navigate: (screen: AppScreen) => void;
-  navigateBack: () => void;
-}
-
-const SettingsComponent: React.FC<Props> = ({ navigate, navigateBack }) => {
-  const [connectorList, setConnectorList] = useState([]);
-  const getConnectorList = async () => {
-    console.log("Getting connector list");
-    const response = await list_connectors();
-    setConnectorList(response);
-    try {
-    } catch (error) {
-      console.error("Failed to retrieve connectors:", error);
-    }
-  };
-
-  // Run on load
-  useEffect(() => {
-    // run once on load and then poll
-    getConnectorList();
-    const intervalId = setInterval(getConnectorList, 2000);
-
-    return () => clearInterval(intervalId);
-  }, []);
-
+const SettingsComponent: React.FC = () => {
   return (
     <div className=" mt-14 flex h-screen flex-col justify-between">
       <h1 className="mt-4 text-center text-xl tracking-tight text-gray-900">
-        Settings
+        Connected Apps
       </h1>
-      <button className="btn-primary btn" onClick={force_sync}>
-        Force Sync
-      </button>
-      {Object.values(connectorList).map((connector, index) => (
-        <div key={index} className="mb-2 border-b-2">
-          <h2>{connector.connector_type.toString()}</h2>
-          <h4>{connector.user.toString()} </h4>
-          <p>Auth Valid: {connector.auth_valid.toString()}</p>
-          <p>Syncing: {connector.syncing.toString()}</p>
-          <p>Last Sync: {connector.last_sync}</p>
-          <p>Number of Documents: {connector.num_documents}</p>
-          <p>Number of Chunks: {connector.num_chunks}</p>
-        </div>
-      ))}
+      <ActiveConnectorsList />
+      <h1 className="mt-4 text-center text-xl tracking-tight text-gray-900">
+        App Catalog
+      </h1>
+
       <AppCatalog />
     </div>
   );
