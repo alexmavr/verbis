@@ -151,7 +151,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
 
   return (
     <>
-      <div className="fixed left-5 top-5">
+      <div className="fixed left-5 top-5 z-50">
         <button onClick={() => startNewConversation()}>
           <PencilSquareIcon className="h-6 w-6" />
         </button>
