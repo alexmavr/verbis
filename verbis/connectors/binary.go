@@ -30,11 +30,6 @@ type ParseRequest struct {
 	Path string `json:"path"`
 }
 
-type UnstructuredChunk struct {
-	Index   int    `json:"index"`
-	Content string `json:"string"`
-}
-
 func ParseBinaryFile(ctx context.Context, request *ParseRequest) (string, error) {
 	// Execute the Python script and pass JSON data to stdin
 	distPath, err := util.GetDistPath()

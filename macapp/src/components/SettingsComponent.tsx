@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { AppScreen } from "../types";
 import {
-  google_auth_setup,
-  google_init,
-  force_sync,
-  list_connectors,
+  connector_auth_setup,
+  connector_init,
 } from "../client";
 import { XMarkIcon } from "@heroicons/react/24/solid";
 import { getCurrentWindow } from "@electron/remote";
@@ -29,8 +27,8 @@ const saasApps = [
     available: true,
     connect: async () => {
       try {
-        let conn_id = await google_init();
-        await google_auth_setup(conn_id);
+        let conn_id = await connector_init("googledrive");
+        await connector_auth_setup(conn_id);
       } catch (e) {
         console.error("could not install: ", e);
       } finally {
@@ -73,7 +71,18 @@ const saasApps = [
     name: "Gmail",
     logo: GmailLogo,
     description: "Gmail",
-    available: false,
+    available: true,
+    connect: async () => {
+      try {
+        let conn_id = await connector_init("gmail");
+        await connector_auth_setup(conn_id);
+      } catch (e) {
+        console.error("could not install: ", e);
+      } finally {
+        getCurrentWindow().show();
+        getCurrentWindow().focus();
+      }
+    },
   },
   {
     name: "Hubspot",

@@ -662,6 +662,10 @@ func DeleteDocumentChunks(ctx context.Context, client *weaviate.Client, uniqueID
 		return fmt.Errorf("unable to get connector state: %v", err)
 	}
 
+	if state == nil {
+		return fmt.Errorf("connector state not found, unable to update chunk count")
+	}
+
 	state.NumChunks = state.NumChunks - int(numDeletedChunks)
 	err = UpdateConnectorState(ctx, client, state)
 	if err != nil {

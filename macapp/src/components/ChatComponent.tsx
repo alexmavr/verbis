@@ -178,7 +178,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
                     </div>
                   </div>
                 ) : (
-                  // Assitant message
+                  // Assistant message
                   <div className="m-4">
                     {/* <div className="avatar">
                       <div className="w-12 rounded-full">

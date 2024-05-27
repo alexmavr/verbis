@@ -13,10 +13,10 @@ const verbis = app.isPackaged
   ? path.join(process.resourcesPath, "ollama")
   : path.resolve(process.cwd(), "..", "verbis");
 
-export async function google_init() {
+export async function connector_init(connector_name: string) {
   try {
     const response = await axios.get(
-      "http://localhost:8081/connectors/googledrive/init"
+      `http://localhost:8081/connectors/${connector_name}/init`
     );
     console.log("Google Init Response:", response.data);
     // Additional logic based on response
@@ -27,15 +27,15 @@ export async function google_init() {
   }
 }
 
-export async function google_auth_setup(connector_id: string) {
+export async function connector_auth_setup(connector_id: string) {
   try {
     const response = await axios.get(
       `http://localhost:8081/connectors/${connector_id}/auth_setup`
     );
-    console.log("Google Auth Setup Response:", response.data);
+    console.log("Connector Auth Setup Response:", response.data);
     // Additional logic based on response
   } catch (error) {
-    console.error("Error in Google Auth Setup:", error);
+    console.error("Error in Connector Auth Setup:", error);
     throw error; // Rethrow or handle as needed
   }
 }

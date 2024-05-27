@@ -9,6 +9,7 @@ type ConnectorType string
 
 const (
 	ConnectorTypeGoogleDrive ConnectorType = "googledrive"
+	ConnectorTypeGmail       ConnectorType = "gmail"
 )
 
 type ConnectorConstructor func() Connector

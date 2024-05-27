@@ -26,8 +26,7 @@ import (
 )
 
 const (
-	credentialFile = "credentials.json"
-	MaxChunkSize   = 2000 // Maximum number of characters in a chunk
+	googleCredentialFile = "credentials.json"
 )
 
 func NewGoogleDriveConnector() types.Connector {
@@ -86,7 +85,7 @@ func (g *GoogleDriveConnector) requestOauthWeb(config *oauth2.Config) error {
 	return exec.Command("open", authURL).Start()
 }
 
-var scopes []string = []string{
+var driveScopes []string = []string{
 	drive.DriveMetadataReadonlyScope,
 	drive.DriveReadonlyScope,
 	"https://www.googleapis.com/auth/userinfo.email",
@@ -132,20 +131,20 @@ func (g *GoogleDriveConnector) UpdateConnectorState(ctx context.Context, state *
 	return store.UpdateConnectorState(ctx, store.GetWeaviateClient(), state)
 }
 
-func get_config_from_json() (*oauth2.Config, error) {
+func driveConfigFromJSON() (*oauth2.Config, error) {
 	path, err := util.GetDistPath()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get dist path: %v", err)
 	}
-	b, err := os.ReadFile(filepath.Join(path, credentialFile))
+	b, err := os.ReadFile(filepath.Join(path, googleCredentialFile))
 	if err != nil {
 		return nil, fmt.Errorf("unable to read client secret file: %v", err)
 	}
-	return google.ConfigFromJSON(b, scopes...)
+	return google.ConfigFromJSON(b, driveScopes...)
 }
 
 func (g *GoogleDriveConnector) AuthSetup(ctx context.Context) error {
-	config, err := get_config_from_json()
+	config, err := driveConfigFromJSON()
 	if err != nil {
 		return fmt.Errorf("unable to get google config: %s", err)
 	}
@@ -165,7 +164,7 @@ func (g *GoogleDriveConnector) AuthSetup(ctx context.Context) error {
 
 // TODO: handle token expiries
 func (g *GoogleDriveConnector) AuthCallback(ctx context.Context, authCode string) error {
-	config, err := get_config_from_json()
+	config, err := driveConfigFromJSON()
 	if err != nil {
 		return fmt.Errorf("unable to get google config: %s", err)
 	}
@@ -226,7 +225,7 @@ func (g *GoogleDriveConnector) Sync(ctx context.Context, lastSync time.Time, res
 	defer close(errChan)
 	defer close(resChan)
 
-	config, err := get_config_from_json()
+	config, err := driveConfigFromJSON()
 	if err != nil {
 		errChan <- fmt.Errorf("unable to get google config: %s", err)
 		return
