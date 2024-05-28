@@ -61,11 +61,13 @@ const ActiveConnectorsList: React.FC = () => {
                   </label>
                 </th> */}
                 <td>
-                  {connector.auth_valid.toString()}
                   {connector.auth_valid ? (
-                    <CheckCircleIcon className="h-5 w-5" />
+                    <CheckCircleIcon className="h-5 w-5" title="Auth Valid" />
                   ) : (
-                    <ExclamationCircleIcon className="h-5 w-5" />
+                    <ExclamationCircleIcon
+                      className="h-5 w-5"
+                      title="Auth Invalid!"
+                    />
                   )}
                 </td>
                 <td>
@@ -74,6 +76,7 @@ const ActiveConnectorsList: React.FC = () => {
                       className={`h-5 w-5 ${
                         connector.syncing ? "animate-spin" : ""
                       }`}
+                      title={connector.syncing ? "Syncing..." : "Force Sync"}
                     />
                   </button>
                 </td>
