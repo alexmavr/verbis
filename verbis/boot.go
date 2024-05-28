@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -97,8 +98,9 @@ func BootOnboard() (*BootContext, error) {
 	postHogClient, err := posthog.NewWithConfig(
 		PosthogAPIKey,
 		posthog.Config{
-			PersonalApiKey: PosthogAPIKey,
-			Endpoint:       "https://eu.i.posthog.com",
+			PersonalApiKey:                     PosthogAPIKey,
+			Endpoint:                           "https://eu.i.posthog.com",
+			DefaultFeatureFlagsPollingInterval: math.MaxInt64, // Max value of time.Duration at 280 years, effectively disabling feature flag polling
 		},
 	)
 	if err != nil {
