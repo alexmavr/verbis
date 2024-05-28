@@ -221,9 +221,9 @@ func getUserEmail(client *http.Client) (string, error) {
 	return userInfo.Email, nil
 }
 
-func (g *GoogleDriveConnector) Sync(ctx context.Context, lastSync time.Time, resChan chan types.Chunk, errChan chan error) {
+func (g *GoogleDriveConnector) Sync(ctx context.Context, lastSync time.Time, chunkChan chan types.Chunk, errChunkChan chan error, errChan chan error) {
 	defer close(errChan)
-	defer close(resChan)
+	defer close(chunkChan)
 
 	config, err := driveConfigFromJSON()
 	if err != nil {
@@ -243,14 +243,14 @@ func (g *GoogleDriveConnector) Sync(ctx context.Context, lastSync time.Time, res
 		return
 	}
 
-	err = g.listFiles(ctx, srv, lastSync, resChan)
+	err = g.listFiles(ctx, srv, lastSync, chunkChan, errChunkChan)
 	if err != nil {
 		errChan <- fmt.Errorf("unable to list files: %v", err)
 		return
 	}
 }
 
-func (g *GoogleDriveConnector) processFile(ctx context.Context, service *drive.Service, file *drive.File, resChan chan types.Chunk) {
+func (g *GoogleDriveConnector) processFile(ctx context.Context, service *drive.Service, file *drive.File, chunkChan chan types.Chunk, errChunkChan chan error) {
 	var content string
 	var err error
 	if file.MimeType == "application/vnd.google-apps.document" {
@@ -260,12 +260,12 @@ func (g *GoogleDriveConnector) processFile(ctx context.Context, service *drive.S
 	} else {
 		content, err = downloadAndParseBinaryFile(ctx, service, file)
 		if err != nil {
-			log.Printf("Error processing binary file %s: %v", file.Name, err)
+			errChunkChan <- fmt.Errorf("unable to process binary file %s: %v", file.Name, err)
 			return
 		}
 	}
 	if err != nil {
-		log.Printf("Error exporting file %s: %v", file.Name, err)
+		errChunkChan <- fmt.Errorf("unable to export file: %v", err)
 		return
 	}
 
@@ -313,10 +313,11 @@ func (g *GoogleDriveConnector) processFile(ctx context.Context, service *drive.S
 		}
 		numChunks += 1
 		log.Printf("Processing chunk %d of document %s", numChunks, file.Name)
-		resChan <- chunk
+		chunkChan <- chunk
 	}
 }
-func (g *GoogleDriveConnector) listFiles(ctx context.Context, service *drive.Service, lastSync time.Time, resChan chan types.Chunk) error {
+
+func (g *GoogleDriveConnector) listFiles(ctx context.Context, service *drive.Service, lastSync time.Time, chunkChan chan types.Chunk, errChunkChan chan error) error {
 	pageToken := ""
 	for {
 		q := service.Files.List().
@@ -340,7 +341,7 @@ func (g *GoogleDriveConnector) listFiles(ctx context.Context, service *drive.Ser
 			wg.Add(1)
 			go func(f *drive.File) {
 				defer wg.Done()
-				g.processFile(ctx, service, f, resChan)
+				g.processFile(ctx, service, f, chunkChan, errChunkChan)
 			}(file)
 		}
 		wg.Wait()

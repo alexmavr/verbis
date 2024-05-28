@@ -9,6 +9,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/posthog/posthog-go"
+
 	"github.com/verbis-ai/verbis/verbis/connectors"
 	"github.com/verbis-ai/verbis/verbis/store"
 	"github.com/verbis-ai/verbis/verbis/types"
@@ -20,16 +22,20 @@ const (
 )
 
 type Syncer struct {
-	connectors      map[string]types.Connector
-	syncCheckPeriod time.Duration
-	staleThreshold  time.Duration
+	connectors        map[string]types.Connector
+	syncCheckPeriod   time.Duration
+	staleThreshold    time.Duration
+	posthogClient     posthog.Client
+	posthogDistinctID string
 }
 
-func NewSyncer() *Syncer {
+func NewSyncer(posthogClient posthog.Client, posthogDistinctID string) *Syncer {
 	return &Syncer{
-		connectors:      map[string]types.Connector{},
-		syncCheckPeriod: 1 * time.Minute,
-		staleThreshold:  1 * time.Minute,
+		connectors:        map[string]types.Connector{},
+		syncCheckPeriod:   1 * time.Minute,
+		staleThreshold:    1 * time.Minute,
+		posthogClient:     posthogClient,
+		posthogDistinctID: posthogDistinctID,
 	}
 }
 
@@ -122,12 +128,12 @@ type chunkCount struct {
 	numDocuments int
 }
 
-func chunkAdder(ctx context.Context, c types.Connector, chunkChan chan types.Chunk, countChan chan chunkCount, doneChan chan struct{}) {
+func chunkAdder(ctx context.Context, chunkChan chan types.Chunk, countChan chan chunkCount, doneChan chan struct{}, errChunkChan chan error) {
+	defer close(countChan)
 	// TODO: hold buffer and add vectors in batches
 	for chunk := range chunkChan {
-		log.Printf("Received chunk of length %d\n", len(chunk.Text))
 		saneChunk := util.CleanWhitespace(chunk.Text)
-		log.Printf("Sanitized chunk to length %d\n", len(saneChunk))
+		log.Printf("New chunk, length: %d, sanitized: %d\n", len(chunk.Text), len(saneChunk))
 		if len(saneChunk) < MinChunkSize {
 			log.Printf("Skipping short chunk: %s\n", saneChunk)
 			continue
@@ -136,7 +142,7 @@ func chunkAdder(ctx context.Context, c types.Connector, chunkChan chan types.Chu
 		chunkHash := hash(saneChunk)
 		exists, err := store.ChunkHashExists(ctx, store.GetWeaviateClient(), chunkHash)
 		if err != nil {
-			log.Printf("Failed to check chunk hash: %s\n", err)
+			errChunkChan <- fmt.Errorf("failed to check chunk hash: %s", err)
 			continue
 		}
 		if exists {
@@ -146,9 +152,10 @@ func chunkAdder(ctx context.Context, c types.Connector, chunkChan chan types.Chu
 
 		resp, err := EmbedFromModel(saneChunk)
 		if err != nil {
-			log.Printf("Failed to get embeddings: %s\n", err)
+			errChunkChan <- fmt.Errorf("failed to get embeddings: %s", err)
 			continue
 		}
+
 		log.Printf("Received embeddings for chunk of length %d", len(saneChunk))
 		embedding := resp.Embedding
 		chunk.Text = saneChunk
@@ -160,24 +167,31 @@ func chunkAdder(ctx context.Context, c types.Connector, chunkChan chan types.Chu
 			},
 		})
 		if err != nil {
-			log.Printf("Failed to add vectors: %s\n", err)
+			errChunkChan <- fmt.Errorf("failed to add vector: %s", err)
+			continue
 		}
-		log.Printf("Added vectors")
 
 		countChan <- chunkCount{
 			numChunks:    addResp.NumChunksAdded,
 			numDocuments: addResp.NumDocsAdded,
 		}
-		log.Printf("Added vectors for chunk: %s\n", chunk.SourceURL)
+		log.Printf("Added vector for chunk: %s\n", chunk.SourceURL)
 	}
 
 	log.Printf("Chunk channel closed")
-	close(doneChan)
 }
 
-func chunkCounter(ctx context.Context, c types.Connector, countChan chan chunkCount) {
-	updateEvery := 10
+func stateUpdater(ctx context.Context, c types.Connector, countChan chan chunkCount, errChunkChan chan error) {
+	// countChan is expected to close before errChunkChan when the sync completes
+	numErrors := 0
+	go func() {
+		for err := range errChunkChan {
+			log.Printf("Error processing chunk: %s\n", err)
+			numErrors++
+		}
+	}()
 
+	updateEvery := 10
 	counts := []chunkCount{}
 	for count := range countChan {
 		counts = append(counts, count)
@@ -206,6 +220,7 @@ func chunkCounter(ctx context.Context, c types.Connector, countChan chan chunkCo
 		}
 	}
 
+	// countChan closed, update remaining counts
 	if len(counts) == 0 {
 		return
 	}
@@ -222,6 +237,7 @@ func chunkCounter(ctx context.Context, c types.Connector, countChan chan chunkCo
 	}
 	state.NumChunks += numChunks
 	state.NumDocuments += numDocs
+	state.NumErrors += numErrors
 	err = c.UpdateConnectorState(ctx, state)
 	if err != nil {
 		log.Printf("Failed to update status: %s\n", err)
@@ -230,6 +246,7 @@ func chunkCounter(ctx context.Context, c types.Connector, countChan chan chunkCo
 }
 
 func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *types.ConnectorState, errChan chan<- error) {
+	syncStartTime := time.Now()
 	// TODO: replace with atomic get and set for syncing state
 	err := store.LockConnector(ctx, store.GetWeaviateClient(), c.ID())
 	if err != nil {
@@ -245,12 +262,16 @@ func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *ty
 	errChanSync := make(chan error)     // closed by Sync
 	doneChan := make(chan struct{})     // closed by chunkAdder
 	countChan := make(chan chunkCount)  // closed by chunkCounter
+	errChunkChan := make(chan error)
+	defer close(errChunkChan)
+	defer close(errChan)
 
 	// TODO: rewrite as sync waitgroup
-	go chunkAdder(ctx, c, chunkChan, countChan, doneChan)
-	go chunkCounter(ctx, c, countChan)
-	go c.Sync(ctx, state.LastSync, chunkChan, errChanSync)
+	go chunkAdder(ctx, chunkChan, countChan, doneChan, errChunkChan)
+	go stateUpdater(ctx, c, countChan, errChunkChan)
+	go c.Sync(ctx, state.LastSync, chunkChan, errChunkChan, errChanSync)
 
+	syncError := ""
 	select {
 	case <-ctx.Done():
 		// The sync time has not been updated, so the next sync will pick up the same chunks
@@ -265,13 +286,13 @@ func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *ty
 		log.Printf("Sync complete for %s\n", c.ID())
 	case err := <-errChanSync:
 		if err != nil {
-			log.Printf("Error during sync for %s: %s\n", c.ID(), err)
+			log.Printf("Error during sync for %s %s: %s\n", c.Type(), c.ID(), err)
+			syncError = err.Error()
+		} else {
+			log.Printf("ErrChan closed before DoneChan")
 		}
-		log.Printf("ErrChan closed before DoneChan")
 	}
 	log.Printf("Sync for connector %s complete\n", c.ID())
-
-	log.Printf("NumChunks: %d, NumDocuments: %d\n", state.NumChunks, state.NumDocuments)
 
 	state, err = c.Status(ctx)
 	if err != nil {
@@ -286,7 +307,23 @@ func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *ty
 		errChan <- fmt.Errorf("unable to update last sync for %s: %s", c.ID(), err)
 		return
 	}
-	close(errChan)
+	syncDoneTime := time.Now()
+
+	err = s.posthogClient.Enqueue(posthog.Capture{
+		DistinctId: s.posthogDistinctID,
+		Event:      "Sync",
+		Properties: posthog.NewProperties().
+			Set("connector_id", c.ID()).
+			Set("connector_type", c.Type()).
+			Set("num_chunks", state.NumChunks).
+			Set("num_documents", state.NumDocuments).
+			Set("num_errors", state.NumErrors).
+			Set("sync_duration", syncDoneTime.Sub(syncStartTime).String()).
+			Set("sync_error", syncError),
+	})
+	if err != nil {
+		log.Printf("Posthog: failed to enqueue sync event: %s\n", err)
+	}
 }
 
 func (s *Syncer) SyncNow(ctx context.Context) error {

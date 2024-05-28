@@ -94,12 +94,6 @@ func BootOnboard() (*BootContext, error) {
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	// Start syncer as separate goroutine
 
-	syncer := NewSyncer()
-	if PosthogAPIKey == "n/a" {
-		log.Fatalf("Posthog API key not set\n")
-	}
-	bootCtx.Syncer = syncer
-
 	postHogClient, err := posthog.NewWithConfig(
 		PosthogAPIKey,
 		posthog.Config{
@@ -113,6 +107,11 @@ func BootOnboard() (*BootContext, error) {
 
 	bootCtx.PosthogClient = postHogClient
 
+	syncer := NewSyncer(bootCtx.PosthogClient, bootCtx.PosthogDistinctID)
+	if PosthogAPIKey == "n/a" {
+		log.Fatalf("Posthog API key not set\n")
+	}
+	bootCtx.Syncer = syncer
 	api := API{
 		Syncer:            syncer,
 		Posthog:           postHogClient,

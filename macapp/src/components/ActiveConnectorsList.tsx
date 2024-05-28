@@ -49,6 +49,7 @@ const ActiveConnectorsList: React.FC = () => {
               <th>Account</th>
               <th># Docs</th>
               <th># Chunks</th>
+              <th># Errors</th>
               <th>Last Sync</th>
             </tr>
           </thead>
@@ -84,6 +85,7 @@ const ActiveConnectorsList: React.FC = () => {
                 <td>{connector.user.toString()}</td>
                 <td>{connector.num_documents}</td>
                 <td>{connector.num_chunks}</td>
+                <td>{connector.num_errors}</td>
                 <td>
                   {formatDistanceToNow(new Date(connector.last_sync), {
                     addSuffix: true,

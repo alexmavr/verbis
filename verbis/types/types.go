@@ -24,6 +24,7 @@ type ConnectorState struct {
 	LastSync      time.Time `json:"last_sync"`
 	NumDocuments  int       `json:"num_documents"`
 	NumChunks     int       `json:"num_chunks"`
+	NumErrors     int       `json:"num_errors"`
 }
 
 type Chunk struct {

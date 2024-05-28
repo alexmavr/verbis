@@ -253,7 +253,6 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 			}
 
 			// Retrieve and parse document details from the linked Document
-			log.Print("In DOC")
 			docid, ok := c["documentid"].(string)
 			if !ok {
 				return nil, fmt.Errorf("documentid is nil")
@@ -265,7 +264,6 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 			log.Print(docData)
 			createdAt, _ := time.Parse(time.RFC3339, docData["createdAt"].(string))
 			updatedAt, _ := time.Parse(time.RFC3339, docData["updatedAt"].(string))
-			log.Print("In APPEND")
 
 			res = append(res, &types.Chunk{
 				Document: types.Document{
@@ -281,7 +279,6 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 			})
 		}
 	}
-	log.Print("In RETURN")
 
 	return res, nil
 }
@@ -406,6 +403,10 @@ func CreateConnectorStateClass(ctx context.Context, client *weaviate.Client, for
 				Name:     "numChunks",
 				DataType: []string{"int"},
 			},
+			{
+				Name:     "numErrors",
+				DataType: []string{"int"},
+			},
 		},
 	}
 
@@ -483,6 +484,7 @@ func UpdateConnectorState(ctx context.Context, client *weaviate.Client, state *t
 			"lastSync":     state.LastSync,
 			"numDocuments": state.NumDocuments,
 			"numChunks":    state.NumChunks,
+			"numErrors":    state.NumErrors,
 		}).Do(ctx)
 		return err
 	}
@@ -508,6 +510,7 @@ func UpdateConnectorState(ctx context.Context, client *weaviate.Client, state *t
 			"lastSync":     state.LastSync,
 			"numDocuments": state.NumDocuments,
 			"numChunks":    state.NumChunks,
+			"numErrors":    state.NumErrors,
 		}).
 		Do(ctx)
 
@@ -528,6 +531,7 @@ func AllConnectorStates(ctx context.Context, client *weaviate.Client) ([]*types.
 				{Name: "lastSync"},
 				{Name: "numDocuments"},
 				{Name: "numChunks"},
+				{Name: "numErrors"},
 			}...).
 		Do(ctx)
 	if err != nil {
@@ -564,6 +568,7 @@ func AllConnectorStates(ctx context.Context, client *weaviate.Client) ([]*types.
 			LastSync:      lastSync,
 			NumDocuments:  int(c["numDocuments"].(float64)),
 			NumChunks:     int(c["numChunks"].(float64)),
+			NumErrors:     int(c["numErrors"].(float64)),
 		})
 	}
 	return res, nil
@@ -589,6 +594,7 @@ func GetConnectorState(ctx context.Context, client *weaviate.Client, connectorID
 				{Name: "lastSync"},
 				{Name: "numDocuments"},
 				{Name: "numChunks"},
+				{Name: "numErrors"},
 			}...).
 		WithWhere(where).
 		Do(ctx)
@@ -625,6 +631,7 @@ func GetConnectorState(ctx context.Context, client *weaviate.Client, connectorID
 		LastSync:      lastSync,
 		NumDocuments:  int(c["numDocuments"].(float64)),
 		NumChunks:     int(c["numChunks"].(float64)),
+		NumErrors:     int(c["numErrors"].(float64)),
 	}, nil
 }
 
