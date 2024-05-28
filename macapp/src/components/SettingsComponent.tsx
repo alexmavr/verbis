@@ -40,7 +40,7 @@ const saasApps = [
   {
     name: "Dropbox",
     logo: DropboxLogo,
-    description: "Dropbox.",
+    description: "Dropbox",
     available: false,
   },
   {
