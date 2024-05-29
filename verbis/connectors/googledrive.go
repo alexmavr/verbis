@@ -265,7 +265,7 @@ func (g *GoogleDriveConnector) processFile(ctx context.Context, service *drive.S
 		}
 	}
 	if err != nil {
-		errChunkChan <- fmt.Errorf("unable to export file: %v", err)
+		errChunkChan <- fmt.Errorf("unable to export file %s of mimetype %s: %v", file.Name, file.MimeType, err)
 		return
 	}
 
