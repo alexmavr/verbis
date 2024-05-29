@@ -5,7 +5,7 @@ import "log"
 var (
 	//	httpClient          = &http.Client{Timeout: 10 * time.Second}
 	generationModelName = "custom-mistral"
-	embeddingsModelName = "nomic-embed-text"
+	embeddingsModelName = "snowflake-arctic-embed:137m"
 	clean               = true
 	KeepAliveTime       = "20m"
 
