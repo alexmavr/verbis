@@ -130,7 +130,10 @@ type chunkCount struct {
 }
 
 func chunkAdder(ctx context.Context, chunkChan chan types.Chunk, countChan chan chunkCount, doneChan chan struct{}, errChunkChan chan error) {
+	defer close(doneChan)
+	defer close(errChunkChan)
 	defer close(countChan)
+
 	// TODO: hold buffer and add vectors in batches
 	for chunk := range chunkChan {
 		saneChunk := util.CleanWhitespace(chunk.Text)
@@ -182,55 +185,7 @@ func chunkAdder(ctx context.Context, chunkChan chan types.Chunk, countChan chan 
 	log.Printf("Chunk channel closed")
 }
 
-func stateUpdater(ctx context.Context, c types.Connector, countChan chan chunkCount, errChunkChan chan error) {
-	// countChan is expected to close before errChunkChan when the sync completes
-	numErrors := 0
-	go func() {
-		for err := range errChunkChan {
-			log.Printf("Error processing chunk: %s\n", err)
-			numErrors++
-		}
-	}()
-
-	updateEvery := 10
-	counts := []chunkCount{}
-	for count := range countChan {
-		counts = append(counts, count)
-		if len(counts) < updateEvery {
-			continue
-		}
-
-		numChunks := 0
-		numDocs := 0
-		for _, prevCount := range counts {
-			numChunks += prevCount.numChunks
-			numDocs += prevCount.numDocuments
-		}
-		counts = []chunkCount{}
-		state, err := c.Status(ctx)
-		if err != nil {
-			log.Printf("Failed to get status: %s\n", err)
-			return
-		}
-		state.NumChunks += numChunks
-		state.NumDocuments += numDocs
-		err = c.UpdateConnectorState(ctx, state)
-		if err != nil {
-			log.Printf("Failed to update status: %s\n", err)
-			return
-		}
-	}
-
-	// countChan closed, update remaining counts
-	if len(counts) == 0 {
-		return
-	}
-	numChunks := 0
-	numDocs := 0
-	for _, prevCount := range counts {
-		numChunks += prevCount.numChunks
-		numDocs += prevCount.numDocuments
-	}
+func updateState(ctx context.Context, c types.Connector, numChunks, numDocs, numErrors int) {
 	state, err := c.Status(ctx)
 	if err != nil {
 		log.Printf("Failed to get status: %s\n", err)
@@ -243,6 +198,56 @@ func stateUpdater(ctx context.Context, c types.Connector, countChan chan chunkCo
 	if err != nil {
 		log.Printf("Failed to update status: %s\n", err)
 		return
+	}
+}
+
+func stateUpdater(ctx context.Context, c types.Connector, countChan chan chunkCount, errChunkChan chan error) {
+	// countChan is expected to close before errChunkChan when the sync completes
+	numErrors := 0
+	numChunks := 0
+	numDocs := 0
+	updateEvery := 10 // Number of chunks after which we should update the state
+	counts := []chunkCount{}
+
+	for {
+		select {
+		case count, ok := <-countChan:
+			if !ok {
+				updateState(ctx, c, numChunks, numDocs, numErrors)
+				return
+			}
+			counts = append(counts, count)
+			if len(counts)+numErrors < updateEvery {
+				continue
+			}
+
+			numChunks = 0
+			numDocs = 0
+			for _, prevCount := range counts {
+				numChunks += prevCount.numChunks
+				numDocs += prevCount.numDocuments
+			}
+			counts = []chunkCount{}
+			updateState(ctx, c, numChunks, numDocs, numErrors)
+			numChunks = 0
+			numDocs = 0
+			numErrors = 0
+		case err, ok := <-errChunkChan:
+			if !ok {
+				updateState(ctx, c, numChunks, numDocs, numErrors)
+				return
+			}
+			log.Printf("Error processing chunk: %s\n", err)
+			numErrors++
+
+			if len(counts)+numErrors < updateEvery {
+				continue
+			}
+			updateState(ctx, c, numChunks, numDocs, numErrors)
+			numChunks = 0
+			numDocs = 0
+			numErrors = 0
+		}
 	}
 }
 
@@ -281,8 +286,8 @@ func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *ty
 	chunkChan := make(chan types.Chunk) // closed by Sync
 	errChanSync := make(chan error)     // closed by Sync
 	doneChan := make(chan struct{})     // closed by chunkAdder
-	countChan := make(chan chunkCount)  // closed by chunkCounter
-	errChunkChan := make(chan error)
+	countChan := make(chan chunkCount)  // closed by chunkAdder
+	errChunkChan := make(chan error)    // closed by chunkAdder
 	defer close(errChunkChan)
 	defer close(errChan)
 

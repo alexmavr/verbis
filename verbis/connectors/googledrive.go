@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -395,36 +396,73 @@ func exportFile(service *drive.Service, fileId string, mimeType string) (string,
 }
 
 func downloadFile(service *drive.Service, fileId string) (string, error) {
-	resp, err := service.Files.Get(fileId).Download()
+	var resp *http.Response
+	var err error
+
+	for retry := 0; retry < maxRetries; retry++ {
+		resp, err = service.Files.Get(fileId).Download()
+		if err == nil {
+			break
+		}
+
+		if shouldRetry(err) {
+			backoff := calculateBackoff(retry)
+			fmt.Printf("Error: %v. Retrying in %v...\n", err, backoff)
+			time.Sleep(backoff)
+		} else {
+			return "", fmt.Errorf("failed to download file: %v", err)
+		}
+	}
+
 	if err != nil {
-		return "", fmt.Errorf("failed to download file: %v", err)
+		return "", fmt.Errorf("failed to download file after retries: %v", err)
 	}
 	defer resp.Body.Close()
 
-	homeDir, err := os.UserHomeDir()
+	tempFilePath, err := createTempFilePath(fileId)
 	if err != nil {
-		return "", fmt.Errorf("failed to get user home directory: %v", err)
+		return "", err
 	}
 
-	tempDir := filepath.Join(homeDir, ".verbis", "tmp")
-	err = os.MkdirAll(tempDir, os.ModePerm)
-	if err != nil {
-		return "", fmt.Errorf("failed to create temporary directory: %v", err)
-	}
-
-	tempFilePath := filepath.Join(tempDir, fileId)
 	outFile, err := os.Create(tempFilePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to create temporary file: %v", err)
 	}
 	defer outFile.Close()
 
-	_, err = io.Copy(outFile, resp.Body)
-	if err != nil {
+	if _, err = io.Copy(outFile, resp.Body); err != nil {
 		return "", fmt.Errorf("failed to write file to disk: %v", err)
 	}
 
 	return tempFilePath, nil
+}
+
+func shouldRetry(err error) bool {
+	if gErr, ok := err.(*googleapi.Error); ok && gErr.Code >= 500 {
+		return true
+	}
+	if netErr, ok := err.(net.Error); ok && netErr.Temporary() {
+		return true
+	}
+	return false
+}
+
+func calculateBackoff(retry int) time.Duration {
+	return time.Duration(math.Min(float64(initialBackoff)*math.Pow(2, float64(retry)), float64(maxBackoff)))
+}
+
+func createTempFilePath(fileId string) (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get user home directory: %v", err)
+	}
+
+	tempDir := filepath.Join(homeDir, ".verbis", "tmp")
+	if err = os.MkdirAll(tempDir, os.ModePerm); err != nil {
+		return "", fmt.Errorf("failed to create temporary directory: %v", err)
+	}
+
+	return filepath.Join(tempDir, fileId), nil
 }
 
 func downloadAndParseBinaryFile(ctx context.Context, service *drive.Service, file *drive.File) (string, error) {

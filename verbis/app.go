@@ -6,7 +6,7 @@ var (
 	//	httpClient          = &http.Client{Timeout: 10 * time.Second}
 	generationModelName = "custom-mistral"
 	embeddingsModelName = "nomic-embed-text"
-	clean               = false
+	clean               = true
 	KeepAliveTime       = "20m"
 
 	PosthogAPIKey = "n/a" // Will be populated by linker from builder's env
@@ -27,7 +27,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to boot until syncing: %s\n", err)
 	}
-	log.Printf("Boot: Ready to sync ")
+	log.Printf("Boot: Ready to sync")
 
 	// Start everything needed for generation
 	// Pulls generation and reranking models
