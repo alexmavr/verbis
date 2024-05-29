@@ -165,8 +165,8 @@ func BootOnboard() (*BootContext, error) {
 			[]string{"serve"},
 			[]string{
 				"OLLAMA_KEEP_ALIVE=" + KeepAliveTime,
-				"OLLAMA_MAX_LOADED_MODELS=2",
-				"OLLAMA_NUM_PARALLEL=5",
+				"OLLAMA_MAX_LOADED_MODELS=2", // Embeddings & LLM
+				"OLLAMA_NUM_PARALLEL=11",     // Max num of parallel items across connectors + 1 for active prompts
 			},
 		},
 		{

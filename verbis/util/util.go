@@ -66,14 +66,20 @@ func binariesPresent(path string) error {
 	return nil
 }
 
-func CleanWhitespace(text string) string {
+func SanitizeString(text string) string {
 	// The UTF-8 BOM is sometimes present in text files, and should be removed
 	bom := []byte{0xEF, 0xBB, 0xBF}
 	text = strings.TrimPrefix(text, string(bom))
 
+	// Define a regex pattern that matches characters used in major human languages
+	// This includes basic Latin, Latin-1 Supplement, Greek, Cyrillic, Hebrew, Arabic, etc.
+	disallowedChars := regexp.MustCompile(`[^\p{L}\p{M}\p{N}\p{P}\p{Zs}]`)
+	text = disallowedChars.ReplaceAllString(text, " ")
+
 	// Replace internal sequences of whitespace with a single space
 	spacePattern := regexp.MustCompile(`\s+`)
 	text = spacePattern.ReplaceAllString(text, " ")
+
 	// Trim leading and trailing whitespace
 	// If the initial text was all whitespace, it should return an empty string
 	return strings.TrimSpace(text)

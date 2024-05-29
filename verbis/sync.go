@@ -136,7 +136,8 @@ func chunkAdder(ctx context.Context, chunkChan chan types.Chunk, countChan chan 
 
 	// TODO: hold buffer and add vectors in batches
 	for chunk := range chunkChan {
-		saneChunk := util.CleanWhitespace(chunk.Text)
+		saneChunk := util.SanitizeString(chunk.Text)
+		saneName := util.SanitizeString(chunk.Name)
 		log.Printf("New chunk, length: %d, sanitized: %d\n", len(chunk.Text), len(saneChunk))
 		if len(saneChunk) < MinChunkSize {
 			log.Printf("Skipping short chunk: %s\n", saneChunk)
@@ -163,6 +164,7 @@ func chunkAdder(ctx context.Context, chunkChan chan types.Chunk, countChan chan 
 		log.Printf("Received embeddings for chunk of length %d", len(saneChunk))
 		embedding := resp.Embedding
 		chunk.Text = saneChunk
+		chunk.Name = saneName
 		chunk.Hash = chunkHash
 		addResp, err := store.AddVectors(ctx, store.GetWeaviateClient(), []types.AddVectorItem{
 			{
@@ -362,6 +364,7 @@ func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *ty
 }
 
 func (s *Syncer) SyncNow(ctx context.Context) error {
+	// TODO: still a minor race condition here
 	errChans := []chan error{}
 	for _, c := range s.connectors {
 		log.Printf("Checking status for connector %s\n", c.ID())

@@ -45,5 +45,5 @@ func ParseBinaryFile(ctx context.Context, request *ParseRequest) (string, error)
 		return "", fmt.Errorf("error executing script: %v", err)
 	}
 
-	return util.CleanWhitespace(string(output)), nil
+	return util.SanitizeString(string(output)), nil
 }
