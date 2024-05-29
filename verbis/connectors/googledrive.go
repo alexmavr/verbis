@@ -3,9 +3,11 @@ package connectors
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -17,6 +19,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 
 	"github.com/verbis-ai/verbis/verbis/keychain"
@@ -27,6 +30,11 @@ import (
 
 const (
 	googleCredentialFile = "credentials.json"
+
+	// Exponential backoff settings
+	initialBackoff = 500 * time.Millisecond
+	maxBackoff     = 64 * time.Second
+	maxRetries     = 10
 )
 
 func NewGoogleDriveConnector() types.Connector {
@@ -355,11 +363,30 @@ func (g *GoogleDriveConnector) listFiles(ctx context.Context, service *drive.Ser
 }
 
 func exportFile(service *drive.Service, fileId string, mimeType string) (string, error) {
-	resp, err := service.Files.Export(fileId, mimeType).Download()
+	var resp *http.Response
+	var err error
+
+	for retry := 0; retry < maxRetries; retry++ {
+		resp, err = service.Files.Export(fileId, mimeType).Download()
+		if err == nil {
+			break
+		}
+
+		// Check if the error is due to user rate limit exceeded
+		if gErr, ok := err.(*googleapi.Error); ok && gErr.Code == http.StatusForbidden && gErr.Message == "User rate limit exceeded" {
+			backoff := time.Duration(math.Min(float64(initialBackoff)*math.Pow(2, float64(retry)), float64(maxBackoff)))
+			fmt.Printf("Rate limit exceeded. Retrying in %v...\n", backoff)
+			time.Sleep(backoff)
+		} else {
+			return "", err
+		}
+	}
+
 	if err != nil {
-		return "", err
+		return "", errors.New("failed to download file after retries")
 	}
 	defer resp.Body.Close()
+
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
