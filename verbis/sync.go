@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log"
 	"sort"
@@ -245,15 +246,34 @@ func stateUpdater(ctx context.Context, c types.Connector, countChan chan chunkCo
 	}
 }
 
+func copyState(state *types.ConnectorState) (*types.ConnectorState, error) {
+	jsonData, err := json.Marshal(state)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal state: %s", err)
+	}
+
+	newState := &types.ConnectorState{}
+	err = json.Unmarshal(jsonData, newState)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal state: %s", err)
+	}
+	return newState, nil
+}
+
 func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *types.ConnectorState, errChan chan<- error) {
+	prevState, err := copyState(state)
+	if err != nil {
+		errChan <- fmt.Errorf("failed to copy state: %s", err)
+		return
+	}
+
 	syncStartTime := time.Now()
 	// TODO: replace with atomic get and set for syncing state
-	err := store.LockConnector(ctx, store.GetWeaviateClient(), c.ID())
+	err = store.LockConnector(ctx, store.GetWeaviateClient(), c.ID())
 	if err != nil {
 		errChan <- fmt.Errorf("failed to lock connector %s: %s", c.ID(), err)
 		return
 	}
-	// TODO: unlock at end of for loop, not function return
 	defer store.UnlockConnector(ctx, store.GetWeaviateClient(), c.ID())
 
 	newSyncTime := time.Now()
@@ -309,15 +329,26 @@ func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *ty
 	}
 	syncDoneTime := time.Now()
 
+	// Only report sync events if the state has changed to avoid spamming posthog
+	num_synced_chunks := state.NumChunks - prevState.NumChunks
+	num_synced_docs := state.NumDocuments - prevState.NumDocuments
+	num_synced_errors := state.NumErrors - prevState.NumErrors
+	if num_synced_chunks == 0 && num_synced_docs == 0 && num_synced_errors == 0 {
+		return
+	}
+
 	err = s.posthogClient.Enqueue(posthog.Capture{
 		DistinctId: s.posthogDistinctID,
 		Event:      "Sync",
 		Properties: posthog.NewProperties().
 			Set("connector_id", c.ID()).
 			Set("connector_type", c.Type()).
-			Set("num_chunks", state.NumChunks).
-			Set("num_documents", state.NumDocuments).
-			Set("num_errors", state.NumErrors).
+			Set("new_num_chunks", num_synced_chunks).
+			Set("new_num_documents", num_synced_docs).
+			Set("new_num_errors", num_synced_errors).
+			Set("total_num_chunks", state.NumChunks).
+			Set("total_num_documents", state.NumDocuments).
+			Set("total_num_errors", state.NumErrors).
 			Set("sync_duration", syncDoneTime.Sub(syncStartTime).String()).
 			Set("sync_error", syncError),
 	})
