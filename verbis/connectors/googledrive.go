@@ -265,7 +265,9 @@ func (g *GoogleDriveConnector) processFile(ctx context.Context, service *drive.S
 	if file.MimeType == "application/vnd.google-apps.document" {
 		content, err = exportFile(service, file.Id, "text/plain")
 	} else if file.MimeType == "application/vnd.google-apps.spreadsheet" {
-		content, err = exportFile(service, file.Id, "application/csv")
+		content, err = exportFile(service, file.Id, "text/csv")
+	} else if file.MimeType == "application/vnd.google-apps.presentation" {
+		content, err = exportFile(service, file.Id, "text/plain")
 	} else {
 		content, err = downloadAndParseBinaryFile(ctx, service, file)
 		if err != nil {

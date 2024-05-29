@@ -288,7 +288,6 @@ func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *ty
 	doneChan := make(chan struct{})     // closed by chunkAdder
 	countChan := make(chan chunkCount)  // closed by chunkAdder
 	errChunkChan := make(chan error)    // closed by chunkAdder
-	defer close(errChunkChan)
 	defer close(errChan)
 
 	// TODO: rewrite as sync waitgroup
