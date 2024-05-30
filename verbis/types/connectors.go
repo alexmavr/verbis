@@ -29,5 +29,10 @@ type Connector interface {
 	Status(ctx context.Context) (*ConnectorState, error)
 	AuthSetup(ctx context.Context) error
 	AuthCallback(ctx context.Context, code string) error
-	Sync(ctx context.Context, lastSync time.Time, chunkChan chan Chunk, chunkErrChan chan error, errChan chan error)
+	Sync(ctx context.Context, lastSync time.Time, chunkChan chan ChunkSyncResult, errChan chan error)
+}
+
+type ChunkSyncResult struct {
+	Chunk Chunk
+	Err   error
 }

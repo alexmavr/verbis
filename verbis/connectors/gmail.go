@@ -97,9 +97,8 @@ func (g *GmailConnector) Init(ctx context.Context, connectorID string) error {
 		g.id = uuid.New().String()
 	}
 
-	log.Printf("Initializing connector type: %s id: %s", g.Type(), g.ID())
 	state, err := store.GetConnectorState(ctx, store.GetWeaviateClient(), g.ID())
-	if err != nil {
+	if err != nil && !store.IsStateNotFound(err) {
 		return fmt.Errorf("failed to get connector state: %v", err)
 	}
 
@@ -119,7 +118,6 @@ func (g *GmailConnector) Init(ctx context.Context, connectorID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to set connector state: %v", err)
 	}
-	log.Printf("Initialized connector type %s: %s", g.Type(), g.ID())
 	return nil
 }
 
@@ -194,8 +192,7 @@ func (g *GmailConnector) AuthCallback(ctx context.Context, authCode string) erro
 	return g.UpdateConnectorState(ctx, state)
 }
 
-func (g *GmailConnector) Sync(ctx context.Context, lastSync time.Time, chunkChan chan types.Chunk, chunkErrChan chan error, errChan chan error) {
-	defer close(errChan)
+func (g *GmailConnector) Sync(ctx context.Context, lastSync time.Time, chunkChan chan types.ChunkSyncResult, errChan chan error) {
 	defer close(chunkChan)
 
 	log.Printf("Starting gmail sync")
@@ -217,20 +214,22 @@ func (g *GmailConnector) Sync(ctx context.Context, lastSync time.Time, chunkChan
 		return
 	}
 
-	err = g.listEmails(ctx, srv, lastSync, chunkChan, chunkErrChan)
+	err = g.listEmails(ctx, srv, lastSync, chunkChan)
 	if err != nil {
 		errChan <- fmt.Errorf("unable to list emails: %v", err)
 		return
 	}
 }
 
-func (g *GmailConnector) processEmail(ctx context.Context, srv *gmail.Service, email *gmail.Message, chunkChan chan types.Chunk, errChunkChan chan error) error {
+func (g *GmailConnector) processEmail(ctx context.Context, srv *gmail.Service, email *gmail.Message, chunkChan chan types.ChunkSyncResult) error {
 	var content string
 	for _, part := range email.Payload.Parts {
 		if part.MimeType == "text/plain" {
 			data, err := decodeBase64(part.Body.Data)
 			if err != nil {
-				errChunkChan <- fmt.Errorf("unable to decode email body: %s", err)
+				chunkChan <- types.ChunkSyncResult{
+					Err: fmt.Errorf("unable to decode email body: %s", err),
+				}
 				continue
 			}
 			content += data
@@ -239,7 +238,9 @@ func (g *GmailConnector) processEmail(ctx context.Context, srv *gmail.Service, e
 		if part.Filename != "" && part.MimeType == "application/pdf" {
 			data, err := downloadAttachment(ctx, srv, g.user, email.Id, part.Body.AttachmentId)
 			if err != nil {
-				errChunkChan <- fmt.Errorf("unable to download attachment for file %s: %s", part.Filename, err)
+				chunkChan <- types.ChunkSyncResult{
+					Err: fmt.Errorf("unable to download attachment for file %s: %s", part.Filename, err),
+				}
 				continue
 			}
 			content += data
@@ -271,16 +272,17 @@ func (g *GmailConnector) processEmail(ctx context.Context, srv *gmail.Service, e
 			end = len(content)
 		}
 
-		chunk := types.Chunk{
-			Text:     content[i:end],
-			Document: document,
+		chunkChan <- types.ChunkSyncResult{
+			Chunk: types.Chunk{
+				Text:     content[i:end],
+				Document: document,
+			},
 		}
-		chunkChan <- chunk
 	}
 	return nil
 }
 
-func (g *GmailConnector) listEmails(ctx context.Context, srv *gmail.Service, lastSync time.Time, chunkChan chan types.Chunk, chunkErrChan chan error) error {
+func (g *GmailConnector) listEmails(ctx context.Context, srv *gmail.Service, lastSync time.Time, chunkChan chan types.ChunkSyncResult) error {
 	user := "me"
 	query := "in:inbox -category:spam"
 	if !lastSync.IsZero() {
@@ -300,7 +302,7 @@ func (g *GmailConnector) listEmails(ctx context.Context, srv *gmail.Service, las
 					log.Printf("Unable to retrieve message %s: %v", messageID, err)
 					return
 				}
-				err = g.processEmail(ctx, srv, email, chunkChan, chunkErrChan)
+				err = g.processEmail(ctx, srv, email, chunkChan)
 				if err != nil {
 					log.Printf("Error processing email %s: %v", messageID, err)
 				}

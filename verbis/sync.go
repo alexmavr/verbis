@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/posthog/posthog-go"
@@ -28,6 +29,7 @@ type Syncer struct {
 	staleThreshold    time.Duration
 	posthogClient     posthog.Client
 	posthogDistinctID string
+	syncing           bool
 }
 
 func NewSyncer(posthogClient posthog.Client, posthogDistinctID string) *Syncer {
@@ -105,6 +107,7 @@ func (s *Syncer) GetConnectorStates(ctx context.Context) ([]*types.ConnectorStat
 // On launch, and after every sync_period, find all connectors that are not
 // actively syncing
 func (s *Syncer) Run(ctx context.Context) error {
+	defer log.Printf("Syncer has stopped")
 	for {
 		select {
 		case <-ctx.Done():
@@ -130,11 +133,18 @@ type chunkAddResult struct {
 	err          error
 }
 
-func chunkAdder(ctx context.Context, chunkChan chan types.Chunk, resChan chan chunkAddResult) {
+func chunkAdder(ctx context.Context, chunkChan chan types.ChunkSyncResult, resChan chan chunkAddResult) {
 	defer close(resChan)
-
 	// TODO: hold buffer and add vectors in batches
-	for chunk := range chunkChan {
+	for res := range chunkChan {
+		if res.Err != nil {
+			resChan <- chunkAddResult{
+				err: fmt.Errorf("error processing chunk: %s", res.Err),
+			}
+			continue
+		}
+		chunk := res.Chunk
+
 		saneChunk := util.SanitizeString(chunk.Text)
 		saneName := util.SanitizeString(chunk.Name)
 		log.Printf("New chunk, length: %d, sanitized: %d\n", len(chunk.Text), len(saneChunk))
@@ -208,7 +218,9 @@ func updateState(ctx context.Context, c types.Connector, numChunks, numDocs, num
 	}
 }
 
-func stateUpdater(ctx context.Context, c types.Connector, resChan chan chunkAddResult) {
+func stateUpdater(ctx context.Context, c types.Connector, resChan chan chunkAddResult, doneChan chan struct{}) {
+	defer close(doneChan)
+
 	// countChan is expected to close before errChunkChan when the sync completes
 	numErrors := 0
 	numChunks := 0
@@ -262,67 +274,77 @@ func copyState(state *types.ConnectorState) (*types.ConnectorState, error) {
 	return newState, nil
 }
 
-func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *types.ConnectorState, errChan chan<- error) {
-	defer close(errChan)
-
+func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *types.ConnectorState) error {
 	// Keep a copy of the current connector state to calculate diffs
 	prevState, err := copyState(state)
 	if err != nil {
-		errChan <- fmt.Errorf("failed to copy state: %s", err)
-		return
+		return fmt.Errorf("failed to copy state: %s", err)
 	}
-
-	// TODO: replace with atomic get and set for syncing state
-	err = store.LockConnector(ctx, store.GetWeaviateClient(), c.ID())
-	if err != nil {
-		errChan <- fmt.Errorf("failed to lock connector %s: %s", c.ID(), err)
-		return
-	}
-	defer store.UnlockConnector(ctx, store.GetWeaviateClient(), c.ID())
 
 	syncStartTime := time.Now()
 
-	chunkChan := make(chan types.Chunk)          // closed by Sync
-	errChanSync := make(chan error)              // closed by Sync
-	chunkAddResChan := make(chan chunkAddResult) // closed by chunkAdder
-	errChunkChan := make(chan error)             // closed by chunkAdder
+	// The channel where all chunks are sent. Closed by c.Sync when done
+	chunkChan := make(chan types.ChunkSyncResult)
 
+	// The channel where sync-wide errors during sync are sent, causing a halt. Closed here
+	errChanSync := make(chan error)
+	defer close(errChanSync)
+
+	// The channel where the results of chunk addition are sent, to be processed
+	// by the stateUpdater. Closed by chunkAdder after all chunks are processed.
+	chunkAddResChan := make(chan chunkAddResult)
+
+	// The channel to signal that the sync is done, including the final state
+	// update. Closed by the stateUpdater
+	doneChan := make(chan struct{})
+
+	// Sync sends chunks to chunkChan, chunkAdder processes them and sends results to chunkAddResChan
+	// This allows the following to happen in parallel:
+	// - Fetches from the connector and document conversions (in Sync)
+	// - Embeddings generation and addition to weaviate (in chunkAdder)
+	// - Periodic updates to the connector state (in stateUpdater)
+	go c.Sync(ctx, state.LastSync, chunkChan, errChanSync)
 	go chunkAdder(ctx, chunkChan, chunkAddResChan)
-	go stateUpdater(ctx, c, chunkAddResChan)
-	go c.Sync(ctx, state.LastSync, chunkChan, errChunkChan, errChanSync)
+	go stateUpdater(ctx, c, chunkAddResChan, doneChan)
 
 	syncError := ""
 	select {
 	case <-ctx.Done():
 		// The sync time has not been updated, so the next sync will pick up the same chunks
+		log.Printf("Syncer: Context cancelled")
+		state, err := c.Status(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get status for %s: %s", c.ID(), err)
+		}
 		state.Syncing = false
 		err = c.UpdateConnectorState(ctx, state)
 		if err != nil {
-			errChan <- fmt.Errorf("unable to update last sync for %s: %s", c.ID(), err)
-			return
+			return fmt.Errorf("unable to update last sync for %s: %s", c.ID(), err)
 		}
 		break
 	case err := <-errChanSync:
 		if err != nil {
-			log.Printf("Sync for connector %s %s complete with error: %s", c.Type(), c.ID(), err)
+			log.Printf("Sync for connector %s %s completed with error: %s", c.Type(), c.ID(), err)
 			syncError = err.Error()
 		} else {
-			log.Printf("Sync for connector %s %s complete without errors", c.Type(), c.ID())
+			log.Printf("Unexpected close for errChanSync")
 		}
+	case <-doneChan:
+		log.Printf("Sync for connector %s %s completed successfully", c.Type(), c.ID())
 	}
 
 	state, err = c.Status(ctx)
 	if err != nil {
-		errChan <- fmt.Errorf("failed to get status for %s: %s", c.ID(), err)
-		return
+		return fmt.Errorf("failed to get status for %s: %s", c.ID(), err)
 	}
-
-	state.LastSync = syncStartTime
+	if syncError == "" {
+		// Only update the sync time if the overall sync was successful (even if there were chunk errors)
+		state.LastSync = syncStartTime
+	}
 	state.Syncing = false
 	err = c.UpdateConnectorState(ctx, state)
 	if err != nil {
-		errChan <- fmt.Errorf("unable to update last sync for %s: %s", c.ID(), err)
-		return
+		return fmt.Errorf("unable to update last sync for %s: %s", c.ID(), err)
 	}
 	syncDoneTime := time.Now()
 
@@ -340,7 +362,8 @@ func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *ty
 		num_synced_errors,
 	)
 	if num_synced_chunks == 0 && num_synced_docs == 0 && num_synced_errors == 0 {
-		return
+		log.Printf("Syncer: no new items found for %s %s\n", c.Type(), c.ID())
+		return nil
 	}
 
 	err = s.posthogClient.Enqueue(posthog.Capture{
@@ -359,51 +382,83 @@ func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *ty
 			Set("sync_error", syncError),
 	})
 	if err != nil {
-		log.Printf("Posthog: failed to enqueue sync event: %s\n", err)
+		return fmt.Errorf("failed to enqueue sync event: %s", err)
 	}
 
-	log.Printf("Connector sync complete for %s %s\n", c.Type(), c.ID())
+	log.Printf("Posted Sync on posthog for %s %s\n", c.Type(), c.ID())
+	return nil
+}
+
+func (s *Syncer) ASyncNow(ctx context.Context) {
+	log.Printf("Attempting async sync")
+	go func() {
+		err := s.SyncNow(ctx)
+		if err != nil {
+			log.Printf("Failed to sync: %s\n", err)
+		}
+	}()
+}
+
+// maybeSyncConnector returns an error only if the entire sync should halt
+func (s *Syncer) maybeSyncConnector(ctx context.Context, wg *sync.WaitGroup, c types.Connector) error {
+	log.Printf("Checking status for connector %s %s\n", c.Type(), c.ID())
+
+	state, err := store.SetConnectorSyncing(ctx, store.GetWeaviateClient(), c.ID(), true)
+	if store.IsSyncingAlreadyExpected(err) {
+		log.Printf("Connector %s %s already syncing", c.Type(), c.ID())
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to set connector %s %s to syncing state: %s", c.Type(), c.ID(), err)
+	}
+	log.Printf("Connector %s %s set to syncing", c.Type(), c.ID())
+
+	if !state.AuthValid {
+		log.Printf("Auth required for %s %s", c.Type(), c.ID())
+
+		// Unlock
+		_, err = store.SetConnectorSyncing(ctx, store.GetWeaviateClient(), c.ID(), false)
+		if err != nil {
+			log.Printf("failed to set connector %s %s to not syncing state: %s", c.Type(), c.ID(), err)
+		} else {
+			log.Printf("Connector %s %s set to not syncing", c.Type(), c.ID())
+		}
+		return nil
+	}
+
+	if time.Since(state.LastSync) > s.staleThreshold {
+		log.Printf("Sync required for %s %s", c.Type(), c.ID())
+		wg.Add(1)
+		go func(c types.Connector) {
+			new_err := s.connectorSync(ctx, c, state)
+			if new_err != nil {
+				log.Printf("Error syncing %s %s: %s", c.Type(), c.ID(), new_err)
+			}
+
+			// Unlock
+			_, new_err = store.SetConnectorSyncing(ctx, store.GetWeaviateClient(), c.ID(), false)
+			if err != nil {
+				log.Printf("Failed to set connector %s %s to not syncing state: %s", c.Type(), c.ID(), new_err)
+			}
+			log.Printf("Connector %s %s set to not syncing", c.Type(), c.ID())
+		}(c)
+	} else {
+		log.Printf("Sync not required for %s", c.ID())
+	}
+
+	return nil
 }
 
 func (s *Syncer) SyncNow(ctx context.Context) error {
-	// TODO: still a minor race condition here
-	errChans := []chan error{}
+	log.Printf("SyncNow started")
+	wg := sync.WaitGroup{}
 	for _, c := range s.connectors {
-		log.Printf("Checking status for connector %s\n", c.ID())
-		state, err := c.Status(ctx)
+		err := s.maybeSyncConnector(ctx, &wg, c)
 		if err != nil {
-			return fmt.Errorf("failed to get status for %s: %s", c.ID(), err)
-		}
-		if state == nil {
-			return fmt.Errorf("nil state for %s", c.ID())
-		}
-
-		if !state.AuthValid {
-			log.Printf("Auth required for %s\n", c.ID())
-			continue
-		}
-
-		if state.Syncing {
-			log.Printf("Sync already in progress for %s, skipping\n", c.ID())
-			continue
-		}
-
-		errChan := make(chan error)
-		errChans = append(errChans, errChan)
-
-		if time.Since(state.LastSync) > s.staleThreshold {
-			log.Printf("Sync required for %s\n", c.ID())
-			go s.connectorSync(ctx, c, state, errChan)
+			return fmt.Errorf("failed to trigger sync for connector %s %s: %s", c.Type(), c.ID(), err)
 		}
 	}
-
-	for _, errChan := range errChans {
-		err := <-errChan
-		if err != nil {
-			return err
-		}
-	}
-
+	wg.Wait()
 	log.Printf("SyncNow complete")
 	return nil
 }

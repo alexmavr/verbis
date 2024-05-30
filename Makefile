@@ -3,7 +3,7 @@
 SHELL=/bin/zsh
 
 WEAVIATE_VERSION := v1.25.0
-OLLAMA_VERSION := v0.1.38
+OLLAMA_VERSION := v0.1.39
 DIST_DIR := ./dist
 TMP_DIR := /tmp/weaviate-installation
 ZIP_FILE := weaviate-$(WEAVIATE_VERSION)-darwin-all.zip

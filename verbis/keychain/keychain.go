@@ -17,7 +17,7 @@ func TokenFromKeychain(connectorID string, connectorType types.ConnectorType) (*
 	tokenKey := fmt.Sprintf("%s-%s-token", string(connectorType), connectorID)
 	tokenJSON, err := keyring.Get(keyringService, tokenKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to get token from keyring: %s", err)
 	}
 	var token oauth2.Token
 	err = json.Unmarshal([]byte(tokenJSON), &token)

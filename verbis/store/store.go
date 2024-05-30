@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strconv"
@@ -414,45 +415,25 @@ func CreateConnectorStateClass(ctx context.Context, client *weaviate.Client, for
 	return client.Schema().ClassCreator().WithClass(class).Do(ctx)
 }
 
-func LockConnector(ctx context.Context, client *weaviate.Client, connectorID string) error {
-	state, err := GetConnectorState(ctx, client, connectorID)
-	if err != nil {
-		return err
-	}
+var ErrSyncingAlreadyExpected = errors.New("syncing is already at the expected value")
 
-	if state == nil {
-		return fmt.Errorf("connector state not found")
-	}
-
-	// Wait until the state is not syncing
-	for state.Syncing {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("context cancelled")
-		case <-time.After(5 * time.Second):
-			state, err = GetConnectorState(ctx, client, connectorID)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	state.Syncing = true
-	return UpdateConnectorState(ctx, client, state)
+func IsSyncingAlreadyExpected(err error) bool {
+	return errors.Is(err, ErrSyncingAlreadyExpected)
 }
 
-func UnlockConnector(ctx context.Context, client *weaviate.Client, connectorID string) error {
+func SetConnectorSyncing(ctx context.Context, client *weaviate.Client, connectorID string, syncing bool) (*types.ConnectorState, error) {
 	state, err := GetConnectorState(ctx, client, connectorID)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("unable to get connector state: %s", err)
 	}
 
-	if state == nil {
-		return fmt.Errorf("connector state not found")
+	if state.Syncing == syncing {
+		return state, ErrSyncingAlreadyExpected
 	}
 
-	state.Syncing = false
-	return UpdateConnectorState(ctx, client, state)
+	state.Syncing = syncing
+	err = UpdateConnectorState(ctx, client, state)
+	return state, err
 }
 
 // Add or update the connector state in Weaviate
@@ -488,7 +469,6 @@ func UpdateConnectorState(ctx context.Context, client *weaviate.Client, state *t
 		}).Do(ctx)
 		return err
 	}
-	log.Printf("Updating existing connector state for %s %s", state.ConnectorType, state.ConnectorID)
 
 	get := resp.Data["Get"].(map[string]interface{})
 	states := get["ConnectorState"].([]interface{})
@@ -572,8 +552,14 @@ func AllConnectorStates(ctx context.Context, client *weaviate.Client) ([]*types.
 	return res, nil
 }
 
-// Retrieve the connector state from Weaviate
-// Does not return AuthValid as it can be inferred from the presence of a token
+var ErrNoStateFound = errors.New("no connector state object found")
+
+func IsStateNotFound(err error) bool {
+	return errors.Is(err, ErrNoStateFound)
+}
+
+// Retrieve the connector state from Weaviate. Does not return AuthValid as it
+// can be inferred from the presence of a token in keychain
 func GetConnectorState(ctx context.Context, client *weaviate.Client, connectorID string) (*types.ConnectorState, error) {
 	where := filters.Where().
 		WithPath([]string{"connector_id"}).
@@ -605,13 +591,17 @@ func GetConnectorState(ctx context.Context, client *weaviate.Client, connectorID
 	}
 
 	get := resp.Data["Get"].(map[string]interface{})
-	states, ok := get["ConnectorState"].([]interface{})
+	states, ok := get[stateClassName].([]interface{})
 	if !ok {
-		return nil, nil
+		return nil, fmt.Errorf("no connector state class found")
 	}
 
 	if len(states) == 0 {
-		return nil, nil
+		return nil, ErrNoStateFound // This is handled gracefully during init
+	}
+
+	if len(states) > 1 {
+		return nil, fmt.Errorf("multiple connector state objects found")
 	}
 
 	c := states[0].(map[string]interface{})

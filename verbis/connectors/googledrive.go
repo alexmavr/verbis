@@ -110,9 +110,8 @@ func (g *GoogleDriveConnector) Init(ctx context.Context, connectorID string) err
 		g.id = uuid.New().String()
 	}
 
-	log.Printf("Initializing connector type: %s id: %s", g.Type(), g.ID())
 	state, err := store.GetConnectorState(ctx, store.GetWeaviateClient(), g.ID())
-	if err != nil {
+	if err != nil && !store.IsStateNotFound(err) {
 		return fmt.Errorf("failed to get connector state: %v", err)
 	}
 
@@ -132,7 +131,6 @@ func (g *GoogleDriveConnector) Init(ctx context.Context, connectorID string) err
 	if err != nil {
 		return fmt.Errorf("failed to set connector state: %v", err)
 	}
-	log.Printf("Initialized connector type %s: %s", g.Type(), g.ID())
 	return nil
 }
 
@@ -230,10 +228,8 @@ func getUserEmail(client *http.Client) (string, error) {
 	return userInfo.Email, nil
 }
 
-func (g *GoogleDriveConnector) Sync(ctx context.Context, lastSync time.Time, chunkChan chan types.Chunk, errChunkChan chan error, errChan chan error) {
-	defer close(errChan)
+func (g *GoogleDriveConnector) Sync(ctx context.Context, lastSync time.Time, chunkChan chan types.ChunkSyncResult, errChan chan error) {
 	defer close(chunkChan)
-
 	config, err := driveConfigFromJSON()
 	if err != nil {
 		errChan <- fmt.Errorf("unable to get google config: %s", err)
@@ -252,14 +248,14 @@ func (g *GoogleDriveConnector) Sync(ctx context.Context, lastSync time.Time, chu
 		return
 	}
 
-	err = g.listFiles(ctx, srv, lastSync, chunkChan, errChunkChan)
+	err = g.listFiles(ctx, srv, lastSync, chunkChan)
 	if err != nil {
 		errChan <- fmt.Errorf("unable to list files: %v", err)
 		return
 	}
 }
 
-func (g *GoogleDriveConnector) processFile(ctx context.Context, service *drive.Service, file *drive.File, chunkChan chan types.Chunk, errChunkChan chan error) {
+func (g *GoogleDriveConnector) processFile(ctx context.Context, service *drive.Service, file *drive.File, chunkChan chan types.ChunkSyncResult) {
 	var content string
 	var err error
 	if file.MimeType == "application/vnd.google-apps.document" {
@@ -271,12 +267,16 @@ func (g *GoogleDriveConnector) processFile(ctx context.Context, service *drive.S
 	} else {
 		content, err = downloadAndParseBinaryFile(ctx, service, file)
 		if err != nil {
-			errChunkChan <- fmt.Errorf("unable to process binary file %s: %v", file.Name, err)
+			chunkChan <- types.ChunkSyncResult{
+				Err: fmt.Errorf("unable to process binary file %s: %v", file.Name, err),
+			}
 			return
 		}
 	}
 	if err != nil {
-		errChunkChan <- fmt.Errorf("unable to export file %s of mimetype %s: %v", file.Name, file.MimeType, err)
+		chunkChan <- types.ChunkSyncResult{
+			Err: fmt.Errorf("unable to export file %s of mimetype %s: %v", file.Name, file.MimeType, err),
+		}
 		return
 	}
 
@@ -318,17 +318,18 @@ func (g *GoogleDriveConnector) processFile(ctx context.Context, service *drive.S
 		}
 
 		// TODO: add chunk overlaps
-		chunk := types.Chunk{
-			Text:     content[i:end],
-			Document: document,
-		}
 		numChunks += 1
 		log.Printf("Processing chunk %d of document %s", numChunks, file.Name)
-		chunkChan <- chunk
+		chunkChan <- types.ChunkSyncResult{
+			Chunk: types.Chunk{
+				Text:     content[i:end],
+				Document: document,
+			},
+		}
 	}
 }
 
-func (g *GoogleDriveConnector) listFiles(ctx context.Context, service *drive.Service, lastSync time.Time, chunkChan chan types.Chunk, errChunkChan chan error) error {
+func (g *GoogleDriveConnector) listFiles(ctx context.Context, service *drive.Service, lastSync time.Time, chunkChan chan types.ChunkSyncResult) error {
 	pageToken := ""
 	for {
 		q := service.Files.List().
@@ -352,7 +353,7 @@ func (g *GoogleDriveConnector) listFiles(ctx context.Context, service *drive.Ser
 			wg.Add(1)
 			go func(f *drive.File) {
 				defer wg.Done()
-				g.processFile(ctx, service, f, chunkChan, errChunkChan)
+				g.processFile(ctx, service, f, chunkChan)
 			}(file)
 		}
 		wg.Wait()
@@ -493,7 +494,7 @@ func downloadAndParseBinaryFile(ctx context.Context, service *drive.Service, fil
 		return "", fmt.Errorf("failed to parse binary file: %v", err)
 	}
 	if err2 != nil {
-		log.Printf("Error deleting file %s: %v", tempFilePath, err)
+		log.Printf("Error deleting file %s: %v", tempFilePath, err2)
 	}
 
 	return content, nil

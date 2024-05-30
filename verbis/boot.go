@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"math"
 	"net/http"
@@ -167,6 +166,7 @@ func BootOnboard() (*BootContext, error) {
 				"OLLAMA_KEEP_ALIVE=" + KeepAliveTime,
 				"OLLAMA_MAX_LOADED_MODELS=2", // Embeddings & LLM
 				"OLLAMA_NUM_PARALLEL=11",     // Max num of parallel items across connectors + 1 for active prompts
+				"OLLAMA_FLASH_ATTENTION=1",   // Speeds up token generation for apple silicon macs
 			},
 		},
 		{
@@ -442,22 +442,4 @@ func GetMasterLogDir() (string, error) {
 		return "", fmt.Errorf("unable to get user home directory: %w", err)
 	}
 	return filepath.Join(home, masterLogPath), nil
-}
-
-type myWriter struct {
-	io.Writer
-}
-
-func (m *myWriter) Write(p []byte) (n int, err error) {
-	n, err = m.Writer.Write(p)
-
-	if flusher, ok := m.Writer.(interface{ Flush() }); ok {
-		flusher.Flush()
-	} else if syncer := m.Writer.(interface{ Sync() error }); ok {
-		// Preserve original error
-		if err2 := syncer.Sync(); err2 != nil && err == nil {
-			err = err2
-		}
-	}
-	return
 }

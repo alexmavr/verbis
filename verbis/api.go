@@ -56,6 +56,7 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 func (a *API) connectorsList(w http.ResponseWriter, r *http.Request) {
 	states, err := a.Syncer.GetConnectorStates(r.Context())
 	if err != nil {
+		log.Printf("Failed to list connectors: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to list connectors: " + err.Error()))
 		return
@@ -63,6 +64,7 @@ func (a *API) connectorsList(w http.ResponseWriter, r *http.Request) {
 
 	b, err := json.Marshal(states)
 	if err != nil {
+		log.Printf("Failed to marshal connectors: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to marshal connectors: " + err.Error()))
 		return
@@ -99,16 +101,21 @@ func (a *API) connectorInit(w http.ResponseWriter, r *http.Request) {
 	// The Init method is responsible for picking up existing configuration from
 	// the store, and discovering credentials
 	conn := constructor()
+
+	log.Printf("Initializing connector type: %s id: %s", conn.Type(), conn.ID())
 	err := conn.Init(r.Context(), "")
 	if err != nil {
+		log.Printf("Failed to init connector: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to init connector: " + err.Error()))
 		return
 	}
+	log.Printf("Connector %s %s initialized", conn.Type(), conn.ID())
 
 	// Add the connector to the syncer so that it may start syncing
 	err = a.Syncer.AddConnector(conn)
 	if err != nil {
+		log.Printf("Failed to add connector: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to add connector: " + err.Error()))
 		return
@@ -141,21 +148,6 @@ func (a *API) connectorAuthSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	state, err := conn.Status(r.Context())
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Failed to get connector state: " + err.Error()))
-		return
-	}
-
-	state.AuthValid = true
-	err = conn.UpdateConnectorState(r.Context(), state)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Failed to update connector state: " + err.Error()))
-		return
-	}
-
 }
 
 func (a *API) handleConnectorCallback(w http.ResponseWriter, r *http.Request) {
@@ -181,9 +173,9 @@ func (a *API) handleConnectorCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	state := queryParts.Get("state")
+	stateParam := queryParts.Get("state")
 	// If any state is provided it must match the connector ID
-	if state != "" && state != connectorID {
+	if stateParam != "" && stateParam != connectorID {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("State does not match connector ID"))
 		return
@@ -201,6 +193,24 @@ func (a *API) handleConnectorCallback(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Failed to authenticate with Google: " + err.Error()))
 		return
 	}
+
+	state, err := conn.Status(a.Context)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to get connector state: " + err.Error()))
+		return
+	}
+	state.AuthValid = true // TODO: delegate this logic to the connector implementation
+	err = conn.UpdateConnectorState(a.Context, state)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to update connector state: " + err.Error()))
+		return
+	}
+
+	// Trigger a background sync, it should silently quit if a sync is already
+	// running for this connector
+	a.Syncer.ASyncNow(a.Context)
 
 	// TODO: Render a done page
 	w.Write([]byte("Google authentication is complete, you may close this tab and return to the Verbis desktop app"))
