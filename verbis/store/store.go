@@ -474,7 +474,7 @@ func UpdateConnectorState(ctx context.Context, client *weaviate.Client, state *t
 	}
 
 	if resp.Data["Get"] == nil || len(resp.Data["Get"].(map[string]interface{})[stateClassName].([]interface{})) == 0 {
-		log.Print("Creating new connector state")
+		log.Printf("Creating new connector state for %s %s", state.ConnectorType, state.ConnectorID)
 		_, err := client.Data().Creator().WithClassName(stateClassName).WithProperties(map[string]interface{}{
 			"connector_id": state.ConnectorID,
 			"type":         state.ConnectorType,
@@ -488,12 +488,10 @@ func UpdateConnectorState(ctx context.Context, client *weaviate.Client, state *t
 		}).Do(ctx)
 		return err
 	}
-	log.Print("Updating existing connector state")
+	log.Printf("Updating existing connector state for %s %s", state.ConnectorType, state.ConnectorID)
 
 	get := resp.Data["Get"].(map[string]interface{})
 	states := get["ConnectorState"].([]interface{})
-	fmt.Println(states)
-
 	c := states[0].(map[string]interface{})
 	addl := c["_additional"].(map[string]interface{})
 	objID := addl["id"].(string)
