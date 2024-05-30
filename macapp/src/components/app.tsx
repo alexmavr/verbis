@@ -20,7 +20,7 @@ export default function () {
   };
 
   return (
-    <div className="drag">
+    <div className="">
       {currentScreen != AppScreen.WELCOME && (
         <NavbarComponent
           navigate={navigateToScreen}
