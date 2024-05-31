@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { force_sync, list_connectors } from "../client";
 import GDriveLogo from "../../assets/connectors/gdrive.svg";
+import GMailLogo from "../../assets/connectors/gmail.svg";
 import {
   ArrowPathIcon,
   CheckCircleIcon,
@@ -8,8 +9,10 @@ import {
 } from "@heroicons/react/24/solid";
 import { formatDistanceToNow } from "date-fns";
 
-const appLogos = {
+const appLogos: { [key: string]: React.FC<React.SVGProps<SVGSVGElement>> } = {
   googledrive: GDriveLogo,
+  gmail: GMailLogo,
+  // Add more mappings for other connector types
 };
 
 const ActiveConnectorsList: React.FC = () => {
@@ -45,7 +48,7 @@ const ActiveConnectorsList: React.FC = () => {
               </th> */}
               <th></th>
               <th></th>
-              <th>Connector</th>
+              <th></th>
               <th>Account</th>
               <th># Docs</th>
               <th># Chunks</th>
@@ -54,45 +57,50 @@ const ActiveConnectorsList: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {Object.values(connectorList).map((connector, index) => (
-              <tr key={index}>
-                {/* <th>
+            {Object.values(connectorList).map((connector, index) => {
+              const LogoComponent = appLogos[connector.connector_type];
+              return (
+                <tr key={index}>
+                  {/* <th>
                   <label>
                     <input type="checkbox" className="checkbox" />
                   </label>
                 </th> */}
-                <td>
-                  {connector.auth_valid ? (
-                    <CheckCircleIcon className="h-5 w-5" title="Auth Valid" />
-                  ) : (
-                    <ExclamationCircleIcon
-                      className="h-5 w-5"
-                      title="Auth Invalid!"
-                    />
-                  )}
-                </td>
-                <td>
-                  <button className="rounded-full" onClick={force_sync}>
-                    <ArrowPathIcon
-                      className={`h-5 w-5 ${
-                        connector.syncing ? "animate-spin" : ""
-                      }`}
-                      title={connector.syncing ? "Syncing..." : "Force Sync"}
-                    />
-                  </button>
-                </td>
-                <td>{connector.connector_type.toString()}</td>
-                <td>{connector.user.toString()}</td>
-                <td>{connector.num_documents}</td>
-                <td>{connector.num_chunks}</td>
-                <td>{connector.num_errors}</td>
-                <td>
-                  {formatDistanceToNow(new Date(connector.last_sync), {
-                    addSuffix: true,
-                  })}
-                </td>
-              </tr>
-            ))}
+                  <td>
+                    {connector.auth_valid ? (
+                      <CheckCircleIcon className="h-5 w-5" title="Auth Valid" />
+                    ) : (
+                      <ExclamationCircleIcon
+                        className="h-5 w-5"
+                        title="Auth Invalid!"
+                      />
+                    )}
+                  </td>
+                  <td>
+                    <button className="rounded-full" onClick={force_sync}>
+                      <ArrowPathIcon
+                        className={`h-5 w-5 ${
+                          connector.syncing ? "animate-spin" : ""
+                        }`}
+                        title={connector.syncing ? "Syncing..." : "Force Sync"}
+                      />
+                    </button>
+                  </td>
+                  <td>
+                    {LogoComponent ? <LogoComponent className="h-5 w-5" /> : ""}
+                  </td>
+                  <td>{connector.user.toString()}</td>
+                  <td>{connector.num_documents}</td>
+                  <td>{connector.num_chunks}</td>
+                  <td>{connector.num_errors}</td>
+                  <td>
+                    {formatDistanceToNow(new Date(connector.last_sync), {
+                      addSuffix: true,
+                    })}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
           {/* <tfoot>
             <tr>
