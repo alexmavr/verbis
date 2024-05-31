@@ -12,5 +12,5 @@ var AllConnectors = map[string]types.ConnectorConstructor{
 const (
 	// MaxChunkSize in number of characters, pre-sanitization
 	// Needs to fit in the embedding context window
-	MaxChunkSize = 4000
+	MaxChunkSize = 2000
 )

@@ -106,18 +106,17 @@ interface HistoryItem {
 
 export async function generate(
   promptText: string,
-  history: HistoryItem[] = []
+  conversation_id: string,
 ): Promise<{
   sources: ResultSource[];
   generator: AsyncGenerator<GenerateChunk, void, unknown>;
 }> {
   const payload = {
     prompt: promptText,
-    history: history.length > 0 ? history : [],
   };
 
   const controller = new AbortController();
-  const response = await fetch("http://localhost:8081/prompt", {
+  const response = await fetch(`http://localhost:8081/conversations/${conversation_id}/prompt`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -149,5 +148,26 @@ export async function list_connectors() {
   } catch (error) {
     console.error("Connector list", error);
     throw error;
+  }
+}
+
+export async function list_conversations() {
+  try {
+    const response = await axios.get("http://localhost:8081/conversations");
+    return response.data;
+  } catch (error) {
+    console.error("Conversation list", error);
+    throw error;
+  }
+}
+
+export async function create_conversation() {
+  try {
+    const response = await axios.post("http://localhost:8081/conversations");
+    console.log("Create Conversation Response:", response.data);
+    return response.data.id;
+  } catch (error) {
+    console.error("Error in Create Conversation:", error);
+    throw error; // Rethrow or handle as needed
   }
 }

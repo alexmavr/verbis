@@ -57,7 +57,7 @@ function firstRunWindow() {
   welcomeWindow = new BrowserWindow({
     width: 600,
     height: 800,
-    frame: false,
+    frame: true,
     fullscreenable: false,
     resizable: true,
     movable: true,

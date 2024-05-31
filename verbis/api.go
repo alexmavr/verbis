@@ -38,9 +38,12 @@ func (a *API) SetupRouter() *mux.Router {
 	r.HandleFunc("/connectors/{connector_id}/auth_setup", a.connectorAuthSetup).Methods("GET")
 	r.HandleFunc("/connectors/{connector_id}/callback", a.handleConnectorCallback).Methods("GET")
 	r.HandleFunc("/connectors/auth_complete", a.authComplete).Methods("GET")
-	r.HandleFunc("/prompt", a.handlePrompt).Methods("POST")
-	r.HandleFunc("/health", a.health).Methods("GET")
 
+	r.HandleFunc("/conversations", a.listConversations).Methods("GET")
+	r.HandleFunc("/conversations", a.createConversation).Methods("POST")
+	r.HandleFunc("/conversations/{conversation_id}/prompt", a.handlePrompt).Methods("POST")
+
+	r.HandleFunc("/health", a.health).Methods("GET")
 	r.HandleFunc("/sync/force", a.forceSync).Methods("GET")
 
 	return r
@@ -51,6 +54,46 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 	// TODO: return state of syncs and model downloads, to be used during init
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(fmt.Sprintf("{\"boot_state\": \"%s\"}", a.Context.State)))
+}
+
+func (a *API) listConversations(w http.ResponseWriter, r *http.Request) {
+	conversations, err := store.ListConversations(r.Context(), store.GetWeaviateClient())
+	if err != nil {
+		log.Printf("Failed to list conversations: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to list conversations: " + err.Error()))
+		return
+	}
+
+	b, err := json.Marshal(conversations)
+	if err != nil {
+		log.Printf("Failed to marshal conversations: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to marshal conversations: " + err.Error()))
+		return
+	}
+
+	w.Write(b)
+}
+
+func (a *API) createConversation(w http.ResponseWriter, r *http.Request) {
+	conversationID, err := store.CreateConversation(r.Context(), store.GetWeaviateClient())
+	if err != nil {
+		log.Printf("Failed to create conversation: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to create conversation: " + err.Error()))
+		return
+	}
+
+	b, err := json.Marshal(map[string]string{"id": conversationID})
+	if err != nil {
+		log.Printf("Failed to marshal conversation: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to marshal conversation: " + err.Error()))
+		return
+	}
+
+	w.Write(b)
 }
 
 func (a *API) connectorsList(w http.ResponseWriter, r *http.Request) {
@@ -312,8 +355,7 @@ type ApiResponse struct {
 }
 
 type PromptRequest struct {
-	Prompt  string              `json:"prompt"`
-	History []types.HistoryItem `json:"history"`
+	Prompt string `json:"prompt"`
 }
 
 type StreamResponseHeader struct {
@@ -323,13 +365,27 @@ type StreamResponseHeader struct {
 func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Start of handlePrompt")
 	startTime := time.Now()
+
+	vars := mux.Vars(r)
+	conversationID, ok := vars["conversation_id"]
+	if !ok {
+		http.Error(w, "No conversation ID provided", http.StatusBadRequest)
+		return
+	}
+
 	var promptReq PromptRequest
 	defer r.Body.Close()
 	err := json.NewDecoder(r.Body).Decode(&promptReq)
 	if err != nil {
 		// return HTTP 400 bad request
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Failed to decode request"))
+		http.Error(w, "Failed to decode request", http.StatusBadRequest)
+	}
+
+	conversation, err := store.GetConversation(r.Context(), store.GetWeaviateClient(), conversationID)
+	if err != nil {
+		log.Printf("Failed to get conversation: %s", err)
+		http.Error(w, "Failed to get conversation: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -337,7 +393,8 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	// Call Ollama embeddings model to get embeddings for the prompt
 	resp, err := EmbedFromModel(promptReq.Prompt)
 	if err != nil {
-		http.Error(w, "Failed to get embeddings", http.StatusInternalServerError)
+		log.Printf("Failed to get embeddings: %s", err)
+		http.Error(w, "Failed to get embeddings "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	embedTime := time.Now()
@@ -358,6 +415,17 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	}
 	searchTime := time.Now()
 
+	// Add all previous conversation chunks for reranking
+	for _, chunkHash := range conversation.ChunkHashes {
+		chunk, err := store.GetChunkByHash(r.Context(), store.GetWeaviateClient(), chunkHash)
+		if err != nil {
+			log.Printf("Failed to get chunk by hash: %s", err)
+			http.Error(w, "Failed to get chunk by hash", http.StatusInternalServerError)
+			return
+		}
+		searchResults = append(searchResults, chunk)
+	}
+
 	// Rerank the results
 	rerankedChunks, err := Rerank(r.Context(), searchResults, promptReq.Prompt)
 	if err != nil {
@@ -377,7 +445,7 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	}
 
 	streamChan := make(chan StreamResponse)
-	err = chatWithModelStream(r.Context(), llmPrompt, generationModelName, promptReq.History, streamChan)
+	err = chatWithModelStream(r.Context(), llmPrompt, generationModelName, conversation.History, streamChan)
 	if err != nil {
 		log.Printf("Failed to generate response: %s", err)
 		http.Error(w, "Failed to generate response", http.StatusInternalServerError)
@@ -432,6 +500,43 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	doneTime := time.Now()
+
+	conversation.History = append(conversation.History, types.HistoryItem{
+		Role:    "assistant",
+		Content: responseAcc,
+	})
+
+	// Find out which chunks are not already part of the conversation history
+	newChunks := []*types.Chunk{}
+	for _, chunk := range rerankedChunks {
+		found := false
+		for _, chunkHash := range conversation.ChunkHashes {
+			if chunkHash == chunk.Hash {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			newChunks = append(newChunks, chunk)
+		}
+	}
+
+	err = store.ConversationAppend(r.Context(), store.GetWeaviateClient(), conversationID, []types.HistoryItem{
+		{
+			Role:    "user",
+			Content: promptReq.Prompt,
+		},
+		{
+			Role:    "assistant",
+			Content: responseAcc,
+		},
+	}, newChunks)
+	if err != nil {
+		log.Printf("Failed to append to conversation: %s", err)
+		http.Error(w, "Failed to append to conversation", http.StatusInternalServerError)
+		return
+	}
 
 	err = a.Posthog.Enqueue(posthog.Capture{
 		DistinctId: a.PosthogDistinctID,

@@ -193,6 +193,7 @@ func BootOnboard() (*BootContext, error) {
 	store.CreateDocumentClass(ctx, weavClient, clean)
 	store.CreateConnectorStateClass(ctx, weavClient, clean)
 	store.CreateChunkClass(ctx, weavClient, clean)
+	store.CreateConversationClass(ctx, weavClient, clean)
 
 	// Start HTTP server
 	go func() {

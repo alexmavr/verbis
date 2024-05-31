@@ -2,10 +2,12 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-openapi/strfmt"
@@ -19,9 +21,10 @@ import (
 )
 
 var (
-	chunkClassName    = "VerbisChunk"
-	documentClassName = "Document"
-	stateClassName    = "ConnectorState"
+	chunkClassName        = "VerbisChunk"
+	documentClassName     = "Document"
+	stateClassName        = "ConnectorState"
+	conversationClassName = "Conversation"
 )
 
 const (
@@ -36,7 +39,25 @@ func GetWeaviateClient() *weaviate.Client {
 	})
 }
 
+var ErrChunkNotFound = errors.New("chunk not found")
+
+func IsErrChunkNotFound(err error) bool {
+	return errors.Is(err, ErrChunkNotFound)
+}
+
 func ChunkHashExists(ctx context.Context, client *weaviate.Client, hash string) (bool, error) {
+	chunk, err := GetChunkByHash(ctx, client, hash)
+	if err != nil {
+		return false, err
+	}
+	if chunk == nil {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+func GetChunkByHash(ctx context.Context, client *weaviate.Client, hash string) (*types.Chunk, error) {
 	where := filters.Where().
 		WithPath([]string{"hash"}).
 		WithOperator(filters.Equal).
@@ -44,24 +65,37 @@ func ChunkHashExists(ctx context.Context, client *weaviate.Client, hash string) 
 
 	resp, err := client.GraphQL().Get().
 		WithClassName(chunkClassName).
-		WithFields([]graphql.Field{{Name: "hash"}}...).
+		WithFields([]graphql.Field{
+			{Name: "hash"},
+			{Name: "documentid"},
+			{Name: "chunk"},
+		}...).
 		WithWhere(where).
 		Do(ctx)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
 	if resp.Data["Get"] == nil {
-		return false, nil
+		return nil, ErrChunkNotFound
 	}
 
 	get := resp.Data["Get"].(map[string]interface{})
 	chunks, ok := get[chunkClassName].([]interface{})
-	if !ok {
-		return false, nil
+	if !ok || len(chunks) == 0 {
+		return nil, ErrChunkNotFound
 	}
 
-	return len(chunks) > 0, nil
+	if len(chunks) > 1 {
+		return nil, fmt.Errorf("found %d chunks instead of 1", len(chunks))
+	}
+
+	parsedChunks, err := parseChunks(ctx, client, chunks, false)
+	if err != nil {
+		return nil, err
+	}
+
+	return parsedChunks[0], nil
 }
 
 func getDocumentIDFromUniqueID(ctx context.Context, client *weaviate.Client, uniqueID string) (string, error) {
@@ -126,7 +160,6 @@ type AddVectorResponse struct {
 }
 
 func AddVectors(ctx context.Context, client *weaviate.Client, items []types.AddVectorItem) (*AddVectorResponse, error) {
-	log.Printf("Adding %d vectors to vector store", len(items))
 	objects := []*models.Object{}
 
 	for _, item := range items {
@@ -231,56 +264,65 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 	}
 
 	log.Print(resp.Data["Get"])
+	if resp.Data["Get"] == nil {
+		return nil, fmt.Errorf("no chunks found")
+	}
+	get := resp.Data["Get"].(map[string]interface{})
+	if get[chunkClassName] == nil {
+		// return empty result
+		return []*types.Chunk{}, nil
+	}
+
+	return parseChunks(ctx, client, get[chunkClassName].([]interface{}), true)
+}
+
+func parseChunks(ctx context.Context, client *weaviate.Client, chunks []interface{}, withScore bool) ([]*types.Chunk, error) {
 	res := []*types.Chunk{}
-	if resp.Data["Get"] != nil {
-		get := resp.Data["Get"].(map[string]interface{})
-		if get[chunkClassName] == nil {
-			// return empty result
-			return res, nil
-		}
+	score := 0.0
+	var err error
+	for _, chunkMap := range chunks {
+		c := chunkMap.(map[string]interface{})
 
-		chunks := get[chunkClassName].([]interface{})
-		for _, chunkMap := range chunks {
-			c := chunkMap.(map[string]interface{})
-
-			// Parse additional info
+		// Parse additional info
+		if withScore {
 			addl := c["_additional"].(map[string]interface{})
 			scoreStr := addl["score"].(string)
 			log.Printf("ScoreStr: %s\n", scoreStr)
-			score, err := strconv.ParseFloat(scoreStr, 64)
+			score, err = strconv.ParseFloat(scoreStr, 64)
 			if err != nil {
 				log.Printf("Failed to parse score: %s\n", err)
 				continue
 			}
-
-			// Retrieve and parse document details from the linked Document
-			docid, ok := c["documentid"].(string)
-			if !ok {
-				return nil, fmt.Errorf("documentid is nil")
-			}
-			docData, err := getDocument(ctx, client, docid)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get document: %v", err)
-			}
-			log.Print(docData)
-			createdAt, _ := time.Parse(time.RFC3339, docData["createdAt"].(string))
-			updatedAt, _ := time.Parse(time.RFC3339, docData["updatedAt"].(string))
-
-			res = append(res, &types.Chunk{
-				Document: types.Document{
-					Name:        docData["name"].(string),
-					SourceURL:   docData["sourceURL"].(string),
-					ConnectorID: docData["connectorID"].(string),
-					CreatedAt:   createdAt,
-					UpdatedAt:   updatedAt,
-				},
-				Text:  c["chunk"].(string),
-				Hash:  c["hash"].(string),
-				Score: score,
-			})
 		}
-	}
 
+		// Retrieve and parse document details from the linked Document
+		docid, ok := c["documentid"].(string)
+		if !ok {
+			return nil, fmt.Errorf("documentid is nil")
+		}
+		docData, err := getDocument(ctx, client, docid)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get document: %v", err)
+		}
+		createdAt, _ := time.Parse(time.RFC3339, docData["createdAt"].(string))
+		updatedAt, _ := time.Parse(time.RFC3339, docData["updatedAt"].(string))
+
+		chunk := &types.Chunk{
+			Document: types.Document{
+				Name:        docData["name"].(string),
+				SourceURL:   docData["sourceURL"].(string),
+				ConnectorID: docData["connectorID"].(string),
+				CreatedAt:   createdAt,
+				UpdatedAt:   updatedAt,
+			},
+			Text: c["chunk"].(string),
+			Hash: c["hash"].(string),
+		}
+		if withScore {
+			chunk.Score = score
+		}
+		res = append(res, chunk)
+	}
 	return res, nil
 }
 
@@ -359,6 +401,190 @@ func CreateChunkClass(ctx context.Context, client *weaviate.Client, force bool) 
 	}
 
 	return nil
+}
+
+func CreateConversation(ctx context.Context, client *weaviate.Client) (string, error) {
+	// Create a new conversation object
+	conversationID := uuid.NewString()
+	_, err := client.Data().Creator().WithClassName(conversationClassName).WithID(conversationID).
+		WithProperties(map[string]interface{}{
+			"history": []interface{}{},
+			"chunks":  []interface{}{},
+		}).Do(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to create conversation: %v", err)
+	}
+
+	return conversationID, nil
+}
+
+var ErrConversationNotFound = errors.New("conversation not found")
+
+func IsErrConversationNotFound(err error) bool {
+	return errors.Is(err, ErrConversationNotFound)
+}
+
+func ListConversations(ctx context.Context, client *weaviate.Client) ([]*types.Conversation, error) {
+	resp, err := client.GraphQL().Get().
+		WithClassName(conversationClassName).
+		WithFields(
+			[]graphql.Field{
+				{
+					Name: "history",
+				},
+				{
+					Name: "chunks",
+				},
+				{
+					Name: "_additional",
+					Fields: []graphql.Field{
+						{Name: "id"},
+					},
+				},
+			}...,
+		).
+		Do(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list conversations: %v", err)
+	}
+
+	if resp.Data["Get"] == nil {
+		return []*types.Conversation{}, nil
+	}
+
+	get := resp.Data["Get"].(map[string]interface{})
+	if get[conversationClassName] == nil {
+		return []*types.Conversation{}, nil
+	}
+
+	conversations := get[conversationClassName].([]interface{})
+	resConversations := []*types.Conversation{}
+	for _, conversation := range conversations {
+		cMap := conversation.(map[string]interface{})
+		res, err := parseConversation("", cMap)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse conversation: %v", err)
+		}
+		resConversations = append(resConversations, res)
+	}
+
+	return resConversations, nil
+}
+
+func GetConversation(ctx context.Context, client *weaviate.Client, conversationID string) (*types.Conversation, error) {
+	log.Printf("Looking for conversation with ID %s\n", conversationID)
+	conversations, err := client.Data().ObjectsGetter().
+		WithClassName(conversationClassName).
+		WithID(conversationID).
+		Do(ctx)
+	if err != nil {
+		if strings.Contains(err.Error(), "404") {
+			return nil, ErrConversationNotFound
+		}
+		return nil, fmt.Errorf("failed to get conversation with id %s: %v", conversationID, err)
+	}
+	if len(conversations) == 0 {
+		return nil, ErrConversationNotFound
+	}
+
+	if len(conversations) > 1 {
+		return nil, fmt.Errorf("found %d conversations instead of 1", len(conversations))
+	}
+
+	conv := conversations[0].Properties.(map[string]interface{})
+	return parseConversation(conversationID, conv)
+}
+
+func parseConversation(conversationID string, conversationMap map[string]interface{}) (*types.Conversation, error) {
+	if conversationID == "" {
+		conversationID = conversationMap["_additional"].(map[string]interface{})["id"].(string)
+	}
+	conversationChunks := conversationMap["chunks"].([]interface{})
+	conversationHistory := conversationMap["history"].([]interface{})
+
+	chunkHashes := []string{}
+	for _, chunk := range conversationChunks {
+		chunkHashes = append(chunkHashes, chunk.(string))
+	}
+
+	historyItems := []types.HistoryItem{}
+	for _, item := range conversationHistory {
+		historyItem := types.HistoryItem{}
+		err := json.Unmarshal([]byte(item.(string)), &historyItem)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal history item: %v", err)
+		}
+
+		historyItems = append(historyItems, historyItem)
+	}
+
+	conversation := &types.Conversation{
+		ID:          conversationID,
+		History:     historyItems,
+		ChunkHashes: chunkHashes,
+	}
+	return conversation, nil
+}
+
+func ConversationAppend(ctx context.Context, client *weaviate.Client, conversationID string, items []types.HistoryItem, chunks []*types.Chunk) error {
+	conversation, err := GetConversation(ctx, client, conversationID)
+	if err != nil {
+		return fmt.Errorf("unable to get conversation: %v", err)
+	}
+
+	// Add chunk hashes to the conversation
+	for _, chunk := range chunks {
+		conversation.ChunkHashes = append(conversation.ChunkHashes, chunk.Hash)
+	}
+	conversation.History = append(conversation.History, items...)
+
+	// Convert each HistoryItem to a JSON string
+	jsonHistory := make([]string, len(conversation.History))
+	for i, item := range conversation.History {
+		historyItemJSON, err := json.Marshal(item)
+		if err != nil {
+			return fmt.Errorf("failed to marshal history item: %v", err)
+		}
+		jsonHistory[i] = string(historyItemJSON)
+	}
+
+	err = client.Data().Updater(). // replaces the entire object
+					WithID(conversationID).
+					WithClassName(conversationClassName).
+					WithProperties(map[string]interface{}{
+			"history": jsonHistory,
+			"chunks":  conversation.ChunkHashes,
+		}).
+		Do(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to update conversation: %v", err)
+	}
+
+	return nil
+}
+
+func CreateConversationClass(ctx context.Context, client *weaviate.Client, force bool) error {
+	if force {
+		client.Schema().ClassDeleter().WithClassName(conversationClassName).Do(ctx)
+	}
+
+	class := &models.Class{
+		Class:      conversationClassName,
+		Vectorizer: "none",
+		Properties: []*models.Property{
+			{
+				Name:     "history",
+				DataType: []string{"text[]"},
+			},
+			{
+				Name:     "chunks",
+				DataType: []string{"text[]"},
+			},
+		},
+	}
+
+	// Create the class in Weaviate
+	return client.Schema().ClassCreator().WithClass(class).Do(ctx)
 }
 
 // Create a Weaviate class schema for the connector state

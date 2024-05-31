@@ -1,6 +1,6 @@
 import { PaperAirplaneIcon, PencilSquareIcon } from "@heroicons/react/24/solid";
 import React, { useEffect, useRef, useState } from "react";
-import { generate } from "../client";
+import { create_conversation, generate } from "../client";
 import { CogIcon } from "@heroicons/react/24/solid";
 import GDriveLogo from "../../assets/connectors/gdrive.svg";
 import { AppScreen, ResultSource } from "../types";
@@ -18,6 +18,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
   const [placeholder, setPlaceholder] = useState("How can I help?");
   const countRef = useRef(0); // To keep track of the ellipsis state
   const [conversation, setConversation] = useState([]);
+  const [conversationId, setConversationId] = useState<string | null>(null); // State for conversation ID
   const controller = new AbortController(); // For handling cancellation
 
   // Function to truncate string
@@ -92,10 +93,27 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
     };
   }, []);
 
-  const startNewConversation = () => {
-    // Reset the conversation state
+  useEffect(() => {
+    const initializeConversation = async () => {
+      try {
+        const newConversationId = await create_conversation();
+        setConversationId(newConversationId);
+      } catch (error) {
+        console.error("Error creating conversation:", error);
+      }
+    };
+
+    initializeConversation();
+  }, []);
+
+  const startNewConversation = async () => {
     setConversation([]);
-    // TODO Create a new Conversation session with the API
+    try {
+      const newConversationId = await create_conversation();
+      setConversationId(newConversationId);
+    } catch (error) {
+      console.error("Error creating conversation:", error);
+    }
   };
 
   const triggerPrompt = async () => {
@@ -113,33 +131,34 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
     const assistantResponseIndex = conversation.length + 1; // zero-indexed, user + assistant message from now
 
     try {
-      const { sources: sources, generator } = await generate(
-        previousPrompt,
-        history
-      );
-      // Create an entry for the assistant's response to accumulate content
-      setConversation((conv) => [
-        ...conv,
-        { role: "user", content: previousPrompt },
-        {
-          role: "assistant",
-          content: "",
-          sources: sources,
-        },
-      ]);
+      if (conversationId) {
+        const { sources: sources, generator } = await generate(previousPrompt, conversationId);
+        // Create an entry for the assistant's response to accumulate content
+        setConversation((conv) => [
+          ...conv,
+          { role: "user", content: previousPrompt },
+          {
+            role: "assistant",
+            content: "",
+            sources: sources,
+          },
+        ]);
 
-      let accumulatedContent = "";
-      // Process each generated chunk as it arrives
-      for await (const chunk of generator) {
-        accumulatedContent += chunk.content;
-        setConversation((conv) => {
-          const newConv = [...conv];
-          newConv[assistantResponseIndex] = {
-            ...newConv[assistantResponseIndex],
-            content: accumulatedContent,
-          };
-          return newConv;
-        });
+        let accumulatedContent = "";
+        // Process each generated chunk as it arrives
+        for await (const chunk of generator) {
+          accumulatedContent += chunk.content;
+          setConversation((conv) => {
+            const newConv = [...conv];
+            newConv[assistantResponseIndex] = {
+              ...newConv[assistantResponseIndex],
+              content: accumulatedContent,
+            };
+            return newConv;
+          });
+        }
+      } else {
+        console.error("No conversation ID available");
       }
     } catch (e) {
       console.error("Error during prompt generation: ", e);
@@ -152,7 +171,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
   return (
     <>
       <div className="fixed left-5 top-5 z-50">
-        <button onClick={() => startNewConversation()}>
+        <button onClick={startNewConversation}>
           <PencilSquareIcon className="h-6 w-6" />
         </button>
       </div>

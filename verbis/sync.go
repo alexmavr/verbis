@@ -155,7 +155,7 @@ func chunkAdder(ctx context.Context, chunkChan chan types.ChunkSyncResult, resCh
 
 		chunkHash := hash(saneChunk)
 		exists, err := store.ChunkHashExists(ctx, store.GetWeaviateClient(), chunkHash)
-		if err != nil {
+		if err != nil && !store.IsErrChunkNotFound(err) {
 			resChan <- chunkAddResult{
 				err: fmt.Errorf("failed to check chunk hash: %s", err),
 			}
@@ -174,7 +174,6 @@ func chunkAdder(ctx context.Context, chunkChan chan types.ChunkSyncResult, resCh
 			continue
 		}
 
-		log.Printf("Genereated embeddings for chunk of length %d", len(saneChunk))
 		embedding := resp.Embedding
 		chunk.Text = saneChunk
 		chunk.Name = saneName
