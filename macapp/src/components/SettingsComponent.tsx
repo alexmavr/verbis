@@ -138,11 +138,12 @@ const AppCatalog: React.FC = () => {
                     app.available
                       ? app.connect
                       : () => {
-                          console.log("Requested", app.name);
-                        }
+                        console.log("Requested", app.name);
+                        // TODO: Log request in Posthog
+                      }
                   }
                 >
-                  Connect
+                  {app.available ? "Connect" : "Request"}
                 </button>
               </div>
             </div>
