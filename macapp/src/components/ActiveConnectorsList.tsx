@@ -7,7 +7,7 @@ import {
   CheckCircleIcon,
   ExclamationCircleIcon,
 } from "@heroicons/react/24/solid";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, differenceInYears } from "date-fns";
 
 const appLogos: { [key: string]: React.FC<React.SVGProps<SVGSVGElement>> } = {
   googledrive: GDriveLogo,
@@ -35,6 +35,19 @@ const ActiveConnectorsList: React.FC = () => {
 
     return () => clearInterval(intervalId);
   }, []);
+
+  // Function to format last_sync date
+  function renderLastSyncDate(lastSyncDate: string | number | Date): string {
+    const date = new Date(lastSyncDate);
+
+    // Check if the date is more than 1 year ago
+    if (differenceInYears(new Date(), date) > 1) {
+      return "-";
+    } else {
+      return formatDistanceToNow(date, { addSuffix: true });
+    }
+  }
+
   return (
     <div>
       <div className="overflow-x-auto">
@@ -93,11 +106,7 @@ const ActiveConnectorsList: React.FC = () => {
                   <td>{connector.num_documents}</td>
                   <td>{connector.num_chunks}</td>
                   <td>{connector.num_errors}</td>
-                  <td>
-                    {formatDistanceToNow(new Date(connector.last_sync), {
-                      addSuffix: true,
-                    })}
-                  </td>
+                  <td>{renderLastSyncDate(connector.last_sync)}</td>
                 </tr>
               );
             })}
