@@ -18,11 +18,23 @@ export async function connector_init(connector_name: string) {
     const response = await axios.get(
       `http://localhost:8081/connectors/${connector_name}/init`
     );
-    console.log("Google Init Response:", response.data);
-    // Additional logic based on response
+    console.log("Connector Init Response:", response.data);
     return response.data["id"];
   } catch (error) {
-    console.error("Error in Google Init:", error);
+    console.error("Error in Connector Init:", error);
+    throw error; // Rethrow or handle as needed
+  }
+}
+
+export async function connector_request(connector_name: string) {
+  try {
+    const response = await axios.get(
+      `http://localhost:8081/connectors/${connector_name}/request`
+    );
+    console.log("Connector Init Response:", response.data);
+    return response.data["id"];
+  } catch (error) {
+    console.error("Error in Connector Init:", error);
     throw error; // Rethrow or handle as needed
   }
 }
@@ -33,7 +45,6 @@ export async function connector_auth_setup(connector_id: string) {
       `http://localhost:8081/connectors/${connector_id}/auth_setup`
     );
     console.log("Connector Auth Setup Response:", response.data);
-    // Additional logic based on response
   } catch (error) {
     console.error("Error in Connector Auth Setup:", error);
     throw error; // Rethrow or handle as needed
@@ -44,7 +55,6 @@ export async function force_sync() {
   try {
     const response = await axios.get("http://localhost:8081/sync/force");
     console.log("Force Sync Response:", response.data);
-    // Additional logic based on response
   } catch (error) {
     console.error("Error in Force Sync:", error);
     throw error; // Rethrow or handle as needed

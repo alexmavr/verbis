@@ -32,6 +32,7 @@ func (a *API) SetupRouter() *mux.Router {
 	r := mux.NewRouter()
 	r.HandleFunc("/connectors", a.connectorsList).Methods("GET")
 	r.HandleFunc("/connectors/{type}/init", a.connectorInit).Methods("GET")
+	r.HandleFunc("/connectors/{type}/request", a.connectorRequest).Methods("GET")
 	// TODO: auth_setup and callback are theoretically per connector and not per
 	// connector type. The ID of the connector should be inferred and passed as
 	// a state variable in the oauth flow.
@@ -54,6 +55,28 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 	// TODO: return state of syncs and model downloads, to be used during init
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(fmt.Sprintf("{\"boot_state\": \"%s\"}", a.Context.State)))
+}
+
+func (a *API) connectorRequest(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	connectorType, ok := vars["type"]
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("No connector name provided"))
+		return
+	}
+
+	err := a.Posthog.Enqueue(posthog.Capture{
+		DistinctId: a.PosthogDistinctID,
+		Event:      "ConnectorRequest",
+		Properties: posthog.NewProperties().
+			Set("connector_type", connectorType),
+	})
+	if err != nil {
+		log.Printf("Failed to enqueue connector request: %s\n", err)
+		http.Error(w, "Failed to enqueue connector request", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (a *API) listConversations(w http.ResponseWriter, r *http.Request) {
