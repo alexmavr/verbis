@@ -63,8 +63,7 @@ const ActiveConnectorsList: React.FC = () => {
               <th></th>
               <th></th>
               <th>Account</th>
-              <th># Docs</th>
-              <th># Chunks</th>
+              <th># Documents</th>
               <th># Errors</th>
               <th>Last Sync</th>
             </tr>
@@ -104,7 +103,6 @@ const ActiveConnectorsList: React.FC = () => {
                   </td>
                   <td>{connector.user.toString()}</td>
                   <td>{connector.num_documents}</td>
-                  <td>{connector.num_chunks}</td>
                   <td>{connector.num_errors}</td>
                   <td>{renderLastSyncDate(connector.last_sync)}</td>
                 </tr>

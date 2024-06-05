@@ -6,7 +6,7 @@ var (
 	//	httpClient          = &http.Client{Timeout: 10 * time.Second}
 	generationModelName = "custom-mistral"
 	embeddingsModelName = "snowflake-arctic-embed:137m"
-	clean               = true
+	clean               = false
 	KeepAliveTime       = "20m"
 
 	PosthogAPIKey = "n/a" // Will be populated by linker from builder's env

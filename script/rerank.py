@@ -15,7 +15,7 @@ model_url = 'https://huggingface.co/prithivida/flashrank/resolve/main/{}.zip'
 
 home_dir = Path.home()
 default_cache_dir = home_dir / ".verbis" / "models"
-default_model = "ms-marco-TinyBERT-L-2-v2"
+default_model = "cross-encoder/ms-marco-MiniLM-L-12-v2"
 model_file_map = {
         "ms-marco-TinyBERT-L-2-v2": "flashrank-TinyBERT-L-2-v2.onnx",
         "ms-marco-MiniLM-L-12-v2": "flashrank-MiniLM-L-12-v2_Q.onnx",

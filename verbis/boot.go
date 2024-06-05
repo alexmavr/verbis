@@ -24,8 +24,11 @@ import (
 )
 
 const (
-	WeaviatePersistDir = ".verbis/synced_data"
 	masterLogPath      = ".verbis/logs/full.log"
+	WeaviatePersistDir = ".verbis/synced_data"
+	OllamaModelsDir    = ".verbis/ollama/models"
+	OllamaRunnersDir   = ".verbis/ollama/runners"
+	OllamaTmpDir       = ".verbis/ollama/tmp"
 )
 
 type BootState string
@@ -153,10 +156,14 @@ func BootOnboard() (*BootContext, error) {
 	ollamaPath := filepath.Join(path, util.OllamaFile)
 	weaviatePath := filepath.Join(path, util.WeaviateFile)
 
-	weaviatePersistDir, err := GetWeaviatePersistDir()
+	home, err := os.UserHomeDir()
 	if err != nil {
-		log.Fatalf("Failed to get Weaviate persist directory: %s\n", err)
+		log.Fatalf("unable to get user home directory: %w", err)
 	}
+	weaviatePersistDir := filepath.Join(home, WeaviatePersistDir)
+	ollamaModelsPath := filepath.Join(home, OllamaModelsDir)
+	ollamaRunnersPath := filepath.Join(home, OllamaRunnersDir)
+	ollamaTmpDirPath := filepath.Join(home, OllamaTmpDir)
 
 	commands := []CmdSpec{
 		{
@@ -167,6 +174,9 @@ func BootOnboard() (*BootContext, error) {
 				"OLLAMA_MAX_LOADED_MODELS=2", // Embeddings & LLM
 				"OLLAMA_NUM_PARALLEL=11",     // Max num of parallel items across connectors + 1 for active prompts
 				"OLLAMA_FLASH_ATTENTION=1",   // Speeds up token generation for apple silicon macs
+				"OLLAMA_MODELS=" + ollamaModelsPath,
+				"OLLAMA_RUNNERS_DIR=" + ollamaRunnersPath,
+				"OLLAMA_TMPDIR=" + ollamaTmpDirPath,
 			},
 		},
 		{
@@ -421,15 +431,6 @@ func waitForWeaviate(ctx context.Context) error {
 		}
 	}
 }
-
-func GetWeaviatePersistDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("unable to get user home directory: %w", err)
-	}
-	return filepath.Join(home, WeaviatePersistDir), nil
-}
-
 func Halt(bootCtx *BootContext, sigChan chan os.Signal, cancel context.CancelFunc) {
 	signal.Stop(sigChan)
 	cancel()
