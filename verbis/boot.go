@@ -158,7 +158,7 @@ func BootOnboard() (*BootContext, error) {
 
 	home, err := os.UserHomeDir()
 	if err != nil {
-		log.Fatalf("unable to get user home directory: %w", err)
+		log.Fatalf("unable to get user home directory: %s", err)
 	}
 	weaviatePersistDir := filepath.Join(home, WeaviatePersistDir)
 	ollamaModelsPath := filepath.Join(home, OllamaModelsDir)
