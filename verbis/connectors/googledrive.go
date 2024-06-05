@@ -332,6 +332,10 @@ func (g *GoogleDriveConnector) processFile(ctx context.Context, service *drive.S
 
 func (g *GoogleDriveConnector) listFiles(ctx context.Context, service *drive.Service, lastSync time.Time, chunkChan chan types.ChunkSyncResult) error {
 	pageToken := ""
+	retryCount := 0
+	maxRetryCount := 3
+	retryBackoffSecs := 5
+
 	for {
 		q := service.Files.List().
 			PageSize(10).
@@ -343,10 +347,21 @@ func (g *GoogleDriveConnector) listFiles(ctx context.Context, service *drive.Ser
 		if pageToken != "" {
 			q = q.PageToken(pageToken)
 		}
+		
 		r, err := q.Do()
 		if err != nil {
+			retryCount += 1
+			if retryCount < maxRetryCount {
+				if ctx.Err() != nil {
+					// Tackle cancellation
+					return ctx.Err()
+				}
+				time.Sleep(time.Duration(retryBackoffSecs) * time.Second)
+				continue
+			}
 			return fmt.Errorf("unable to retrieve files: %v", err)
 		}
+		retryCount = 0  // Reset retry count after a successful operation
 
 		// Max parallelism is number of files per page (10)
 		wg := sync.WaitGroup{}
