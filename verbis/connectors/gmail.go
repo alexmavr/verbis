@@ -257,6 +257,7 @@ func (g *GmailConnector) processEmail(ctx context.Context, srv *gmail.Service, e
 		Name:        getEmailSubject(email.Payload.Headers),
 		SourceURL:   emailURL, // Include the URL here
 		ConnectorID: g.ID(),
+		ConnectorType: string(g.Type()),
 		CreatedAt:   receivedAt,
 		UpdatedAt:   receivedAt,
 	}

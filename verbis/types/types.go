@@ -41,6 +41,7 @@ type Document struct {
 	Name        string    `json:"name"`
 	SourceURL   string    `json:"source_url"`
 	ConnectorID string    `json:"connector_id"`
+	ConnectorType string    `json:"connector_type"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }

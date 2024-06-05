@@ -3,12 +3,18 @@ import React, { useEffect, useRef, useState } from "react";
 import { create_conversation, generate } from "../client";
 import { CogIcon } from "@heroicons/react/24/solid";
 import GDriveLogo from "../../assets/connectors/gdrive.svg";
+import GMailLogo from "../../assets/connectors/gmail.svg";
 import { AppScreen, ResultSource } from "../types";
 import ThemeSwitcher from "./ThemeSwitcher";
 
 interface Props {
   navigate: (screen: AppScreen) => void;
 }
+
+const Logos: { [key: string]: React.FC<React.SVGProps<SVGSVGElement>> } = {
+  googledrive: GDriveLogo,
+  gmail: GMailLogo,
+};
 
 const ChatComponent: React.FC<Props> = ({ navigate }) => {
   const conversationContainer = useRef<HTMLDivElement>(null);
@@ -132,7 +138,10 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
 
     try {
       if (conversationId) {
-        const { sources: sources, generator } = await generate(previousPrompt, conversationId);
+        const { sources: sources, generator } = await generate(
+          previousPrompt,
+          conversationId
+        );
         // Create an entry for the assistant's response to accumulate content
         setConversation((conv) => [
           ...conv,
@@ -199,38 +208,35 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
                 ) : (
                   // Assistant message
                   <div className="m-4">
-                    {/* <div className="avatar">
-                      <div className="w-12 rounded-full">
-                        <img src="file://../../assets/iconTemplate.png" />
-                      </div>
-                    </div> */}
                     <div className="text-justify">
                       {item.content}
                       {item.hasOwnProperty("sources") &&
                         item.sources.map(
-                          (source: ResultSource, sourceIndex: number) => (
-                            <div
-                              key={sourceIndex}
-                              className="flex items-center"
-                            >
-                              {/* TODO: Render logo of source */}
-                              <GDriveLogo className="mr-2 h-4 w-4" />
-                              <a
-                                href={source.url}
-                                target="none"
-                                className="mr-1 text-blue-600 underline visited:text-purple-600 hover:text-blue-800"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  require("electron").shell.openExternal(
-                                    source.url
-                                  );
-                                }}
+                          (source: ResultSource, sourceIndex: number) => {
+                            const LogoComponent = Logos[source.type];
+                            return (
+                              <div
+                                key={sourceIndex}
+                                className="flex items-center"
                               >
-                                {truncateString(source.title, 30)}
-                              </a>
-                            </div>
-                          )
+                                <LogoComponent className="mr-1 h-4 w-4" />
+                                <a
+                                  href={source.url}
+                                  target="none"
+                                  className="mr-1 text-blue-600 underline visited:text-purple-600 hover:text-blue-800"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    require("electron").shell.openExternal(
+                                      source.url
+                                    );
+                                  }}
+                                >
+                                  {truncateString(source.title, 30)}
+                                </a>
+                              </div>
+                            );
+                          }
                         )}
                     </div>
                   </div>

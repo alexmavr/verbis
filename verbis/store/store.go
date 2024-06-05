@@ -182,6 +182,7 @@ func AddVectors(ctx context.Context, client *weaviate.Client, items []types.AddV
 					"name":        item.Document.Name,
 					"sourceURL":   item.Document.SourceURL,
 					"connectorID": item.Document.ConnectorID,
+					"connectorType": item.Document.ConnectorType,
 					"createdAt":   item.Document.CreatedAt.Format(time.RFC3339),
 					"updatedAt":   item.Document.UpdatedAt.Format(time.RFC3339),
 				},
@@ -312,6 +313,7 @@ func parseChunks(ctx context.Context, client *weaviate.Client, chunks []interfac
 				Name:        docData["name"].(string),
 				SourceURL:   docData["sourceURL"].(string),
 				ConnectorID: docData["connectorID"].(string),
+				ConnectorType: docData["connectorType"].(string),
 				CreatedAt:   createdAt,
 				UpdatedAt:   updatedAt,
 			},
@@ -346,6 +348,10 @@ func CreateDocumentClass(ctx context.Context, client *weaviate.Client, force boo
 			},
 			{
 				Name:     "connectorID",
+				DataType: []string{"text"},
+			},
+			{
+				Name:     "connectorType",
 				DataType: []string{"text"},
 			},
 			{
