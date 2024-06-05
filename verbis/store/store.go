@@ -351,6 +351,10 @@ func CreateDocumentClass(ctx context.Context, client *weaviate.Client, force boo
 				DataType: []string{"text"},
 			},
 			{
+				Name:     "connectorType",
+				DataType: []string{"text"},
+			},
+			{
 				Name:     "createdAt",
 				DataType: []string{"date"},
 			},
