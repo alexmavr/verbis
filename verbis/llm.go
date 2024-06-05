@@ -257,6 +257,7 @@ func sourcesFromChunks(chunks []*types.Chunk) []map[string]string {
 		sourceObj := map[string]string{
 			"title": chunk.Name,
 			"url":   chunk.SourceURL,
+			"type": chunk.ConnectorType,
 		}
 		sources = append(sources, sourceObj)
 	}

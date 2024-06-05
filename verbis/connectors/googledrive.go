@@ -299,6 +299,7 @@ func (g *GoogleDriveConnector) processFile(ctx context.Context, service *drive.S
 		Name:        file.Name,
 		SourceURL:   file.WebViewLink,
 		ConnectorID: g.ID(),
+		ConnectorType: string(g.Type()),
 		CreatedAt:   createdAt,
 		UpdatedAt:   updatedAt,
 	}

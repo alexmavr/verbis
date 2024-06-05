@@ -8,4 +8,5 @@ export enum AppScreen {
 export interface ResultSource {
   title: string;
   url: string;
+  type: string;
 }
