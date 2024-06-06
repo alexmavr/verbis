@@ -61,7 +61,6 @@ const ActiveConnectorsList: React.FC = () => {
               </th> */}
               <th></th>
               <th></th>
-              <th></th>
               <th>Account</th>
               <th># Documents</th>
               <th># Errors</th>
@@ -78,16 +77,6 @@ const ActiveConnectorsList: React.FC = () => {
                     <input type="checkbox" className="checkbox" />
                   </label>
                 </th> */}
-                  <td>
-                    {connector.auth_valid ? (
-                      <CheckCircleIcon className="h-5 w-5" title="Auth Valid" />
-                    ) : (
-                      <ExclamationCircleIcon
-                        className="h-5 w-5"
-                        title="Auth Invalid!"
-                      />
-                    )}
-                  </td>
                   <td>
                     <button className="rounded-full" onClick={force_sync}>
                       <ArrowPathIcon
