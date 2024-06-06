@@ -152,8 +152,13 @@ export async function generate(
 }
 
 export async function list_connectors() {
+  const params = {
+    all: false,
+  };
   try {
-    const response = await axios.get("http://localhost:8081/connectors");
+    const response = await axios.get("http://localhost:8081/connectors", {
+      params,
+    });
     return response.data;
   } catch (error) {
     console.error("Connector list", error);

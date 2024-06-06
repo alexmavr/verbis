@@ -83,14 +83,18 @@ func (s *Syncer) GetConnector(id string) types.Connector {
 	return s.connectors[id]
 }
 
-func (s *Syncer) GetConnectorStates(ctx context.Context) ([]*types.ConnectorState, error) {
+func (s *Syncer) GetConnectorStates(ctx context.Context, fetch_all bool) ([]*types.ConnectorState, error) {
 	states := []*types.ConnectorState{}
 	for _, c := range s.connectors {
 		state, err := c.Status(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get state for %s: %s", c.ID(), err)
 		}
-		states = append(states, state)
+
+		// Fetch all if explicitly requested, else only ones with AuthValid
+		if fetch_all || state.AuthValid {
+			states = append(states, state)
+		}
 	}
 
 	// Sort by connector type and user

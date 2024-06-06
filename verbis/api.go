@@ -120,7 +120,9 @@ func (a *API) createConversation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) connectorsList(w http.ResponseWriter, r *http.Request) {
-	states, err := a.Syncer.GetConnectorStates(r.Context())
+	fetch_all := r.URL.Query().Get("all") == "true" 
+	states, err := a.Syncer.GetConnectorStates(r.Context(), fetch_all)
+
 	if err != nil {
 		log.Printf("Failed to list connectors: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
