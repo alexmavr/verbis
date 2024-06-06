@@ -129,11 +129,21 @@ const saasApps: SaasApp[] = [
     internal_name: "zoom",
     available: false,
   },
-].map(app => ({
-  ...app,
-  connect: app.available ? () => handleConnect(app.internal_name) : undefined,
-  connector_request: !app.available ? (showNotification: () => void) => handleConnectorRequest(app.internal_name, showNotification) : undefined
-})).sort((a, b) => a.name.localeCompare(b.name));
+]
+  .map((app) => ({
+    ...app,
+    connect: app.available ? () => handleConnect(app.internal_name) : undefined,
+    connector_request: !app.available
+      ? (showNotification: () => void) =>
+          handleConnectorRequest(app.internal_name, showNotification)
+      : undefined,
+  }))
+  .sort((a, b) => {
+    if (a.available === b.available) {
+      return a.name.localeCompare(b.name);
+    }
+    return b.available ? 1 : -1;
+  });
 
 const NotificationModal: React.FC<{ show: boolean; onClose: () => void }> = ({ show, onClose }) => {
   if (!show) return null;
