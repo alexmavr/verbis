@@ -2,8 +2,8 @@
 
 SHELL=/bin/zsh
 
-WEAVIATE_VERSION := v1.25.0
-OLLAMA_VERSION := v0.1.39
+WEAVIATE_VERSION := v1.25.2
+OLLAMA_VERSION := v0.1.41
 DIST_DIR := ./dist
 TMP_DIR := /tmp/weaviate-installation
 ZIP_FILE := weaviate-$(WEAVIATE_VERSION)-darwin-all.zip
@@ -51,6 +51,15 @@ dist/weaviate:
 	# Remove the temporary directory and the zip file
 	rm -rf $(TMP_DIR)
 
+dist/ms-marco-MiniLM-L-12-v2:
+	wget https://huggingface.co/prithivida/flashrank/resolve/main/ms-marco-MiniLM-L-12-v2.zip
+	unzip -o ms-marco-MiniLM-L-12-v2.zip -d dist/
+	pushd dist/ms-marco-MiniLM-L-12-v2 && \
+		mv flashrank-MiniLM-L-12-v2_Q.onnx reranker.onnx && \
+		popd
+	rm ms-marco-MiniLM-L-12-v2.zip
+	rm -rf dist/ms-marco-MiniLM-L-12-v2
+
 dist/pdftotext:
 	brew install poppler
 	mkdir -p dist/pdftotext
@@ -69,7 +78,7 @@ dist/rerank:
 		python3 -OO -m PyInstaller --onedir script/rerank.py --specpath dist/ \
 	)
 
-verbis: dist/rerank dist/weaviate dist/ollama dist/pdftotext
+verbis: dist/rerank dist/weaviate dist/ollama dist/pdftotext dist/ms-marco-MiniLM-L-12-v2
 	# Ensure dist directory exists
 	mkdir -p $(DIST_DIR)
 	# Modelfile is needed for any custom model execution
@@ -78,7 +87,7 @@ verbis: dist/rerank dist/weaviate dist/ollama dist/pdftotext
 	echo "$(LDFLAGS)"
 	pushd verbis && go build -ldflags="$(LDFLAGS)" -o ../$(DIST_DIR)/verbis . && popd
 
-macapp: verbis dist/ollama dist/weaviate dist/rerank
+macapp: verbis 
 	pushd macapp && npm install && npm run package && popd
 
 builder-env:
@@ -101,6 +110,7 @@ builder-env:
 
 clean:
 	rm dist/weaviate dist/ollama dist/verbis
+	rm -r dist/ms-marco-MiniLM-L-12-v2
 	rm -r dist/rerank build/*
 
 kill:

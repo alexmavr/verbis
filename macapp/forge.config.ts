@@ -24,6 +24,7 @@ const config: ForgeConfig = {
       "../dist/credentials.json",
       "../dist/Modelfile.custom-mistral",
       "../dist/rerank",
+      "../dist/ms-marco-MiniLM-L-12-v2",
       //      path.join(__dirname, './assets/iconTemplate.png'),
     ],
     ...(process.env.SIGN

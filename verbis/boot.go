@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"net/http"
@@ -29,6 +30,9 @@ const (
 	OllamaModelsDir    = ".verbis/ollama/models"
 	OllamaRunnersDir   = ".verbis/ollama/runners"
 	OllamaTmpDir       = ".verbis/ollama/tmp"
+
+	miscModelsPath    = ".verbis/models"
+	rerankerModelName = "ms-marco-MiniLM-L-12-v2"
 )
 
 type BootState string
@@ -350,7 +354,12 @@ func BootSyncing(ctx *BootContext) error {
 }
 
 func BootGen(ctx *BootContext) error {
-	err := initModels([]string{generationModelName})
+	err := copyRerankerModel()
+	if err != nil {
+		log.Fatalf("Failed to copy reranker model: %s\n", err)
+	}
+
+	err = initModels([]string{generationModelName})
 	if err != nil {
 		log.Fatalf("Failed to initialize models: %s\n", err)
 	}
@@ -445,4 +454,85 @@ func GetMasterLogDir() (string, error) {
 		return "", fmt.Errorf("unable to get user home directory: %w", err)
 	}
 	return filepath.Join(home, masterLogPath), nil
+}
+
+func copyRerankerModel() error {
+	distPath, err := util.GetDistPath()
+	if err != nil {
+		return fmt.Errorf("failed to get dist path: %w", err)
+	}
+	rerankerDirPath := filepath.Join(distPath, rerankerModelName)
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("unable to get user home directory: %w", err)
+	}
+	targetModelDir := filepath.Join(home, miscModelsPath, rerankerModelName)
+
+	err = os.Mkdir(targetModelDir, 0755)
+	if err != nil && !os.IsExist(err) {
+		return fmt.Errorf("failed to create target model directory: %w", err)
+	}
+
+	err = copyDir(rerankerDirPath, targetModelDir)
+	if err != nil {
+		return fmt.Errorf("failed to copy reranker model: %w", err)
+	}
+
+	return nil
+}
+
+// copyDir recursively copies a directory from src to dst.
+func copyDir(src string, dst string) error {
+	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+
+		destPath := filepath.Join(dst, relPath)
+
+		if info.IsDir() {
+			return os.MkdirAll(destPath, info.Mode())
+		}
+
+		return copyFile(path, destPath)
+	})
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// copyFile copies a file from src to dst.
+func copyFile(src, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	_, err = io.Copy(dstFile, srcFile)
+	if err != nil {
+		return err
+	}
+
+	info, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	return os.Chmod(dst, info.Mode())
 }
