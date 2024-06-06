@@ -170,6 +170,7 @@ func BootOnboard() (*BootContext, error) {
 			ollamaPath,
 			[]string{"serve"},
 			[]string{
+				"OLLAMA_HOST=" + OllamaHost,
 				"OLLAMA_KEEP_ALIVE=" + KeepAliveTime,
 				"OLLAMA_MAX_LOADED_MODELS=2", // Embeddings & LLM
 				"OLLAMA_NUM_PARALLEL=11",     // Max num of parallel items across connectors + 1 for active prompts
@@ -217,7 +218,7 @@ func BootOnboard() (*BootContext, error) {
 }
 
 func waitForOllama(ctx context.Context) error {
-	ollama_url := "http://localhost:11434"
+	ollama_url := fmt.Sprintf("http://%s", OllamaHost)
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 
 	// Poll the ollama URL every 5 seconds until the context is cancelled

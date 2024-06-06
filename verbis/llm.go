@@ -29,6 +29,8 @@ const (
 	MaxNumRerankedChunks      = 3
 	RerankNoResultScoreCutoff = 0.1
 	RerankSoloScoreCliff      = 0.2
+
+	OllamaHost = "127.0.0.1:11435"
 )
 
 var (
@@ -48,7 +50,7 @@ type ModelCreateRequest struct {
 }
 
 func createModel(modelName string) error {
-	url := "http://localhost:11434/api/create"
+	url := fmt.Sprintf("http://%s/api/create", OllamaHost)
 
 	path, err := util.GetDistPath()
 	if err != nil {
@@ -107,7 +109,7 @@ type StreamResponse struct {
 }
 
 func chatWithModelStream(ctx context.Context, prompt string, model string, history []types.HistoryItem, resChan chan<- StreamResponse) error {
-	url := "http://localhost:11434/api/chat"
+	url := fmt.Sprintf("http://%s/api/chat", OllamaHost)
 
 	messages := history
 	if prompt != "" {
@@ -183,7 +185,7 @@ func chatWithModelStream(ctx context.Context, prompt string, model string, histo
 // Function to call ollama model
 func chatWithModel(prompt string, model string, history []types.HistoryItem) (*ApiResponse, error) {
 	// URL of the API endpoint
-	url := "http://localhost:11434/api/chat"
+	url := fmt.Sprintf("http://%s/api/chat", OllamaHost)
 
 	messages := history
 	if prompt != "" {
@@ -257,7 +259,7 @@ func sourcesFromChunks(chunks []*types.Chunk) []map[string]string {
 		sourceObj := map[string]string{
 			"title": chunk.Name,
 			"url":   chunk.SourceURL,
-			"type": chunk.ConnectorType,
+			"type":  chunk.ConnectorType,
 		}
 		sources = append(sources, sourceObj)
 	}
@@ -593,7 +595,7 @@ type EmbedApiResponse struct {
 // Function to call ollama model
 func EmbedFromModel(prompt string) (*EmbedApiResponse, error) {
 	// URL of the API endpoint
-	url := "http://localhost:11434/api/embeddings"
+	url := fmt.Sprintf("http://%s/api/embeddings", OllamaHost)
 
 	// Create the payload
 	payload := EmbedRequestPayload{

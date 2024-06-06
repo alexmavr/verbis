@@ -302,7 +302,7 @@ type PullApiResponse struct {
 // pullModel makes a POST request to the specified URL with the given payload
 // and returns nil only if the response status is "success".
 func pullModel(name string, stream bool) error {
-	url := "http://localhost:11434/api/pull"
+	url := fmt.Sprintf("http://%s/api/pull", OllamaHost)
 
 	// Create the payload
 	payload := PullRequestPayload{
