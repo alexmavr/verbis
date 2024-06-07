@@ -79,6 +79,11 @@ func BootOnboard() (*BootContext, error) {
 		log.Fatalf("Failed to get master log directory: %s", err)
 	}
 
+	err = os.Mkdir(filepath.Dir(path), 0755)
+	if err != nil && !os.IsExist(err) {
+		log.Fatalf("Failed to create log directory: %s", err)
+	}
+
 	// Open a file for logging
 	logFile, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
