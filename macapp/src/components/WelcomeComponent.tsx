@@ -10,6 +10,7 @@ interface Props {
 
 const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
   const [loading, setLoading] = useState(true); // State for the spinner
+  const [longLoading, setLongLoading] = useState(false);
 
   useEffect(() => {
     const checkHealth = async () => {
@@ -29,6 +30,11 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
       }
     };
 
+    // Set longLoading to true after 30 seconds
+    setTimeout(() => {
+      setLongLoading(true);
+    }, 30000);
+
     checkHealth();
   }, []);
 
@@ -39,25 +45,14 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
         <div className={`mt-4 ${loading ? "verbis-loading" : ""}`}>
           <VerbisIcon className="h-24 w-24" />
         </div>
-        {loading ? (
+        {loading && (
           <>
             <p className="mx-auto mt-8 w-[65%]">Setting things up...</p>
-            <p className="mx-auto mt-8 text-sm italic text-gray-400">
-              This could take a few minutes for the first boot
-            </p>
-          </>
-        ) : (
-          <>
-            {/* TODO: Unreachable code if we auto redirect to Prompt screen on load. Clean up */}
-            <p className="mx-auto mt-8 w-[65%] text-sm text-gray-400">
-              We're ready for you!
-            </p>
-            <button
-              onClick={() => navigate(AppScreen.CHAT)}
-              className="no-drag rounded-dm mx-auto my-8 rounded-md bg-black px-4 py-2 text-sm text-white hover:brightness-110"
-            >
-              Continue
-            </button>
+            {longLoading && (
+              <p className="mx-auto mt-8 text-sm italic text-gray-400">
+                This could take a few minutes for the first boot
+              </p>
+            )}
           </>
         )}
       </div>
