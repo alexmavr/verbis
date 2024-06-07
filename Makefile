@@ -58,7 +58,6 @@ dist/ms-marco-MiniLM-L-12-v2:
 		mv flashrank-MiniLM-L-12-v2_Q.onnx reranker.onnx && \
 		popd
 	rm ms-marco-MiniLM-L-12-v2.zip
-	rm -rf dist/ms-marco-MiniLM-L-12-v2
 
 dist/pdftotext:
 	brew install poppler
@@ -109,9 +108,9 @@ builder-env:
 	)
 
 clean:
-	rm dist/weaviate dist/ollama dist/verbis
-	rm -r dist/ms-marco-MiniLM-L-12-v2
-	rm -r dist/rerank build/*
+	rm dist/weaviate dist/ollama dist/verbis || true
+	rm -r dist/ms-marco-MiniLM-L-12-v2 || true
+	rm -rf dist/rerank dist/pdftotext dist/lib || true
 
 kill:
 	pkill -9 weaviate ollama verbis
