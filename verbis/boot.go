@@ -369,16 +369,26 @@ func BootGen(ctx *BootContext) error {
 		log.Fatalf("Failed to initialize models: %s\n", err)
 	}
 
-	// Perform a test generation with ollama to load the model in memory
-	resp, err := chatWithModel("What is the capital of France? Respond in one word only", generationModelName, []types.HistoryItem{})
-	if err != nil {
-		log.Fatalf("Failed to generate response: %s\n", err)
-	}
-	if !resp.Done {
-		log.Fatalf("Response not done: %v\n", resp)
-	}
-	if !strings.Contains(resp.Message.Content, "Paris") {
-		log.Fatalf("Response does not contain Paris: %v\n", resp.Message.Content)
+	retries := 0
+	maxRetries := 5
+	for {
+		resp, err := chatWithModel("What is the capital of France? Respond in one word only", generationModelName, []types.HistoryItem{})
+
+		if err != nil {
+			if retries < maxRetries && strings.Contains(err.Error(), "try pulling it first") {
+				time.Sleep(time.Second)
+				retries += 1
+				continue
+			}
+			log.Fatalf("Failed to generate response: %s\n", err)
+		}
+		if !resp.Done {
+			log.Fatalf("Response not done: %v\n", resp)
+		}
+		if !strings.Contains(resp.Message.Content, "Paris") {
+			log.Fatalf("Response does not contain Paris: %v\n", resp.Message.Content)
+		}
+		break
 	}
 
 	// Perform a test rerank to download the model
@@ -474,7 +484,7 @@ func copyRerankerModel() error {
 	}
 	targetModelDir := filepath.Join(home, miscModelsPath, rerankerModelName)
 
-	err = os.Mkdir(targetModelDir, 0755)
+	err = os.MkdirAll(targetModelDir, 0755)
 	if err != nil && !os.IsExist(err) {
 		return fmt.Errorf("failed to create target model directory: %w", err)
 	}
