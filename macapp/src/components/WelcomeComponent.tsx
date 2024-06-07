@@ -40,7 +40,12 @@ const WelcomeComponent: React.FC<Props> = ({ navigate }) => {
           <VerbisIcon className="h-24 w-24" />
         </div>
         {loading ? (
-          <p className="mx-auto mt-8 w-[65%]">Setting things up...</p>
+          <>
+            <p className="mx-auto mt-8 w-[65%]">Setting things up...</p>
+            <p className="mx-auto mt-8 text-sm italic text-gray-400">
+              This could take a few minutes for the first boot
+            </p>
+          </>
         ) : (
           <>
             {/* TODO: Unreachable code if we auto redirect to Prompt screen on load. Clean up */}
