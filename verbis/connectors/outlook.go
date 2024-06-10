@@ -346,7 +346,7 @@ func (o *OutlookConnector) listEmails(ctx context.Context, client *msgraph.Graph
 	pageIterator.SetHeaders(headers)
 
 	err = pageIterator.Iterate(
-		context.Background(),
+		ctx,
 		func(message *models.Message) bool {
 			// TODO: process many in parallel
 			err := o.processEmail(ctx, message, chunkChan)
