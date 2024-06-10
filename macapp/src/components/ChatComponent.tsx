@@ -4,6 +4,7 @@ import { create_conversation, generate } from "../client";
 import { CogIcon } from "@heroicons/react/24/solid";
 import GDriveLogo from "../../assets/connectors/gdrive.svg";
 import GMailLogo from "../../assets/connectors/gmail.svg";
+import OutlookLogo from "../../assets/connectors/outlook.svg";
 import { AppScreen, ResultSource } from "../types";
 import ThemeSwitcher from "./ThemeSwitcher";
 
@@ -14,6 +15,7 @@ interface Props {
 const Logos: { [key: string]: React.FC<React.SVGProps<SVGSVGElement>> } = {
   googledrive: GDriveLogo,
   gmail: GMailLogo,
+  outlook: OutlookLogo,
 };
 
 const ChatComponent: React.FC<Props> = ({ navigate }) => {

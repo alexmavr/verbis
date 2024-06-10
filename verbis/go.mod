@@ -10,6 +10,7 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/microsoft/kiota-abstractions-go v1.6.0
 	github.com/microsoftgraph/msgraph-sdk-go v1.45.0
+	github.com/microsoftgraph/msgraph-sdk-go-core v1.1.0
 	github.com/posthog/posthog-go v0.0.0-20240327112532-87b23fe11103
 	github.com/weaviate/weaviate v1.24.8
 	github.com/weaviate/weaviate-go-client/v4 v4.13.1
@@ -57,7 +58,6 @@ require (
 	github.com/microsoft/kiota-serialization-json-go v1.0.7 // indirect
 	github.com/microsoft/kiota-serialization-multipart-go v1.0.0 // indirect
 	github.com/microsoft/kiota-serialization-text-go v1.0.0 // indirect
-	github.com/microsoftgraph/msgraph-sdk-go-core v1.1.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8 // indirect

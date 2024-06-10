@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { force_sync, list_connectors } from "../client";
 import GDriveLogo from "../../assets/connectors/gdrive.svg";
 import GMailLogo from "../../assets/connectors/gmail.svg";
+import OutlookLogo from "../../assets/connectors/outlook.svg";
 import {
   ArrowPathIcon,
   CheckCircleIcon,
@@ -12,6 +13,7 @@ import { formatDistanceToNow, differenceInYears } from "date-fns";
 const appLogos: { [key: string]: React.FC<React.SVGProps<SVGSVGElement>> } = {
   googledrive: GDriveLogo,
   gmail: GMailLogo,
+  outlook: OutlookLogo,
   // Add more mappings for other connector types
 };
 
