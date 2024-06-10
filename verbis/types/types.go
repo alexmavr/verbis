@@ -37,17 +37,23 @@ type Chunk struct {
 	ExplainScore string  `json:"explain_score"`
 }
 type Document struct {
-	UniqueID    string    `json:"unique_id"` // Uniquely identifies the document in the connector's context
-	Name        string    `json:"name"`
-	SourceURL   string    `json:"source_url"`
-	ConnectorID string    `json:"connector_id"`
+	UniqueID      string    `json:"unique_id"` // Uniquely identifies the document in the connector's context
+	Name          string    `json:"name"`
+	SourceURL     string    `json:"source_url"`
+	ConnectorID   string    `json:"connector_id"`
 	ConnectorType string    `json:"connector_type"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 type Conversation struct {
 	ID          string        `json:"id"`
 	History     []HistoryItem `json:"history"`
 	ChunkHashes []string      `json:"chunk_hashes"`
+}
+
+type BuildCredentials struct {
+	PosthogAPIKey    string
+	AzureSecretID    string
+	AzureSecretValue string
 }

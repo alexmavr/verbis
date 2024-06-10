@@ -18,6 +18,7 @@ import HubspotLogo from "../../assets/connectors/hubspot.svg";
 import TrelloLogo from "../../assets/connectors/trello.svg";
 import ZendeskLogo from "../../assets/connectors/zendesk.svg";
 import ZoomLogo from "../../assets/connectors/zoom.svg";
+import OutlookLogo from "../../assets/connectors/outlook.svg";
 
 interface SaasApp {
   name: string;
@@ -60,6 +61,20 @@ const saasApps: SaasApp[] = [
     internal_name: "googledrive",
   },
   {
+    name: "Gmail",
+    logo: GmailLogo,
+    description: "Gmail",
+    available: true,
+    internal_name: "gmail",
+  },
+  {
+    name: "Outlook",
+    logo: OutlookLogo,
+    description: "Outlook",
+    available: true,
+    internal_name: "outlook",
+  },
+  {
     name: "Dropbox",
     logo: DropboxLogo,
     description: "Dropbox",
@@ -94,13 +109,7 @@ const saasApps: SaasApp[] = [
     internal_name: "gitlab",
     available: false,
   },
-  {
-    name: "Gmail",
-    logo: GmailLogo,
-    description: "Gmail",
-    available: true,
-    internal_name: "gmail",
-  },
+
   {
     name: "Hubspot",
     logo: HubspotLogo,

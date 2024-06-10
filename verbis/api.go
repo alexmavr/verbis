@@ -120,7 +120,7 @@ func (a *API) createConversation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) connectorsList(w http.ResponseWriter, r *http.Request) {
-	fetch_all := r.URL.Query().Get("all") == "true" 
+	fetch_all := r.URL.Query().Get("all") == "true"
 	states, err := a.Syncer.GetConnectorStates(r.Context(), fetch_all)
 
 	if err != nil {
@@ -168,7 +168,7 @@ func (a *API) connectorInit(w http.ResponseWriter, r *http.Request) {
 	// Create a new connector object and initialize it
 	// The Init method is responsible for picking up existing configuration from
 	// the store, and discovering credentials
-	conn := constructor()
+	conn := constructor(a.Context.Credentials)
 
 	log.Printf("Initializing connector type: %s id: %s", conn.Type(), conn.ID())
 	err := conn.Init(r.Context(), "")
@@ -240,13 +240,19 @@ func (a *API) handleConnectorCallback(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("No connector name provided"))
 		return
 	}
-
 	stateParam := queryParts.Get("state")
-	// If any state is provided it must match the connector ID
-	if stateParam != "" && stateParam != connectorID {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("State does not match connector ID"))
-		return
+
+	// For some connectors, the redirectURI must be static. In that case we
+	// expect the callback URL to be the connector type.
+	if connectors.IsConnectorType(connectorID) {
+		// If any state is provided it must match the connector ID
+		connectorID = stateParam
+	} else {
+		if stateParam != "" && stateParam != connectorID {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("State does not match connector ID"))
+			return
+		}
 	}
 
 	conn := a.Syncer.GetConnector(connectorID)
@@ -258,7 +264,7 @@ func (a *API) handleConnectorCallback(w http.ResponseWriter, r *http.Request) {
 	err := conn.AuthCallback(r.Context(), code)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Failed to authenticate with Google: " + err.Error()))
+		w.Write([]byte("Failed to complete auth callback : " + err.Error()))
 		return
 	}
 
@@ -280,8 +286,8 @@ func (a *API) handleConnectorCallback(w http.ResponseWriter, r *http.Request) {
 	// running for this connector
 	a.Syncer.ASyncNow(a.Context)
 
-	// TODO: Render a done page
-	w.Write([]byte("Google authentication is complete, you may close this tab and return to the Verbis desktop app"))
+	// TODO: Render a proper done page
+	w.Write([]byte("authentication is complete, you may close this tab and return to the Verbis desktop app"))
 }
 
 func (a *API) forceSync(w http.ResponseWriter, r *http.Request) {

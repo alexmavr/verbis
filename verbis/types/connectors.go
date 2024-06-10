@@ -10,9 +10,10 @@ type ConnectorType string
 const (
 	ConnectorTypeGoogleDrive ConnectorType = "googledrive"
 	ConnectorTypeGmail       ConnectorType = "gmail"
+	ConnectorTypeOutlook     ConnectorType = "outlook"
 )
 
-type ConnectorConstructor func() Connector
+type ConnectorConstructor func(BuildCredentials) Connector
 type Connector interface {
 	ID() string
 	Type() ConnectorType

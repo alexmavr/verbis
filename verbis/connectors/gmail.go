@@ -26,7 +26,7 @@ import (
 	"github.com/verbis-ai/verbis/verbis/util"
 )
 
-func NewGmailConnector() types.Connector {
+func NewGmailConnector(creds types.BuildCredentials) types.Connector {
 	return &GmailConnector{
 		id:   "",
 		user: "",
@@ -253,13 +253,13 @@ func (g *GmailConnector) processEmail(ctx context.Context, srv *gmail.Service, e
 	emailURL := fmt.Sprintf("https://mail.google.com/mail/u/0/#inbox/%s", email.Id)
 
 	document := types.Document{
-		UniqueID:    email.Id,
-		Name:        getEmailSubject(email.Payload.Headers),
-		SourceURL:   emailURL, // Include the URL here
-		ConnectorID: g.ID(),
+		UniqueID:      email.Id,
+		Name:          getEmailSubject(email.Payload.Headers),
+		SourceURL:     emailURL, // Include the URL here
+		ConnectorID:   g.ID(),
 		ConnectorType: string(g.Type()),
-		CreatedAt:   receivedAt,
-		UpdatedAt:   receivedAt,
+		CreatedAt:     receivedAt,
+		UpdatedAt:     receivedAt,
 	}
 
 	err := store.DeleteDocumentChunks(ctx, store.GetWeaviateClient(), document.UniqueID, g.ID())

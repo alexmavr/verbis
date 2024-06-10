@@ -30,15 +30,17 @@ type Syncer struct {
 	posthogClient     posthog.Client
 	posthogDistinctID string
 	syncing           bool
+	credentials       types.BuildCredentials
 }
 
-func NewSyncer(posthogClient posthog.Client, posthogDistinctID string) *Syncer {
+func NewSyncer(posthogClient posthog.Client, posthogDistinctID string, creds types.BuildCredentials) *Syncer {
 	return &Syncer{
 		connectors:        map[string]types.Connector{},
 		syncCheckPeriod:   1 * time.Minute,
 		staleThreshold:    1 * time.Minute,
 		posthogClient:     posthogClient,
 		posthogDistinctID: posthogDistinctID,
+		credentials:       creds,
 	}
 }
 
@@ -58,7 +60,7 @@ func (s *Syncer) Init(ctx context.Context) error {
 		if !ok {
 			return fmt.Errorf("unknown connector type %s", state.ConnectorType)
 		}
-		c := constructor()
+		c := constructor(s.credentials)
 		err = c.Init(ctx, state.ConnectorID)
 		if err != nil {
 			return fmt.Errorf("failed to init connector %s: %s", state.ConnectorID, err)

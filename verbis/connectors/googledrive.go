@@ -38,7 +38,7 @@ const (
 	maxRetries     = 10
 )
 
-func NewGoogleDriveConnector() types.Connector {
+func NewGoogleDriveConnector(creds types.BuildCredentials) types.Connector {
 	return &GoogleDriveConnector{
 		id:   "",
 		user: "",
@@ -295,13 +295,13 @@ func (g *GoogleDriveConnector) processFile(ctx context.Context, service *drive.S
 
 	numChunks := 0
 	document := types.Document{
-		UniqueID:    file.Id,
-		Name:        file.Name,
-		SourceURL:   file.WebViewLink,
-		ConnectorID: g.ID(),
+		UniqueID:      file.Id,
+		Name:          file.Name,
+		SourceURL:     file.WebViewLink,
+		ConnectorID:   g.ID(),
 		ConnectorType: string(g.Type()),
-		CreatedAt:   createdAt,
-		UpdatedAt:   updatedAt,
+		CreatedAt:     createdAt,
+		UpdatedAt:     updatedAt,
 	}
 
 	// TODO: ideally this should live at the top level but we need to refactor the syncer first
@@ -347,7 +347,7 @@ func (g *GoogleDriveConnector) listFiles(ctx context.Context, service *drive.Ser
 		if pageToken != "" {
 			q = q.PageToken(pageToken)
 		}
-		
+
 		r, err := q.Do()
 		if err != nil {
 			retryCount += 1
@@ -361,7 +361,7 @@ func (g *GoogleDriveConnector) listFiles(ctx context.Context, service *drive.Ser
 			}
 			return fmt.Errorf("unable to retrieve files: %v", err)
 		}
-		retryCount = 0  // Reset retry count after a successful operation
+		retryCount = 0 // Reset retry count after a successful operation
 
 		// Max parallelism is number of files per page (10)
 		wg := sync.WaitGroup{}

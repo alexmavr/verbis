@@ -18,7 +18,7 @@ PACKAGE := main
 
 include .build.env
 
-LDFLAGS := -X "$(PACKAGE).PosthogAPIKey=$(POSTHOG_PERSONAL_API_KEY)"
+LDFLAGS := -X "$(PACKAGE).PosthogAPIKey=$(POSTHOG_PERSONAL_API_KEY)" -X "$(PACKAGE).AzureSecretID=$(AZURE_SECRET_ID)" -X "$(PACKAGE).AzureSecretValue=$(AZURE_SECRET_VALUE)"
 
 all: macapp
 

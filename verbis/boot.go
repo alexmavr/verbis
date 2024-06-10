@@ -47,6 +47,7 @@ const (
 type BootContext struct {
 	context.Context
 	Timers
+	Credentials       types.BuildCredentials
 	State             BootState
 	PosthogDistinctID string
 	PosthogClient     posthog.Client
@@ -73,7 +74,7 @@ func NewBootContext(ctx context.Context) *BootContext {
 	}
 }
 
-func BootOnboard() (*BootContext, error) {
+func BootOnboard(creds types.BuildCredentials) (*BootContext, error) {
 	path, err := GetMasterLogDir()
 	if err != nil {
 		log.Fatalf("Failed to get master log directory: %s", err)
@@ -100,6 +101,7 @@ func BootOnboard() (*BootContext, error) {
 
 	bootCtx := NewBootContext(ctx)
 	bootCtx.Logfile = logFile
+	bootCtx.Credentials = creds
 
 	// Define the commands to be executed
 	sigChan := make(chan os.Signal, 1)
@@ -120,7 +122,7 @@ func BootOnboard() (*BootContext, error) {
 
 	bootCtx.PosthogClient = postHogClient
 
-	syncer := NewSyncer(bootCtx.PosthogClient, bootCtx.PosthogDistinctID)
+	syncer := NewSyncer(bootCtx.PosthogClient, bootCtx.PosthogDistinctID, bootCtx.Credentials)
 	if PosthogAPIKey == "n/a" {
 		log.Fatalf("Posthog API key not set\n")
 	}

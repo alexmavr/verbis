@@ -12,7 +12,8 @@ models.
 
 ### System Requirements
 - Apple Silicon Mac (m1+): Macbook, Mac mini, Mac Pro, Mac Studio
-- Expected system resource utilization
+
+#### Expected system resource utilization
 - Disk: 6 GB for model weights, approximately 1-4 GB depending on connector configuration and synced data.
 - All data is stored under ~/.verbis
 - Memory: Approximately 1.2 GB for models and 200MB to 2 GB for indexes

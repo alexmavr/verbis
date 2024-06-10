@@ -1,6 +1,10 @@
 package main
 
-import "log"
+import (
+	"log"
+
+	"github.com/verbis-ai/verbis/verbis/types"
+)
 
 var (
 	//	httpClient          = &http.Client{Timeout: 10 * time.Second}
@@ -9,12 +13,20 @@ var (
 	clean               = false
 	KeepAliveTime       = "20m"
 
-	PosthogAPIKey = "n/a" // Will be populated by linker from builder's env
+	// Will be populated by linker from .builder.env
+	PosthogAPIKey    = "n/a"
+	AzureSecretID    = "n/a"
+	AzureSecretValue = "n/a"
 )
 
 func main() {
+	creds := types.BuildCredentials{
+		PosthogAPIKey:    PosthogAPIKey,
+		AzureSecretID:    AzureSecretID,
+		AzureSecretValue: AzureSecretValue,
+	}
 	// Start everything needed to let the user onboard connectors
-	bootCtx, err := BootOnboard()
+	bootCtx, err := BootOnboard(creds)
 	if err != nil {
 		log.Fatalf("Failed to boot until onboarding: %s\n", err)
 	}
