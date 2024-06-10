@@ -11,7 +11,9 @@ import (
 	"github.com/google/uuid"
 	abstractions "github.com/microsoft/kiota-abstractions-go"
 	msgraph "github.com/microsoftgraph/msgraph-sdk-go"
+	graphcore "github.com/microsoftgraph/msgraph-sdk-go-core"
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
+	msusers "github.com/microsoftgraph/msgraph-sdk-go/users"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/microsoft"
 
@@ -76,19 +78,22 @@ func (a *OAuthAuthenticationProvider) AuthenticateRequest(ctx context.Context, r
 	return nil
 }
 
-func (o *OutlookConnector) getClient(ctx context.Context, config *oauth2.Config) (*msgraph.GraphRequestAdapter, error) {
+func (o *OutlookConnector) getClient(ctx context.Context, config *oauth2.Config) (*msgraph.GraphServiceClient, error) {
 	// Token from Keychain
 	tok, err := keychain.TokenFromKeychain(o.ID(), o.Type())
 	if err != nil {
 		return nil, err
 	}
+
 	tokenSource := config.TokenSource(ctx, tok)
 	authProvider := &OAuthAuthenticationProvider{TokenSource: tokenSource}
 	adapter, err := msgraph.NewGraphRequestAdapter(authProvider)
 	if err != nil {
 		return nil, err
 	}
-	return adapter, nil
+
+	graphClient := msgraph.NewGraphServiceClient(adapter)
+	return graphClient, nil
 }
 
 func (o *OutlookConnector) requestOauthWeb(config *oauth2.Config) error {
@@ -106,6 +111,8 @@ var outlookScopes = []string{
 	"openid",
 	"email",
 }
+
+var outlookScopesPlusOffline = append(outlookScopes, "offline_access")
 
 func (o *OutlookConnector) Init(ctx context.Context, connectorID string) error {
 	if connectorID != "" {
@@ -132,7 +139,6 @@ func (o *OutlookConnector) Init(ctx context.Context, connectorID string) error {
 	state.ConnectorType = string(o.Type())
 	token, err := keychain.TokenFromKeychain(o.ID(), o.Type())
 	state.AuthValid = (err == nil && token != nil) // TODO: check for expiry of refresh token
-	log.Printf("AuthValid: %v", state.AuthValid)
 
 	err = store.UpdateConnectorState(ctx, store.GetWeaviateClient(), state)
 	if err != nil {
@@ -169,7 +175,7 @@ func (o *OutlookConnector) outlookConfig() (*oauth2.Config, error) {
 		ClientID:     o.secretID,
 		ClientSecret: o.secretValue,
 		RedirectURL:  fmt.Sprintf("http://127.0.0.1:8081/connectors/%s/callback", o.Type()),
-		Scopes:       outlookScopes,
+		Scopes:       outlookScopesPlusOffline,
 		Endpoint:     microsoft.AzureADEndpoint("common"),
 	}, nil
 }
@@ -186,7 +192,7 @@ func (o *OutlookConnector) AuthCallback(ctx context.Context, authCode string) er
 		return fmt.Errorf("failed to create client app: %v", err)
 	}
 
-	// Ensure the redirect URI matches your Azure AD app registration
+	// MSAL automatically adds the offline_access scope
 	result, err := clientApp.AcquireTokenByAuthCode(ctx, authCode, "http://127.0.0.1:8081/connectors/outlook/callback", outlookScopes)
 	if err != nil {
 		return fmt.Errorf("unable to retrieve token from web: %v", err)
@@ -201,14 +207,11 @@ func (o *OutlookConnector) AuthCallback(ctx context.Context, authCode string) er
 		return fmt.Errorf("unable to save token to keychain: %v", err)
 	}
 
-	tokenSource := config.TokenSource(ctx, tok)
-	authProvider := &OAuthAuthenticationProvider{TokenSource: tokenSource}
-	adapter, err := msgraph.NewGraphRequestAdapter(authProvider)
+	client, err := o.getClient(ctx, config)
 	if err != nil {
-		return fmt.Errorf("unable to create request adapter: %v", err)
+		return fmt.Errorf("unable to get client: %v", err)
 	}
 
-	client := msgraph.NewGraphServiceClient(adapter)
 	email, err := getOutlookUserEmail(ctx, client)
 	if err != nil {
 		return fmt.Errorf("unable to get user email: %v", err)
@@ -252,13 +255,12 @@ func (o *OutlookConnector) Sync(ctx context.Context, lastSync time.Time, chunkCh
 		return
 	}
 
-	client, err := o.getClient(ctx, config)
+	graphClient, err := o.getClient(ctx, config)
 	if err != nil {
 		errChan <- fmt.Errorf("unable to get client: %v", err)
 		return
 	}
 
-	graphClient := msgraph.NewGraphServiceClient(client)
 	err = o.listEmails(ctx, graphClient, lastSync, chunkChan)
 	if err != nil {
 		errChan <- fmt.Errorf("unable to list emails: %v", err)
@@ -272,9 +274,18 @@ func (o *OutlookConnector) processEmail(ctx context.Context, email models.Messag
 	receivedAt := *email.GetReceivedDateTime()
 	emailURL := fmt.Sprintf("https://outlook.office.com/mail/inbox/id/%s", *email.GetId())
 
+	/*
+			    location, err := time.LoadLocation("Local")
+		    if err != nil {
+		        log.Panicf("Error getting local timezone: %v", err)
+		    }
+	*/
+
 	document := types.Document{
-		UniqueID:      *email.GetId(),
-		Name:          *email.GetSubject(),
+		UniqueID: *email.GetId(),
+		Name:     *email.GetSubject(),
+		// message.GetFrom().GetEmailAddress().GetName())
+		// *message.GetReceivedDateTime()).In(location))
 		SourceURL:     emailURL,
 		ConnectorID:   o.ID(),
 		ConnectorType: string(o.Type()),
@@ -305,22 +316,48 @@ func (o *OutlookConnector) processEmail(ctx context.Context, email models.Messag
 }
 
 func (o *OutlookConnector) listEmails(ctx context.Context, client *msgraph.GraphServiceClient, lastSync time.Time, chunkChan chan types.ChunkSyncResult) error {
-	user := "me"
-	query := "in:inbox -category:spam"
-	if !lastSync.IsZero() {
-		query += fmt.Sprintf(" receivedDateTime ge %s", lastSync.Format(time.RFC3339))
+	headers := abstractions.NewRequestHeaders()
+	headers.Add("Prefer", "outlook.body-content-type=\"text\"")
+
+	filter := fmt.Sprintf("receivedDateTime ge %s", lastSync.Format(time.RFC3339))
+	var top int32 = 10
+	requestConfig := &msusers.ItemMailfoldersItemMessagesRequestBuilderGetRequestConfiguration{
+		Headers: headers,
+		QueryParameters: &msusers.ItemMailfoldersItemMessagesRequestBuilderGetQueryParameters{
+			Select:  []string{"id", "subject", "receivedDateTime", "body", "sender"},
+			Filter:  &filter,
+			Top:     &top,
+			Orderby: []string{"receivedDateTime DESC"},
+		},
 	}
 
-	messages, err := client.Users().ByUserId(user).MailFolders().ByMailFolderId("inbox").Messages().Get(ctx, nil)
+	result, err := client.Me().MailFolders().ByMailFolderId("inbox").Messages().Get(ctx, requestConfig)
 	if err != nil {
 		return fmt.Errorf("unable to list emails: %v", err)
 	}
 
-	for _, message := range messages.GetValue() {
-		err := o.processEmail(ctx, message, chunkChan)
-		if err != nil {
-			return fmt.Errorf("unable to process email: %v", err)
-		}
+	pageIterator, err := graphcore.NewPageIterator[*models.Message](
+		result,
+		client.GetAdapter(),
+		models.CreateMessageCollectionResponseFromDiscriminatorValue)
+	if err != nil {
+		return fmt.Errorf("unable to create page iterator: %v", err)
+	}
+	pageIterator.SetHeaders(headers)
+
+	err = pageIterator.Iterate(
+		context.Background(),
+		func(message *models.Message) bool {
+			// TODO: process many in parallel
+			err := o.processEmail(ctx, message, chunkChan)
+			if err != nil {
+				log.Printf("unable to process email: %v", err)
+			}
+			// Return true to continue the iteration
+			return true
+		})
+	if err != nil {
+		return fmt.Errorf("unable to iterate over emails: %v", err)
 	}
 
 	return nil

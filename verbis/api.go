@@ -287,7 +287,7 @@ func (a *API) handleConnectorCallback(w http.ResponseWriter, r *http.Request) {
 	a.Syncer.ASyncNow(a.Context)
 
 	// TODO: Render a proper done page
-	w.Write([]byte("authentication is complete, you may close this tab and return to the Verbis desktop app"))
+	w.Write([]byte("Application authentication is complete, you may close this tab and return to the Verbis desktop app"))
 }
 
 func (a *API) forceSync(w http.ResponseWriter, r *http.Request) {

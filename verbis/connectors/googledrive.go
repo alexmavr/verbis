@@ -125,7 +125,6 @@ func (g *GoogleDriveConnector) Init(ctx context.Context, connectorID string) err
 	state.ConnectorType = string(g.Type())
 	token, err := keychain.TokenFromKeychain(g.ID(), g.Type())
 	state.AuthValid = (err == nil && token != nil) // TODO: check for expiry of refresh token
-	log.Printf("AuthValid: %v", state.AuthValid)
 
 	err = store.UpdateConnectorState(ctx, store.GetWeaviateClient(), state)
 	if err != nil {
