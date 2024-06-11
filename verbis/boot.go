@@ -93,6 +93,12 @@ func BootOnboard(creds types.BuildCredentials) (*BootContext, error) {
 		log.Fatalf("Failed to open log file: %s", err)
 	}
 
+	// A dup2 syscall is used to capture panics and other stderr-only output
+	err = syscall.Dup2(int(logFile.Fd()), int(os.Stderr.Fd()))
+	if err != nil {
+		log.Fatalf("Failed to redirect stderr to file: %v", err)
+	}
+
 	os.Stderr = logFile
 	os.Stdout = logFile
 	log.SetOutput(logFile)
@@ -108,7 +114,6 @@ func BootOnboard(creds types.BuildCredentials) (*BootContext, error) {
 	// Define the commands to be executed
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGKILL)
 	// Start syncer as separate goroutine
 
 	postHogClient, err := posthog.NewWithConfig(
