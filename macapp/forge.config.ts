@@ -1,5 +1,6 @@
 import type { ForgeConfig } from '@electron-forge/shared-types'
 import { MakerZIP } from '@electron-forge/maker-zip'
+import { MakerDMG } from '@electron-forge/maker-dmg'
 import { AutoUnpackNativesPlugin } from '@electron-forge/plugin-auto-unpack-natives'
 import { WebpackPlugin } from '@electron-forge/plugin-webpack'
 import * as path from 'path'
@@ -25,7 +26,6 @@ const config: ForgeConfig = {
       "../dist/Modelfile.custom-mistral",
       "../dist/rerank",
       "../dist/ms-marco-MiniLM-L-12-v2",
-      //      path.join(__dirname, './assets/iconTemplate.png'),
     ],
     ...(process.env.SIGN
       ? {
@@ -45,7 +45,15 @@ const config: ForgeConfig = {
     },
   },
   rebuildConfig: {},
-  makers: [new MakerZIP({}, ["darwin"])],
+  makers: [
+    new MakerZIP({}, ["darwin"]),
+    new MakerDMG({
+      name: packageJson.name,
+      icon: "./assets/icon.icns",
+      overwrite: true,
+      format: 'ULFO',
+    }),
+  ],
   hooks: {
     readPackageJson: async (_, packageJson) => {
       return {

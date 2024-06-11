@@ -103,9 +103,13 @@ builder-env:
 		pyenv activate $(VENV_NAME); \
 		pip install --upgrade pip; \
 		pip install poetry; \
+		pip install setuptools; \
 		cd script; \
 		poetry install; \
 	)
+
+release:
+	pushd macapp && npm run make && popd
 
 clean:
 	rm dist/weaviate dist/ollama dist/verbis || true

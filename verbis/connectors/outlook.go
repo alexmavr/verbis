@@ -272,7 +272,7 @@ func (o *OutlookConnector) processEmail(ctx context.Context, email models.Messag
 	content := *email.GetBody().GetContent()
 
 	receivedAt := *email.GetReceivedDateTime()
-	emailURL := fmt.Sprintf("https://outlook.office.com/mail/inbox/id/%s", *email.GetId())
+	emailURL := fmt.Sprintf("https://outlook.live.com/mail/inbox/id/%s", *email.GetId())
 
 	/*
 			    location, err := time.LoadLocation("Local")
@@ -297,6 +297,8 @@ func (o *OutlookConnector) processEmail(ctx context.Context, email models.Messag
 	if err != nil {
 		log.Printf("Unable to delete chunks for document %s: %v", document.UniqueID, err)
 	}
+
+	log.Printf("Processing email of size %d: title: %s", len(content), document.Name)
 
 	const MaxChunkSize = 5000
 	for i := 0; i < len(content); i += MaxChunkSize {

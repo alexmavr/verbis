@@ -1,8 +1,8 @@
 {
-  "name": "verbis",
-  "productName": "verbis",
+  "name": "Verbis",
+  "productName": "Verbis",
   "version": "0.0.0",
-  "description": "verbis",
+  "description": "Verbis",
   "main": ".webpack/main",
   "scripts": {
     "start": "NODE_ENV=development electron-forge start",
@@ -26,6 +26,7 @@
     "@babel/preset-react": "^7.22.5",
     "@electron-forge/cli": "^6.2.1",
     "@electron-forge/maker-deb": "^6.2.1",
+    "@electron-forge/maker-dmg": "^7.4.0",
     "@electron-forge/maker-rpm": "^6.2.1",
     "@electron-forge/maker-squirrel": "^6.2.1",
     "@electron-forge/maker-zip": "^6.2.1",
@@ -42,6 +43,7 @@
     "@typescript-eslint/eslint-plugin": "^5.60.0",
     "@typescript-eslint/parser": "^5.60.0",
     "@vercel/webpack-asset-relocator-loader": "^1.7.3",
+    "appdmg": "^0.6.6",
     "babel-loader": "^9.1.2",
     "chmodr": "^1.2.0",
     "copy-webpack-plugin": "^11.0.0",

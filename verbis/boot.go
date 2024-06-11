@@ -75,6 +75,8 @@ func NewBootContext(ctx context.Context) *BootContext {
 }
 
 func BootOnboard(creds types.BuildCredentials) (*BootContext, error) {
+	log.Printf("Starting Verbis boot sequence")
+
 	path, err := GetMasterLogDir()
 	if err != nil {
 		log.Fatalf("Failed to get master log directory: %s", err)
@@ -106,6 +108,7 @@ func BootOnboard(creds types.BuildCredentials) (*BootContext, error) {
 	// Define the commands to be executed
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGKILL)
 	// Start syncer as separate goroutine
 
 	postHogClient, err := posthog.NewWithConfig(
