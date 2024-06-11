@@ -273,7 +273,6 @@ func (o *OutlookConnector) processEmail(ctx context.Context, email models.Messag
 
 	receivedAt := *email.GetReceivedDateTime()
 	emailURL := fmt.Sprintf("https://outlook.live.com/mail/inbox/id/%s", *email.GetId())
-
 	/*
 			    location, err := time.LoadLocation("Local")
 		    if err != nil {
@@ -281,9 +280,20 @@ func (o *OutlookConnector) processEmail(ctx context.Context, email models.Messag
 		    }
 	*/
 
+	email_id := "N/A"
+	email_id_ptr := email.GetId()
+	if email_id_ptr != nil {
+		email_id = *email_id_ptr
+	}
+	email_subject := "N/A"
+	email_subject_ptr := email.GetSubject()
+	if email_subject_ptr != nil {
+		email_subject = *email_subject_ptr
+	}
+
 	document := types.Document{
-		UniqueID: *email.GetId(),
-		Name:     *email.GetSubject(),
+		UniqueID: email_id,
+		Name:     email_subject,
 		// message.GetFrom().GetEmailAddress().GetName())
 		// *message.GetReceivedDateTime()).In(location))
 		SourceURL:     emailURL,
