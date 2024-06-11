@@ -75,8 +75,7 @@ func NewBootContext(ctx context.Context) *BootContext {
 }
 
 func BootOnboard(creds types.BuildCredentials) (*BootContext, error) {
-	log.Printf("Starting Verbis boot sequence")
-
+	// Set up logging
 	path, err := GetMasterLogDir()
 	if err != nil {
 		log.Fatalf("Failed to get master log directory: %s", err)
@@ -87,41 +86,43 @@ func BootOnboard(creds types.BuildCredentials) (*BootContext, error) {
 		log.Fatalf("Failed to create log directory: %s", err)
 	}
 
-	// Open a file for logging
 	logFile, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatalf("Failed to open log file: %s", err)
 	}
 
-	// A dup2 syscall is used to capture panics and other stderr-only output
 	err = syscall.Dup2(int(logFile.Fd()), int(os.Stderr.Fd()))
 	if err != nil {
 		log.Fatalf("Failed to redirect stderr to file: %v", err)
 	}
-
 	os.Stderr = logFile
 	os.Stdout = logFile
 	log.SetOutput(logFile)
 
-	// Main context attacked to application runtime, everything in the
-	// background should terminate when cancelled
 	ctx, cancel := context.WithCancel(context.Background())
+	log.Printf("Starting Verbis boot sequence")
+
+	// Kill any previous stale processes
+	processesToKill := []string{"ollama", "weaviate"}
+	for _, process := range processesToKill {
+		if err := killProcessByName(process); err != nil {
+			log.Printf("Error killing process %s: %s\n", process, err)
+		}
+	}
 
 	bootCtx := NewBootContext(ctx)
 	bootCtx.Logfile = logFile
 	bootCtx.Credentials = creds
 
-	// Define the commands to be executed
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	// Start syncer as separate goroutine
 
 	postHogClient, err := posthog.NewWithConfig(
 		PosthogAPIKey,
 		posthog.Config{
 			PersonalApiKey:                     PosthogAPIKey,
 			Endpoint:                           "https://eu.i.posthog.com",
-			DefaultFeatureFlagsPollingInterval: math.MaxInt64, // Max value of time.Duration at 280 years, effectively disabling feature flag polling
+			DefaultFeatureFlagsPollingInterval: math.MaxInt64,
 		},
 	)
 	if err != nil {
@@ -143,12 +144,10 @@ func BootOnboard(creds types.BuildCredentials) (*BootContext, error) {
 	}
 	router := api.SetupRouter()
 
-	// Apply CORS middleware for npm run start
-	// TODO: only do this in development
 	corsHeaders := handlers.CORS(
-		handlers.AllowedOrigins([]string{"http://localhost:3000"}),                   // Allow requests from Electron app
-		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}), // Allow these methods
-		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),           // Allow these headers
+		handlers.AllowedOrigins([]string{"http://localhost:3000"}),
+		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
+		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),
 	)
 	handler := corsHeaders(router)
 
@@ -158,14 +157,15 @@ func BootOnboard(creds types.BuildCredentials) (*BootContext, error) {
 	}
 
 	go func() {
-		select {
-		case <-sigChan:
-			log.Print("Sigchan closed")
-			cancel()
-			server.Close()
-		case <-ctx.Done():
-			server.Close()
-		}
+		<-sigChan
+		log.Print("Received termination signal")
+		Halt(bootCtx, sigChan, cancel)
+		server.Close()
+	}()
+
+	go func() {
+		<-ctx.Done()
+		server.Close()
 	}()
 
 	path, err = util.GetDistPath()
@@ -191,9 +191,9 @@ func BootOnboard(creds types.BuildCredentials) (*BootContext, error) {
 			[]string{
 				"OLLAMA_HOST=" + OllamaHost,
 				"OLLAMA_KEEP_ALIVE=" + KeepAliveTime,
-				"OLLAMA_MAX_LOADED_MODELS=2", // Embeddings & LLM
-				"OLLAMA_NUM_PARALLEL=11",     // Max num of parallel items across connectors + 1 for active prompts
-				"OLLAMA_FLASH_ATTENTION=1",   // Speeds up token generation for apple silicon macs
+				"OLLAMA_MAX_LOADED_MODELS=2",
+				"OLLAMA_NUM_PARALLEL=11",
+				"OLLAMA_FLASH_ATTENTION=1",
 				"OLLAMA_MODELS=" + ollamaModelsPath,
 				"OLLAMA_RUNNERS_DIR=" + ollamaRunnersPath,
 				"OLLAMA_TMPDIR=" + ollamaTmpDirPath,
@@ -210,7 +210,6 @@ func BootOnboard(creds types.BuildCredentials) (*BootContext, error) {
 		},
 	}
 
-	// Start subprocesses
 	startSubprocesses(ctx, commands, logFile, logFile)
 
 	err = waitForWeaviate(ctx)
@@ -218,14 +217,12 @@ func BootOnboard(creds types.BuildCredentials) (*BootContext, error) {
 		log.Fatalf("Failed to wait for Weaviate: %s\n", err)
 	}
 
-	// Create store schemas
 	weavClient := store.GetWeaviateClient()
 	store.CreateDocumentClass(ctx, weavClient, clean)
 	store.CreateConnectorStateClass(ctx, weavClient, clean)
 	store.CreateChunkClass(ctx, weavClient, clean)
 	store.CreateConversationClass(ctx, weavClient, clean)
 
-	// Start HTTP server
 	go func() {
 		log.Print("Starting server on port 8081")
 		log.Fatal(server.ListenAndServe())
@@ -305,25 +302,34 @@ type CmdSpec struct {
 func startSubprocesses(ctx context.Context, commands []CmdSpec, stdout *os.File, stderr *os.File) {
 	for _, cmdConfig := range commands {
 		go func(c CmdSpec) {
-			cmd := exec.Command(c.Name, c.Args...)
-			cmd.Env = append(os.Environ(), c.Env...)
-			cmd.Stdout = stdout
-			cmd.Stderr = stderr
+			for {
+				cmd := exec.Command(c.Name, c.Args...)
+				cmd.Env = append(os.Environ(), c.Env...)
+				cmd.Stdout = stdout
+				cmd.Stderr = stderr
 
-			if err := cmd.Start(); err != nil {
-				log.Printf("Error starting command %s: %s\n", c.Name, err)
-				return
-			}
-
-			go func() {
-				<-ctx.Done()
-				if err := cmd.Process.Kill(); err != nil {
-					log.Printf("Failed to kill process %s: %s\n", c.Name, err)
+				if err := cmd.Start(); err != nil {
+					log.Printf("Error starting command %s: %s\n", c.Name, err)
+					return
 				}
-			}()
 
-			if err := cmd.Wait(); err != nil {
-				log.Printf("Command %s finished with error: %s\n", c.Name, err)
+				done := make(chan error)
+				go func() { done <- cmd.Wait() }()
+
+				select {
+				case <-ctx.Done():
+					if err := cmd.Process.Kill(); err != nil {
+						log.Printf("Failed to kill process %s: %s\n", c.Name, err)
+					}
+					return
+				case err := <-done:
+					if err != nil {
+						log.Printf("Command %s finished with error: %s. Restarting...\n", c.Name, err)
+					} else {
+						log.Printf("Command %s finished successfully. Exiting restart loop.\n", c.Name)
+						return
+					}
+				}
 			}
 		}(cmdConfig)
 	}
@@ -466,11 +472,28 @@ func waitForWeaviate(ctx context.Context) error {
 		}
 	}
 }
+
 func Halt(bootCtx *BootContext, sigChan chan os.Signal, cancel context.CancelFunc) {
 	signal.Stop(sigChan)
 	cancel()
 	close(sigChan)
 	defer bootCtx.PosthogClient.Close()
+	if err := bootCtx.Logfile.Close(); err != nil {
+		log.Printf("Failed to close log file: %s\n", err)
+	}
+}
+
+func killProcessByName(name string) error {
+	cmd := exec.Command("pkill", "-f", name)
+	err := cmd.Run()
+	if err != nil {
+		if exitError, ok := err.(*exec.ExitError); ok && exitError.ExitCode() == 1 {
+			// pkill returns 1 if no processes were matched, which is not an error in this context
+			return nil
+		}
+		return fmt.Errorf("failed to kill process %s: %v", name, err)
+	}
+	return nil
 }
 
 func GetMasterLogDir() (string, error) {
