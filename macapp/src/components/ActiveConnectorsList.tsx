@@ -5,6 +5,7 @@ import GMailLogo from "../../assets/connectors/gmail.svg";
 import OutlookLogo from "../../assets/connectors/outlook.svg";
 import { ArrowPathIcon, TrashIcon } from "@heroicons/react/24/solid";
 import { formatDistanceToNow, differenceInYears } from "date-fns";
+import ConfirmationModal from "./ConfirmationModal";
 
 const appLogos: { [key: string]: React.FC<React.SVGProps<SVGSVGElement>> } = {
   googledrive: GDriveLogo,
@@ -15,6 +16,9 @@ const appLogos: { [key: string]: React.FC<React.SVGProps<SVGSVGElement>> } = {
 
 const ActiveConnectorsList: React.FC = () => {
   const [connectorList, setConnectorList] = useState([]);
+  const [isConfirmationModalOpen, setIsConfirmationModalOpen] = useState(false);
+  const [selectedConnector, setSelectedConnector] = useState(null);
+
   const getConnectorList = async () => {
     console.log("Getting connector list");
     const response = await list_connectors();
@@ -45,6 +49,20 @@ const ActiveConnectorsList: React.FC = () => {
       return formatDistanceToNow(date, { addSuffix: true });
     }
   }
+
+  const openConfirmationModal = (connector_id: string) => {
+    setSelectedConnector(connector_id);
+    setIsConfirmationModalOpen(true);
+  };
+  const closeConfirmationModal = () => {
+    setSelectedConnector(null);
+    setIsConfirmationModalOpen(false);
+  };
+  const confirmDelete = async () => {
+    await connector_delete(selectedConnector);
+    getConnectorList();
+    closeConfirmationModal();
+  };
 
   return (
     <div>
@@ -96,27 +114,23 @@ const ActiveConnectorsList: React.FC = () => {
                   <td>
                     <TrashIcon
                       className="h-5 w-5"
-                      onClick={() => connector_delete(connector.connector_id)}
+                      onClick={() =>
+                        openConfirmationModal(connector.connector_id)
+                      }
                     />
                   </td>
                 </tr>
               );
             })}
           </tbody>
-          {/* <tfoot>
-            <tr>
-              <th></th>
-              <th>Connector Type</th>
-              <th>User</th>
-              <th>Auth Valid</th>
-              <th>Syncing</th>
-              <th>Last Sync</th>
-              <th>Number of Documents</th>
-              <th>Number of Chunks</th>
-            </tr>
-          </tfoot> */}
         </table>
       </div>
+      <ConfirmationModal
+        isOpen={isConfirmationModalOpen}
+        onClose={closeConfirmationModal}
+        onConfirm={confirmDelete}
+        content={"Are you sure you want to delete this connector?"}
+      />
     </div>
   );
 };
