@@ -86,11 +86,11 @@ func (s *Syncer) GetConnector(id string) types.Connector {
 }
 
 func (s *Syncer) DeleteConnector(ctx context.Context, connectorID string) error {
-	_, ok := s.connectors[connectorID]
+	connector, ok := s.connectors[connectorID]
 	if !ok {
 		return fmt.Errorf("connector %s not found", connectorID)
 	}
-	err := store.DeleteConnector(ctx, connectorID)
+	err := store.DeleteConnector(ctx, connector)
 	if err != nil {
 		return fmt.Errorf("failed to delete connector %s: %s", connectorID, err)
 	}

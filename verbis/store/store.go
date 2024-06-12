@@ -17,6 +17,7 @@ import (
 	"github.com/weaviate/weaviate-go-client/v4/weaviate/graphql"
 	"github.com/weaviate/weaviate/entities/models"
 
+	"github.com/verbis-ai/verbis/verbis/keychain"
 	"github.com/verbis-ai/verbis/verbis/types"
 )
 
@@ -902,11 +903,12 @@ func DeleteDocumentChunks(ctx context.Context, client *weaviate.Client, uniqueID
 	return nil
 }
 
-func DeleteConnector(ctx context.Context, connectorID string) error {
+func DeleteConnector(ctx context.Context, connector types.Connector) error {
 	// why do we need to get the client in the method signature. It is available within the package already.
 	
 	// TODO Mark connector for deletion. Cancel ongoing syncs, and exclude from future ones
 	client := GetWeaviateClient()
+	connectorID := connector.ID()
  
 	where := filters.Where().
 		WithPath([]string{"connectorID"}).
@@ -1008,5 +1010,10 @@ func DeleteConnector(ctx context.Context, connectorID string) error {
 	}
 
 	// TODO Delete credentials for connector
+	keychainDeletionErr := keychain.DeleteTokenFromKeychain(connectorID, connector.Type())
+	if keychainDeletionErr != nil {
+		log.Printf("Failed to delete credentials for connector %s: %v", connectorID, keychainDeletionErr)
+		return fmt.Errorf("failed to delete credentials for connector %s: %v", connectorID, keychainDeletionErr)
+	}
 	return nil
 }
