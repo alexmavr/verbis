@@ -940,58 +940,56 @@ func DeleteConnector(ctx context.Context, connector types.Connector) error {
 	} else {
 		// print number of documents found
 		fmt.Println("Number of documents found: ", len(docs.Data["Get"].(map[string]interface{})[documentClassName].([]interface{})))
-	}
 
-	// Two options
-	// 1. (Better) Collect chunk IDs for all docs, and delete in batches
-	// 2. Iterate on docs and delete chunks for each, then the document
-	// Ensure docs.Data["Get"] is a map
-	getData, ok := docs.Data["Get"].(map[string]interface{})
-	if !ok {
-		log.Println("Failed to assert Get data as map[string]interface{}")
-		return nil
-	}
-
-	// Ensure getData[documentClassName] is a slice
-	classDocs, ok := getData[documentClassName].([]interface{})
-	if !ok {
-		log.Println("Failed to assert class documents as []interface{}")
-		return nil
-	}
-
-	// Iterate over the documents
-	for _, doc := range classDocs {
-		// Ensure each doc is a map
-		document, ok := doc.(map[string]interface{})
+		// Two options
+		// 1. (Better) Collect chunk IDs for all docs, and delete in batches
+		// 2. Iterate on docs and delete chunks for each, then the document
+		// Ensure docs.Data["Get"] is a map
+		getData, ok := docs.Data["Get"].(map[string]interface{})
 		if !ok {
-			log.Println("Failed to assert document as map[string]interface{}")
-			continue
+			return fmt.Errorf("failed to assert Get data as map[string]interface{}")
 		}
 
-		// Ensure unique_id is a string
-		uniqueID, ok := document["unique_id"].(string)
+		// Ensure getData[documentClassName] is a slice
+		classDocs, ok := getData[documentClassName].([]interface{})
 		if !ok {
-			log.Println("Failed to assert unique_id as string")
-			continue
+			return fmt.Errorf("failed to assert class documents as []interface{}")
 		}
 
-		// Call your DeleteDocumentChunks method with the unique_id
-		err := DeleteDocumentChunks(ctx, client, uniqueID, connectorID)
-		if err != nil {
-			log.Printf("Failed to delete document chunks for unique_id %s: %v", uniqueID, err)
-			continue
-		}
+		// Iterate over the documents
+		for _, doc := range classDocs {
+			// Ensure each doc is a map
+			document, ok := doc.(map[string]interface{})
+			if !ok {
+				log.Println("Failed to assert document as map[string]interface{}")
+				continue
+			}
 
-		fmt.Printf("Successfully deleted document chunks for unique_id %s\n", uniqueID)
+			// Ensure unique_id is a string
+			uniqueID, ok := document["unique_id"].(string)
+			if !ok {
+				log.Println("Failed to assert unique_id as string")
+				continue
+			}
 
-		// Delete the document
-		err = client.Data().Deleter().
-			WithClassName(documentClassName).
-			WithID(document["_additional"].(map[string]interface{})["id"].(string)).
-			Do(ctx)
-		
-		if err != nil {
-			log.Printf("Failed to delete document for unique_id %s: %v", uniqueID, err)
+			// Call your DeleteDocumentChunks method with the unique_id
+			err := DeleteDocumentChunks(ctx, client, uniqueID, connectorID)
+			if err != nil {
+				log.Printf("Failed to delete document chunks for unique_id %s: %v", uniqueID, err)
+				continue
+			}
+
+			fmt.Printf("Successfully deleted document chunks for unique_id %s\n", uniqueID)
+
+			// Delete the document
+			err = client.Data().Deleter().
+				WithClassName(documentClassName).
+				WithID(document["_additional"].(map[string]interface{})["id"].(string)).
+				Do(ctx)
+			
+			if err != nil {
+				log.Printf("Failed to delete document for unique_id %s: %v", uniqueID, err)
+			}
 		}
 	}
 
@@ -1012,7 +1010,6 @@ func DeleteConnector(ctx context.Context, connector types.Connector) error {
 	// TODO Delete credentials for connector
 	keychainDeletionErr := keychain.DeleteTokenFromKeychain(connectorID, connector.Type())
 	if keychainDeletionErr != nil {
-		log.Printf("Failed to delete credentials for connector %s: %v", connectorID, keychainDeletionErr)
 		return fmt.Errorf("failed to delete credentials for connector %s: %v", connectorID, keychainDeletionErr)
 	}
 	return nil
