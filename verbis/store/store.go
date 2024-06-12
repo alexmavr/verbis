@@ -17,6 +17,7 @@ import (
 	"github.com/weaviate/weaviate-go-client/v4/weaviate/graphql"
 	"github.com/weaviate/weaviate/entities/models"
 
+	"github.com/verbis-ai/verbis/verbis/keychain"
 	"github.com/verbis-ai/verbis/verbis/types"
 )
 
@@ -899,5 +900,117 @@ func DeleteDocumentChunks(ctx context.Context, client *weaviate.Client, uniqueID
 		return fmt.Errorf("unable to update connector state: %v", err)
 	}
 
+	return nil
+}
+
+func DeleteConnector(ctx context.Context, connector types.Connector) error {
+	// why do we need to get the client in the method signature. It is available within the package already.
+	
+	// TODO Mark connector for deletion. Cancel ongoing syncs, and exclude from future ones
+	client := GetWeaviateClient()
+	connectorID := connector.ID()
+ 
+	where := filters.Where().
+		WithPath([]string{"connectorID"}).
+		WithOperator(filters.Equal).
+		WithValueString(connectorID)
+
+	docs, err := client.GraphQL().Get().
+		WithClassName(documentClassName).
+		WithFields([]graphql.Field{
+			{
+				Name: "unique_id",
+			},
+			{
+				Name: "_additional", 
+				Fields: []graphql.Field{
+					{Name: "id"},
+				},
+			},
+		}...).
+		WithWhere(where).Do(ctx)
+	
+	if err != nil {
+		return err
+	}
+
+	// No documents found
+	if docs.Data["Get"] == nil {
+		fmt.Println("No documents found for connector:", connectorID)
+	} else {
+		// print number of documents found
+		fmt.Println("Number of documents found: ", len(docs.Data["Get"].(map[string]interface{})[documentClassName].([]interface{})))
+
+		// Two options
+		// 1. (Better) Collect chunk IDs for all docs, and delete in batches
+		// 2. Iterate on docs and delete chunks for each, then the document
+		// Ensure docs.Data["Get"] is a map
+		getData, ok := docs.Data["Get"].(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("failed to assert Get data as map[string]interface{}")
+		}
+
+		// Ensure getData[documentClassName] is a slice
+		classDocs, ok := getData[documentClassName].([]interface{})
+		if !ok {
+			return fmt.Errorf("failed to assert class documents as []interface{}")
+		}
+
+		// Iterate over the documents
+		for _, doc := range classDocs {
+			// Ensure each doc is a map
+			document, ok := doc.(map[string]interface{})
+			if !ok {
+				log.Println("Failed to assert document as map[string]interface{}")
+				continue
+			}
+
+			// Ensure unique_id is a string
+			uniqueID, ok := document["unique_id"].(string)
+			if !ok {
+				log.Println("Failed to assert unique_id as string")
+				continue
+			}
+
+			// Call your DeleteDocumentChunks method with the unique_id
+			err := DeleteDocumentChunks(ctx, client, uniqueID, connectorID)
+			if err != nil {
+				log.Printf("Failed to delete document chunks for unique_id %s: %v", uniqueID, err)
+				continue
+			}
+
+			fmt.Printf("Successfully deleted document chunks for unique_id %s\n", uniqueID)
+
+			// Delete the document
+			err = client.Data().Deleter().
+				WithClassName(documentClassName).
+				WithID(document["_additional"].(map[string]interface{})["id"].(string)).
+				Do(ctx)
+			
+			if err != nil {
+				log.Printf("Failed to delete document for unique_id %s: %v", uniqueID, err)
+			}
+		}
+	}
+
+	// Delete connector now that all docs and chunks were deleted
+	connectorDeleteWhere := filters.Where().
+		WithPath([]string{"connector_id"}).
+		WithOperator(filters.Equal).
+		WithValueString(connectorID)
+	_, connectorDeletionErr := client.Batch().ObjectsBatchDeleter().
+		WithClassName(stateClassName).
+		WithOutput("verbose").
+		WithWhere(connectorDeleteWhere).
+		Do(ctx)
+	if connectorDeletionErr != nil {
+		log.Printf("Failed to delete connector %s: %v", connectorID, connectorDeletionErr)
+	}
+
+	// TODO Delete credentials for connector
+	keychainDeletionErr := keychain.DeleteTokenFromKeychain(connectorID, connector.Type())
+	if keychainDeletionErr != nil {
+		return fmt.Errorf("failed to delete credentials for connector %s: %v", connectorID, keychainDeletionErr)
+	}
 	return nil
 }

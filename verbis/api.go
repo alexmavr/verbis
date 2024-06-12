@@ -38,6 +38,7 @@ func (a *API) SetupRouter() *mux.Router {
 	// a state variable in the oauth flow.
 	r.HandleFunc("/connectors/{connector_id}/auth_setup", a.connectorAuthSetup).Methods("GET")
 	r.HandleFunc("/connectors/{connector_id}/callback", a.handleConnectorCallback).Methods("GET")
+	r.HandleFunc("/connectors/{connector_id}", a.handleConnectorDelete).Methods("DELETE")
 	r.HandleFunc("/connectors/auth_complete", a.authComplete).Methods("GET")
 
 	r.HandleFunc("/conversations", a.listConversations).Methods("GET")
@@ -216,6 +217,22 @@ func (a *API) connectorAuthSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+}
+
+func (a *API) handleConnectorDelete(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	connectorID, ok := vars["connector_id"]
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("No connector ID provided"))
+		return
+	}
+	err := a.Syncer.DeleteConnector(a.Context, connectorID)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to remove connector: " + err.Error()))
+		return
+	}
 }
 
 func (a *API) handleConnectorCallback(w http.ResponseWriter, r *http.Request) {
