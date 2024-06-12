@@ -39,6 +39,18 @@ export async function connector_request(connector_name: string) {
   }
 }
 
+export async function connector_delete(connector_id: string) {
+  try {
+    const response = await axios.delete(
+      `http://localhost:8081/connectors/${connector_id}`
+    );
+    console.log("Connector Delete Response:", response.data);
+  } catch (error) {
+    console.error("Error in Connector Delete:", error);
+    throw error; // Rethrow or handle as needed
+  }
+}
+
 export async function connector_auth_setup(connector_id: string) {
   try {
     const response = await axios.get(

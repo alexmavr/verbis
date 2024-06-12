@@ -37,3 +37,8 @@ func SaveTokenToKeychain(token *oauth2.Token, connectorID string, connectorType 
 
 	return nil
 }
+
+func DeleteTokenFromKeychain(connectorID string, connectorType types.ConnectorType) error {
+	tokenKey := fmt.Sprintf("%s-%s-token", string(connectorType), connectorID)
+	return keyring.Delete(keyringService, tokenKey)
+}

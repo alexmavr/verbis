@@ -85,6 +85,19 @@ func (s *Syncer) GetConnector(id string) types.Connector {
 	return s.connectors[id]
 }
 
+func (s *Syncer) DeleteConnector(ctx context.Context, connectorID string) error {
+	_, ok := s.connectors[connectorID]
+	if !ok {
+		return fmt.Errorf("connector %s not found", connectorID)
+	}
+	err := store.DeleteConnector(ctx, connectorID)
+	if err != nil {
+		return fmt.Errorf("failed to delete connector %s: %s", connectorID, err)
+	}
+	delete(s.connectors, connectorID)
+	return nil
+}
+
 func (s *Syncer) GetConnectorStates(ctx context.Context, fetch_all bool) ([]*types.ConnectorState, error) {
 	states := []*types.ConnectorState{}
 	for _, c := range s.connectors {
@@ -119,6 +132,7 @@ func (s *Syncer) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-time.After(s.syncCheckPeriod):
+			// TODO clean stale connectors
 			err := s.SyncNow(ctx)
 			if err != nil {
 				log.Printf("Failed to sync: %s\n", err)

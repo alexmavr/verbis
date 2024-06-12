@@ -1,13 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { force_sync, list_connectors } from "../client";
+import { force_sync, list_connectors, connector_delete } from "../client";
 import GDriveLogo from "../../assets/connectors/gdrive.svg";
 import GMailLogo from "../../assets/connectors/gmail.svg";
 import OutlookLogo from "../../assets/connectors/outlook.svg";
-import {
-  ArrowPathIcon,
-  CheckCircleIcon,
-  ExclamationCircleIcon,
-} from "@heroicons/react/24/solid";
+import { ArrowPathIcon, TrashIcon } from "@heroicons/react/24/solid";
 import { formatDistanceToNow, differenceInYears } from "date-fns";
 
 const appLogos: { [key: string]: React.FC<React.SVGProps<SVGSVGElement>> } = {
@@ -67,6 +63,7 @@ const ActiveConnectorsList: React.FC = () => {
               <th># Documents</th>
               <th># Errors</th>
               <th>Last Sync</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -96,6 +93,12 @@ const ActiveConnectorsList: React.FC = () => {
                   <td>{connector.num_documents}</td>
                   <td>{connector.num_errors}</td>
                   <td>{renderLastSyncDate(connector.last_sync)}</td>
+                  <td>
+                    <TrashIcon
+                      className="h-5 w-5"
+                      onClick={() => connector_delete(connector.connector_id)}
+                    />
+                  </td>
                 </tr>
               );
             })}
