@@ -227,8 +227,7 @@ func (a *API) handleConnectorDelete(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("No connector ID provided"))
 		return
 	}
-	a.Syncer.DeleteConnector(a.Context, connectorID)
-	err := store.DeleteConnector(a.Context, connectorID)
+	err := a.Syncer.DeleteConnector(a.Context, connectorID)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to remove connector: " + err.Error()))
