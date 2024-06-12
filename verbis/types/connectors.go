@@ -11,6 +11,7 @@ const (
 	ConnectorTypeGoogleDrive ConnectorType = "googledrive"
 	ConnectorTypeGmail       ConnectorType = "gmail"
 	ConnectorTypeOutlook     ConnectorType = "outlook"
+	ConnectorTypeSlack       ConnectorType = "slack"
 )
 
 type ConnectorConstructor func(BuildCredentials) Connector

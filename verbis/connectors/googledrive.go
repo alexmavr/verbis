@@ -310,6 +310,7 @@ func (g *GoogleDriveConnector) processFile(ctx context.Context, service *drive.S
 		log.Printf("Unable to delete chunks for document %s: %v", document.UniqueID, err)
 	}
 
+	content = util.CleanChunk(content)
 	// Split contents into chunks of MaxChunkSize characters
 	for i := 0; i < len(content); i += MaxChunkSize {
 		end := i + MaxChunkSize

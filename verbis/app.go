@@ -10,20 +10,24 @@ var (
 	//	httpClient          = &http.Client{Timeout: 10 * time.Second}
 	generationModelName = "custom-mistral"
 	embeddingsModelName = "snowflake-arctic-embed:137m"
-	clean               = false
+	clean               = true
 	KeepAliveTime       = "20m"
 
 	// Will be populated by linker from .builder.env
-	PosthogAPIKey    = "n/a"
-	AzureSecretID    = "n/a"
-	AzureSecretValue = "n/a"
+	PosthogAPIKey     = "n/a"
+	AzureSecretID     = "n/a"
+	AzureSecretValue  = "n/a"
+	SlackClientID     = "n/a"
+	SlackClientSecret = "n/a"
 )
 
 func main() {
 	creds := types.BuildCredentials{
-		PosthogAPIKey:    PosthogAPIKey,
-		AzureSecretID:    AzureSecretID,
-		AzureSecretValue: AzureSecretValue,
+		PosthogAPIKey:     PosthogAPIKey,
+		AzureSecretID:     AzureSecretID,
+		AzureSecretValue:  AzureSecretValue,
+		SlackClientID:     SlackClientID,
+		SlackClientSecret: SlackClientSecret,
 	}
 	// Start everything needed to let the user onboard connectors
 	bootCtx, err := BootOnboard(creds)

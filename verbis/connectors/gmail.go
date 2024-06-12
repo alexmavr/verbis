@@ -9,8 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
-	"strings"
 	"sync"
 	"time"
 
@@ -246,7 +244,7 @@ func (g *GmailConnector) processEmail(ctx context.Context, srv *gmail.Service, e
 		}
 	}
 
-	content = cleanText(content)
+	content = util.CleanChunk(content)
 
 	receivedAt := time.Unix(email.InternalDate/1000, 0)
 	emailURL := fmt.Sprintf("https://mail.google.com/mail/u/0/#inbox/%s", email.Id)
@@ -375,20 +373,4 @@ func downloadAttachment(ctx context.Context, srv *gmail.Service, userID, message
 	}
 
 	return tempFilePath, nil
-}
-
-func cleanText(input string) string {
-	// Remove URLs
-	urlRegex := regexp.MustCompile(`http[s]?://[^\s]+`)
-	cleaned := urlRegex.ReplaceAllString(input, "")
-
-	// Remove non-readable text and payloads (based on patterns in your example)
-	payloadRegex := regexp.MustCompile(`[a-zA-Z0-9\-_]{20,}`)
-	cleaned = payloadRegex.ReplaceAllString(cleaned, "")
-
-	// Remove extra whitespace
-	cleaned = strings.TrimSpace(cleaned)
-	cleaned = regexp.MustCompile(`\s+`).ReplaceAllString(cleaned, " ")
-
-	return cleaned
 }

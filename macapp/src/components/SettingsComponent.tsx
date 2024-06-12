@@ -15,6 +15,7 @@ import GCalLogo from "../../assets/connectors/gcal.svg";
 import GitlabLogo from "../../assets/connectors/gitlab.svg";
 import GmailLogo from "../../assets/connectors/gmail.svg";
 import HubspotLogo from "../../assets/connectors/hubspot.svg";
+import SlackLogo from "../../assets/connectors/slack.svg";
 import TrelloLogo from "../../assets/connectors/trello.svg";
 import ZendeskLogo from "../../assets/connectors/zendesk.svg";
 import ZoomLogo from "../../assets/connectors/zoom.svg";
@@ -73,6 +74,13 @@ const saasApps: SaasApp[] = [
     description: "Outlook",
     available: true,
     internal_name: "outlook",
+  },
+  {
+    name: "Slack",
+    logo: SlackLogo,
+    description: "Slack",
+    available: true,
+    internal_name: "slack",
   },
   {
     name: "Dropbox",

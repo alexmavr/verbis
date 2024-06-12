@@ -53,7 +53,9 @@ type Conversation struct {
 }
 
 type BuildCredentials struct {
-	PosthogAPIKey    string
-	AzureSecretID    string
-	AzureSecretValue string
+	PosthogAPIKey     string
+	AzureSecretID     string
+	AzureSecretValue  string
+	SlackClientID     string
+	SlackClientSecret string
 }

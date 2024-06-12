@@ -8,6 +8,7 @@ var AllConnectors = map[string]types.ConnectorConstructor{
 	string(types.ConnectorTypeGoogleDrive): NewGoogleDriveConnector,
 	string(types.ConnectorTypeGmail):       NewGmailConnector,
 	string(types.ConnectorTypeOutlook):     NewOutlookConnector,
+	string(types.ConnectorTypeSlack):       NewSlackConnector,
 }
 
 const (

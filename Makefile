@@ -18,7 +18,7 @@ PACKAGE := main
 
 include .build.env
 
-LDFLAGS := -X "$(PACKAGE).PosthogAPIKey=$(POSTHOG_PERSONAL_API_KEY)" -X "$(PACKAGE).AzureSecretID=$(AZURE_SECRET_ID)" -X "$(PACKAGE).AzureSecretValue=$(AZURE_SECRET_VALUE)"
+LDFLAGS := -X "$(PACKAGE).PosthogAPIKey=$(POSTHOG_PERSONAL_API_KEY)" -X "$(PACKAGE).AzureSecretID=$(AZURE_SECRET_ID)" -X "$(PACKAGE).AzureSecretValue=$(AZURE_SECRET_VALUE)" -X "$(PACKAGE).SlackClientID=$(SLACK_CLIENT_ID)" -X "$(PACKAGE).SlackClientSecret=$(SLACK_CLIENT_SECRET)" -X "$(PACKAGE).SlackSigningSecret=$(SLACK_SIGNING_SECRET)" -X "$(PACKAGE).SlackBotToken=$(SLACK_CLIENT_SECRET)"
 
 all: macapp
 
@@ -51,6 +51,10 @@ dist/weaviate:
 	# Remove the temporary directory and the zip file
 	rm -rf $(TMP_DIR)
 
+dist/certs:
+	mkdir -p $(DIST_DIR)/certs
+	cp verbis/certs/* $(DIST_DIR)/certs
+
 dist/ms-marco-MiniLM-L-12-v2:
 	wget https://huggingface.co/prithivida/flashrank/resolve/main/ms-marco-MiniLM-L-12-v2.zip
 	unzip -o ms-marco-MiniLM-L-12-v2.zip -d dist/
@@ -77,14 +81,13 @@ dist/rerank:
 		python3 -OO -m PyInstaller --onedir script/rerank.py --specpath dist/ \
 	)
 
-verbis: dist/rerank dist/weaviate dist/ollama dist/pdftotext dist/ms-marco-MiniLM-L-12-v2
+verbis: dist/rerank dist/weaviate dist/ollama dist/pdftotext dist/ms-marco-MiniLM-L-12-v2 dist/certs
 	# Ensure dist directory exists
 	mkdir -p $(DIST_DIR)
 	# Modelfile is needed for any custom model execution
 	cp Modelfile.* dist/
 
-	echo "$(LDFLAGS)"
-	pushd verbis && go build -ldflags="$(LDFLAGS)" -o ../$(DIST_DIR)/verbis . && popd
+	@pushd verbis && go build -ldflags="$(LDFLAGS)" -o ../$(DIST_DIR)/verbis . && popd
 
 macapp: verbis 
 	pushd macapp && npm install && npm run package && popd

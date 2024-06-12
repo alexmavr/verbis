@@ -66,21 +66,27 @@ func binariesPresent(path string) error {
 	return nil
 }
 
-func SanitizeString(text string) string {
+func CleanChunk(input string) string {
 	// The UTF-8 BOM is sometimes present in text files, and should be removed
 	bom := []byte{0xEF, 0xBB, 0xBF}
-	text = strings.TrimPrefix(text, string(bom))
+	input = strings.TrimPrefix(input, string(bom))
 
 	// Define a regex pattern that matches characters used in major human languages
 	// This includes basic Latin, Latin-1 Supplement, Greek, Cyrillic, Hebrew, Arabic, etc.
 	disallowedChars := regexp.MustCompile(`[^\p{L}\p{M}\p{N}\p{P}\p{Zs}]`)
-	text = disallowedChars.ReplaceAllString(text, " ")
+	input = disallowedChars.ReplaceAllString(input, " ")
 
-	// Replace internal sequences of whitespace with a single space
-	spacePattern := regexp.MustCompile(`\s+`)
-	text = spacePattern.ReplaceAllString(text, " ")
+	// Remove URLs
+	urlRegex := regexp.MustCompile(`http[s]?://[^\s]+`)
+	input = urlRegex.ReplaceAllString(input, "")
 
-	// Trim leading and trailing whitespace
-	// If the initial text was all whitespace, it should return an empty string
-	return strings.TrimSpace(text)
+	// Remove non-readable text and payloads (based on patterns in your example)
+	payloadRegex := regexp.MustCompile(`[a-zA-Z0-9\-_]{20,}`)
+	input = payloadRegex.ReplaceAllString(input, "")
+
+	// Remove extra whitespace
+	input = regexp.MustCompile(`\s+`).ReplaceAllString(input, " ")
+	input = strings.TrimSpace(input)
+
+	return input
 }

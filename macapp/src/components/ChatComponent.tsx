@@ -5,6 +5,7 @@ import { CogIcon } from "@heroicons/react/24/solid";
 import GDriveLogo from "../../assets/connectors/gdrive.svg";
 import GMailLogo from "../../assets/connectors/gmail.svg";
 import OutlookLogo from "../../assets/connectors/outlook.svg";
+import SlackLogo from "../../assets/connectors/slack.svg";
 import { AppScreen, ResultSource } from "../types";
 import ThemeSwitcher from "./ThemeSwitcher";
 
@@ -16,6 +17,7 @@ const Logos: { [key: string]: React.FC<React.SVGProps<SVGSVGElement>> } = {
   googledrive: GDriveLogo,
   gmail: GMailLogo,
   outlook: OutlookLogo,
+  slack: SlackLogo,
 };
 
 const ChatComponent: React.FC<Props> = ({ navigate }) => {

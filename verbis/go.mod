@@ -12,6 +12,7 @@ require (
 	github.com/microsoftgraph/msgraph-sdk-go v1.45.0
 	github.com/microsoftgraph/msgraph-sdk-go-core v1.1.0
 	github.com/posthog/posthog-go v0.0.0-20240327112532-87b23fe11103
+	github.com/slack-go/slack v0.13.0
 	github.com/weaviate/weaviate v1.24.8
 	github.com/weaviate/weaviate-go-client/v4 v4.13.1
 	github.com/zalando/go-keyring v0.2.4
@@ -49,6 +50,7 @@ require (
 	github.com/google/s2a-go v0.1.7 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
 	github.com/googleapis/gax-go/v2 v2.12.3 // indirect
+	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect

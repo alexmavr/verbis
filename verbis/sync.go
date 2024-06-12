@@ -165,8 +165,8 @@ func chunkAdder(ctx context.Context, chunkChan chan types.ChunkSyncResult, resCh
 		}
 		chunk := res.Chunk
 
-		saneChunk := util.SanitizeString(chunk.Text)
-		saneName := util.SanitizeString(chunk.Name)
+		saneChunk := util.CleanChunk(chunk.Text)
+		saneName := util.CleanChunk(chunk.Name)
 		log.Printf("New chunk, length: %d, sanitized: %d\n", len(chunk.Text), len(saneChunk))
 		if len(saneChunk) < MinChunkSize {
 			log.Printf("Skipping short chunk: %s\n", saneChunk)
@@ -453,16 +453,15 @@ func (s *Syncer) maybeSyncConnector(ctx context.Context, wg *sync.WaitGroup, c t
 			if new_err != nil {
 				log.Printf("Error syncing %s %s: %s", c.Type(), c.ID(), new_err)
 			}
-
-			// Unlock
-			_, new_err = store.SetConnectorSyncing(ctx, store.GetWeaviateClient(), c.ID(), false)
-			if err != nil {
-				log.Printf("Failed to set connector %s %s to not syncing state: %s", c.Type(), c.ID(), new_err)
-			}
-			log.Printf("Connector %s %s set to not syncing", c.Type(), c.ID())
 		}(c)
 	} else {
 		log.Printf("Sync not required for %s", c.ID())
+	}
+	_, err = store.SetConnectorSyncing(ctx, store.GetWeaviateClient(), c.ID(), false)
+	if err != nil {
+		log.Printf("Failed to set connector %s %s to not syncing state: %s", c.Type(), c.ID(), err)
+	} else {
+		log.Printf("Connector %s %s set to not syncing", c.Type(), c.ID())
 	}
 
 	return nil

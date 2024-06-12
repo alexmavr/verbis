@@ -99,6 +99,40 @@ func GetChunkByHash(ctx context.Context, client *weaviate.Client, hash string) (
 	return parsedChunks[0], nil
 }
 
+var ErrDocumentNotFound = errors.New("document not found")
+
+func IsErrDocumentNotFound(err error) bool {
+	return errors.Is(err, ErrDocumentNotFound)
+}
+
+func GetDocument(ctx context.Context, uniqueID string) (*types.Document, error) {
+	client := GetWeaviateClient()
+	docID, err := getDocumentIDFromUniqueID(ctx, client, uniqueID)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get document ID: %v", err)
+	}
+	if docID == "" {
+		return nil, ErrDocumentNotFound
+	}
+
+	docData, err := getDocument(ctx, client, docID)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get document: %s", err)
+	}
+	createdAt, _ := time.Parse(time.RFC3339, docData["createdAt"].(string))
+	updatedAt, _ := time.Parse(time.RFC3339, docData["updatedAt"].(string))
+
+	doc := &types.Document{
+		Name:          docData["name"].(string),
+		SourceURL:     docData["sourceURL"].(string),
+		ConnectorID:   docData["connectorID"].(string),
+		ConnectorType: docData["connectorType"].(string),
+		CreatedAt:     createdAt,
+		UpdatedAt:     updatedAt,
+	}
+	return doc, nil
+}
+
 func getDocumentIDFromUniqueID(ctx context.Context, client *weaviate.Client, uniqueID string) (string, error) {
 	where := filters.Where().
 		WithPath([]string{"unique_id"}).
@@ -179,13 +213,13 @@ func AddVectors(ctx context.Context, client *weaviate.Client, items []types.AddV
 				Class: documentClassName,
 				ID:    strfmt.UUID(docID),
 				Properties: map[string]interface{}{
-					"unique_id":   item.Document.UniqueID,
-					"name":        item.Document.Name,
-					"sourceURL":   item.Document.SourceURL,
-					"connectorID": item.Document.ConnectorID,
+					"unique_id":     item.Document.UniqueID,
+					"name":          item.Document.Name,
+					"sourceURL":     item.Document.SourceURL,
+					"connectorID":   item.Document.ConnectorID,
 					"connectorType": item.Document.ConnectorType,
-					"createdAt":   item.Document.CreatedAt.Format(time.RFC3339),
-					"updatedAt":   item.Document.UpdatedAt.Format(time.RFC3339),
+					"createdAt":     item.Document.CreatedAt.Format(time.RFC3339),
+					"updatedAt":     item.Document.UpdatedAt.Format(time.RFC3339),
 				},
 			}
 			objects = append(objects, documentObj)
@@ -311,12 +345,12 @@ func parseChunks(ctx context.Context, client *weaviate.Client, chunks []interfac
 
 		chunk := &types.Chunk{
 			Document: types.Document{
-				Name:        docData["name"].(string),
-				SourceURL:   docData["sourceURL"].(string),
-				ConnectorID: docData["connectorID"].(string),
+				Name:          docData["name"].(string),
+				SourceURL:     docData["sourceURL"].(string),
+				ConnectorID:   docData["connectorID"].(string),
 				ConnectorType: docData["connectorType"].(string),
-				CreatedAt:   createdAt,
-				UpdatedAt:   updatedAt,
+				CreatedAt:     createdAt,
+				UpdatedAt:     updatedAt,
 			},
 			Text: c["chunk"].(string),
 			Hash: c["hash"].(string),

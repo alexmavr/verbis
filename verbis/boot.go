@@ -155,17 +155,23 @@ func BootOnboard(creds types.BuildCredentials) (*BootContext, error) {
 		Addr:    ":8081",
 		Handler: handler,
 	}
+	httpsServer := http.Server{
+		Addr:    ":8082",
+		Handler: handler,
+	}
 
 	go func() {
 		<-sigChan
 		log.Print("Received termination signal")
 		Halt(bootCtx, sigChan, cancel)
 		server.Close()
+		httpsServer.Close()
 	}()
 
 	go func() {
 		<-ctx.Done()
 		server.Close()
+		httpsServer.Close()
 	}()
 
 	path, err = util.GetDistPath()
@@ -223,9 +229,17 @@ func BootOnboard(creds types.BuildCredentials) (*BootContext, error) {
 	store.CreateChunkClass(ctx, weavClient, clean)
 	store.CreateConversationClass(ctx, weavClient, clean)
 
+	certPath := filepath.Join(path, "certs/localhost.pem")
+	keyPath := filepath.Join(path, "certs/localhost-key.pem")
+
 	go func() {
-		log.Print("Starting server on port 8081")
+		log.Print("Starting HTTP server on port 8081")
 		log.Fatal(server.ListenAndServe())
+	}()
+
+	go func() {
+		log.Print("Starting HTTPS server on port 8082")
+		log.Fatal(httpsServer.ListenAndServeTLS(certPath, keyPath))
 	}()
 
 	bootCtx.State = BootStateOnboard

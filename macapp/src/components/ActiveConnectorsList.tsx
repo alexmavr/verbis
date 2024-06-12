@@ -4,6 +4,7 @@ import GDriveLogo from "../../assets/connectors/gdrive.svg";
 import GMailLogo from "../../assets/connectors/gmail.svg";
 import OutlookLogo from "../../assets/connectors/outlook.svg";
 import { ArrowPathIcon, TrashIcon } from "@heroicons/react/24/solid";
+import SlackLogo from "../../assets/connectors/slack.svg";
 import { formatDistanceToNow, differenceInYears } from "date-fns";
 import ConfirmationModal from "./ConfirmationModal";
 
@@ -11,6 +12,7 @@ const appLogos: { [key: string]: React.FC<React.SVGProps<SVGSVGElement>> } = {
   googledrive: GDriveLogo,
   gmail: GMailLogo,
   outlook: OutlookLogo,
+  slack: SlackLogo,
   // Add more mappings for other connector types
 };
 
