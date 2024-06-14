@@ -89,6 +89,7 @@ func (s *Syncer) DeleteConnector(ctx context.Context, connectorID string) error 
 	if !ok {
 		return fmt.Errorf("connector %s not found", connectorID)
 	}
+	connector.Cancel()
 	err := store.DeleteConnector(ctx, connector)
 	if err != nil {
 		return fmt.Errorf("failed to delete connector %s: %s", connectorID, err)
@@ -325,7 +326,7 @@ func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *ty
 	// - Fetches from the connector and document conversions (in Sync)
 	// - Embeddings generation and addition to weaviate (in chunkAdder)
 	// - Periodic updates to the connector state (in stateUpdater)
-	go c.Sync(ctx, state.LastSync, chunkChan, errChanSync)
+	go c.Sync(state.LastSync, chunkChan, errChanSync)
 	go chunkAdder(ctx, chunkChan, chunkAddResChan)
 	go stateUpdater(ctx, c, chunkAddResChan, doneChan)
 
@@ -444,6 +445,7 @@ func (s *Syncer) maybeSyncConnector(ctx context.Context, wg *sync.WaitGroup, c t
 			unlock = false
 			wg.Add(1)
 			go func(c types.Connector) {
+				defer wg.Done()
 				new_err := s.connectorSync(ctx, c, state)
 				if new_err != nil {
 					log.Printf("Error syncing %s %s: %s", c.Type(), c.ID(), new_err)

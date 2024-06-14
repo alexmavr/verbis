@@ -172,15 +172,14 @@ func (a *API) connectorInit(w http.ResponseWriter, r *http.Request) {
 	conn := constructor(a.Context.Credentials)
 
 	log.Printf("Initializing connector type: %s id: %s", conn.Type(), conn.ID())
-	err := conn.Init(r.Context(), "")
+
+	err := conn.Init(a.Context, "")
 	if err != nil {
 		log.Printf("Failed to init connector: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to init connector: " + err.Error()))
 		return
 	}
-	log.Printf("Connector %s %s initialized", conn.Type(), conn.ID())
-
 	// Add the connector to the syncer so that it may start syncing
 	err = a.Syncer.AddConnector(conn)
 	if err != nil {
@@ -189,6 +188,7 @@ func (a *API) connectorInit(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Failed to add connector: " + err.Error()))
 		return
 	}
+	log.Printf("Connector %s %s initialized", conn.Type(), conn.ID())
 
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")

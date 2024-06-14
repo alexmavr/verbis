@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/gmail/v1"
@@ -26,39 +25,14 @@ import (
 
 func NewGmailConnector(creds types.BuildCredentials) types.Connector {
 	return &GmailConnector{
-		id:   "",
-		user: "",
+		BaseConnector: BaseConnector{
+			connectorType: types.ConnectorTypeGmail,
+		},
 	}
 }
 
 type GmailConnector struct {
-	id   string
-	user string
-}
-
-func (g *GmailConnector) ID() string {
-	return g.id
-}
-
-func (g *GmailConnector) User() string {
-	return g.user
-}
-
-func (g *GmailConnector) Type() types.ConnectorType {
-	return types.ConnectorTypeGmail
-}
-
-func (g *GmailConnector) Status(ctx context.Context) (*types.ConnectorState, error) {
-	state, err := store.GetConnectorState(ctx, store.GetWeaviateClient(), g.ID())
-	if err != nil {
-		return nil, fmt.Errorf("failed to get connector state: %v", err)
-	}
-
-	if state == nil {
-		// No stored state, only happens if sync() is called before init()
-		return nil, fmt.Errorf("connector state not found")
-	}
-	return state, nil
+	BaseConnector
 }
 
 func (g *GmailConnector) getClient(ctx context.Context, config *oauth2.Config) (*http.Client, error) {
@@ -83,43 +57,6 @@ func (g *GmailConnector) requestOauthWeb(config *oauth2.Config) error {
 var gmailScopes []string = []string{
 	gmail.GmailReadonlyScope,
 	"https://www.googleapis.com/auth/userinfo.email",
-}
-
-func (g *GmailConnector) Init(ctx context.Context, connectorID string) error {
-	if connectorID != "" {
-		// connectorID is passed only when Init is called to re-create the
-		// connector from a state object during initial load
-		g.id = connectorID
-	}
-	if g.id == "" {
-		g.id = uuid.New().String()
-	}
-
-	state, err := store.GetConnectorState(ctx, store.GetWeaviateClient(), g.ID())
-	if err != nil && !store.IsStateNotFound(err) {
-		return fmt.Errorf("failed to get connector state: %v", err)
-	}
-
-	if state == nil {
-		state = &types.ConnectorState{}
-	}
-
-	state.ConnectorID = g.ID()
-	state.Syncing = false
-	// state.User is unknown until auth is complete
-	state.ConnectorType = string(g.Type())
-	token, err := keychain.TokenFromKeychain(g.ID(), g.Type())
-	state.AuthValid = (err == nil && token != nil) // TODO: check for expiry of refresh token
-
-	err = store.UpdateConnectorState(ctx, store.GetWeaviateClient(), state)
-	if err != nil {
-		return fmt.Errorf("failed to set connector state: %v", err)
-	}
-	return nil
-}
-
-func (g *GmailConnector) UpdateConnectorState(ctx context.Context, state *types.ConnectorState) error {
-	return store.UpdateConnectorState(ctx, store.GetWeaviateClient(), state)
 }
 
 func (g *GmailConnector) AuthSetup(ctx context.Context) error {
@@ -189,7 +126,7 @@ func (g *GmailConnector) AuthCallback(ctx context.Context, authCode string) erro
 	return g.UpdateConnectorState(ctx, state)
 }
 
-func (g *GmailConnector) Sync(ctx context.Context, lastSync time.Time, chunkChan chan types.ChunkSyncResult, errChan chan error) {
+func (g *GmailConnector) Sync(lastSync time.Time, chunkChan chan types.ChunkSyncResult, errChan chan error) {
 	defer close(chunkChan)
 
 	log.Printf("Starting gmail sync")
@@ -199,19 +136,19 @@ func (g *GmailConnector) Sync(ctx context.Context, lastSync time.Time, chunkChan
 		return
 	}
 
-	client, err := g.getClient(ctx, config)
+	client, err := g.getClient(g.context, config)
 	if err != nil {
 		errChan <- fmt.Errorf("unable to get client: %v", err)
 		return
 	}
 
-	srv, err := gmail.NewService(ctx, option.WithHTTPClient(client))
+	srv, err := gmail.NewService(g.context, option.WithHTTPClient(client))
 	if err != nil {
 		errChan <- fmt.Errorf("unable to retrieve Gmail client: %v", err)
 		return
 	}
 
-	err = g.listEmails(ctx, srv, lastSync, chunkChan)
+	err = g.listEmails(g.context, srv, lastSync, chunkChan)
 	if err != nil {
 		errChan <- fmt.Errorf("unable to list emails: %v", err)
 		return

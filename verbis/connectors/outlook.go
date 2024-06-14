@@ -8,7 +8,6 @@ import (
 	"time"
 
 	msal "github.com/AzureAD/microsoft-authentication-library-for-go/apps/public"
-	"github.com/google/uuid"
 	abstractions "github.com/microsoft/kiota-abstractions-go"
 	msgraph "github.com/microsoftgraph/msgraph-sdk-go"
 	graphcore "github.com/microsoftgraph/msgraph-sdk-go-core"
@@ -24,46 +23,20 @@ import (
 
 func NewOutlookConnector(creds types.BuildCredentials) types.Connector {
 	return &OutlookConnector{
-		id:          "",
-		user:        "",
+		BaseConnector: BaseConnector{
+			connectorType: types.ConnectorTypeOutlook,
+		},
 		secretValue: creds.AzureSecretValue,
 		secretID:    creds.AzureSecretID,
 	}
 }
 
 type OutlookConnector struct {
-	id          string
-	user        string
+	BaseConnector
 	secretValue string
 	secretID    string
 }
 
-func (o *OutlookConnector) ID() string {
-	return o.id
-}
-
-func (o *OutlookConnector) User() string {
-	return o.user
-}
-
-func (o *OutlookConnector) Type() types.ConnectorType {
-	return types.ConnectorTypeOutlook
-}
-
-func (o *OutlookConnector) Status(ctx context.Context) (*types.ConnectorState, error) {
-	state, err := store.GetConnectorState(ctx, store.GetWeaviateClient(), o.ID())
-	if err != nil {
-		return nil, fmt.Errorf("failed to get connector state: %v", err)
-	}
-
-	if state == nil {
-		// No stored state, only happens if sync() is called before init()
-		return nil, fmt.Errorf("connector state not found")
-	}
-	return state, nil
-}
-
-// OAuthAuthenticationProvider implements the AuthenticationProvider interface
 type OAuthAuthenticationProvider struct {
 	TokenSource oauth2.TokenSource
 }
@@ -113,43 +86,6 @@ var outlookScopes = []string{
 }
 
 var outlookScopesPlusOffline = append(outlookScopes, "offline_access")
-
-func (o *OutlookConnector) Init(ctx context.Context, connectorID string) error {
-	if connectorID != "" {
-		// connectorID is passed only when Init is called to re-create the
-		// connector from a state object during initial load
-		o.id = connectorID
-	}
-	if o.id == "" {
-		o.id = uuid.New().String()
-	}
-
-	state, err := store.GetConnectorState(ctx, store.GetWeaviateClient(), o.ID())
-	if err != nil && !store.IsStateNotFound(err) {
-		return fmt.Errorf("failed to get connector state: %v", err)
-	}
-
-	if state == nil {
-		state = &types.ConnectorState{}
-	}
-
-	state.ConnectorID = o.ID()
-	state.Syncing = false
-	// state.User is unknown until auth is complete
-	state.ConnectorType = string(o.Type())
-	token, err := keychain.TokenFromKeychain(o.ID(), o.Type())
-	state.AuthValid = (err == nil && token != nil) // TODO: check for expiry of refresh token
-
-	err = store.UpdateConnectorState(ctx, store.GetWeaviateClient(), state)
-	if err != nil {
-		return fmt.Errorf("failed to set connector state: %v", err)
-	}
-	return nil
-}
-
-func (o *OutlookConnector) UpdateConnectorState(ctx context.Context, state *types.ConnectorState) error {
-	return store.UpdateConnectorState(ctx, store.GetWeaviateClient(), state)
-}
 
 func (o *OutlookConnector) AuthSetup(ctx context.Context) error {
 	config, err := o.outlookConfig()
@@ -245,8 +181,12 @@ func getOutlookUserEmail(ctx context.Context, client *msgraph.GraphServiceClient
 	return *email, nil
 }
 
-func (o *OutlookConnector) Sync(ctx context.Context, lastSync time.Time, chunkChan chan types.ChunkSyncResult, errChan chan error) {
+func (o *OutlookConnector) Sync(lastSync time.Time, chunkChan chan types.ChunkSyncResult, errChan chan error) {
 	defer close(chunkChan)
+	if err := o.context.Err(); err != nil {
+		errChan <- fmt.Errorf("context error: %s", err)
+		return
+	}
 
 	log.Printf("Starting outlook sync")
 	config, err := o.outlookConfig()
@@ -255,13 +195,13 @@ func (o *OutlookConnector) Sync(ctx context.Context, lastSync time.Time, chunkCh
 		return
 	}
 
-	graphClient, err := o.getClient(ctx, config)
+	graphClient, err := o.getClient(o.context, config)
 	if err != nil {
 		errChan <- fmt.Errorf("unable to get client: %v", err)
 		return
 	}
 
-	err = o.listEmails(ctx, graphClient, lastSync, chunkChan)
+	err = o.listEmails(o.context, graphClient, lastSync, chunkChan)
 	if err != nil {
 		errChan <- fmt.Errorf("unable to list emails: %v", err)
 		return

@@ -27,11 +27,14 @@ type Connector interface {
 	// and setting the initial state. It must be called before any of the other methods
 	Init(ctx context.Context, connectorID string) error
 
+	// Cancels the connector's own context
+	Cancel()
+
 	UpdateConnectorState(ctx context.Context, state *ConnectorState) error
 	Status(ctx context.Context) (*ConnectorState, error)
 	AuthSetup(ctx context.Context) error
 	AuthCallback(ctx context.Context, code string) error
-	Sync(ctx context.Context, lastSync time.Time, chunkChan chan ChunkSyncResult, errChan chan error)
+	Sync(lastSync time.Time, chunkChan chan ChunkSyncResult, errChan chan error)
 }
 
 type ChunkSyncResult struct {

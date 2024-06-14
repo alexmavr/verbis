@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/slack-go/slack"
 	"golang.org/x/oauth2"
 	oauthslack "golang.org/x/oauth2/slack"
@@ -26,45 +25,19 @@ const (
 
 func NewSlackConnector(creds types.BuildCredentials) types.Connector {
 	return &SlackConnector{
-		id:           "",
-		user:         "",
+		BaseConnector: BaseConnector{
+			connectorType: types.ConnectorTypeSlack,
+		},
 		clientID:     creds.SlackClientID,
 		clientSecret: creds.SlackClientSecret,
 	}
 }
 
 type SlackConnector struct {
-	id           string
-	user         string
-	clientID     string
-	clientSecret string
-
+	BaseConnector
+	clientID      string
+	clientSecret  string
 	messageBuffer string
-}
-
-func (s *SlackConnector) ID() string {
-	return s.id
-}
-
-func (s *SlackConnector) User() string {
-	return s.user
-}
-
-func (s *SlackConnector) Type() types.ConnectorType {
-	return types.ConnectorTypeSlack
-}
-
-func (s *SlackConnector) Status(ctx context.Context) (*types.ConnectorState, error) {
-	state, err := store.GetConnectorState(ctx, store.GetWeaviateClient(), s.ID())
-	if err != nil {
-		return nil, fmt.Errorf("failed to get connector state: %v", err)
-	}
-
-	if state == nil {
-		// No stored state, only happens if sync() is called before init()
-		return nil, fmt.Errorf("connector state not found")
-	}
-	return state, nil
 }
 
 func (s *SlackConnector) getClient() (*slack.Client, error) {
@@ -105,43 +78,6 @@ func (s *SlackConnector) slackConfig() (*oauth2.Config, error) {
 		Scopes:       slackScopes,
 		Endpoint:     oauthslack.Endpoint,
 	}, nil
-}
-
-func (g *SlackConnector) Init(ctx context.Context, connectorID string) error {
-	if connectorID != "" {
-		// connectorID is passed only when Init is called to re-create the
-		// connector from a state object during initial load
-		g.id = connectorID
-	}
-	if g.id == "" {
-		g.id = uuid.New().String()
-	}
-
-	state, err := store.GetConnectorState(ctx, store.GetWeaviateClient(), g.ID())
-	if err != nil && !store.IsStateNotFound(err) {
-		return fmt.Errorf("failed to get connector state: %v", err)
-	}
-
-	if state == nil {
-		state = &types.ConnectorState{}
-	}
-
-	state.ConnectorID = g.ID()
-	state.Syncing = false
-	// state.User is unknown until auth is complete
-	state.ConnectorType = string(g.Type())
-	token, err := keychain.TokenFromKeychain(g.ID(), g.Type())
-	state.AuthValid = (err == nil && token != nil) // TODO: check for expiry of refresh token
-
-	err = store.UpdateConnectorState(ctx, store.GetWeaviateClient(), state)
-	if err != nil {
-		return fmt.Errorf("failed to set connector state: %v", err)
-	}
-	return nil
-}
-
-func (s *SlackConnector) UpdateConnectorState(ctx context.Context, state *types.ConnectorState) error {
-	return store.UpdateConnectorState(ctx, store.GetWeaviateClient(), state)
 }
 
 func (s *SlackConnector) AuthSetup(ctx context.Context) error {
@@ -208,8 +144,12 @@ func (s *SlackConnector) AuthCallback(ctx context.Context, authCode string) erro
 	return s.UpdateConnectorState(ctx, state)
 }
 
-func (s *SlackConnector) Sync(ctx context.Context, lastSync time.Time, chunkChan chan types.ChunkSyncResult, errChan chan error) {
+func (s *SlackConnector) Sync(lastSync time.Time, chunkChan chan types.ChunkSyncResult, errChan chan error) {
 	defer close(chunkChan)
+	if err := s.context.Err(); err != nil {
+		errChan <- fmt.Errorf("context error: %s", err)
+		return
+	}
 
 	log.Printf("Starting slack sync")
 	client, err := s.getClient()
@@ -218,7 +158,7 @@ func (s *SlackConnector) Sync(ctx context.Context, lastSync time.Time, chunkChan
 		return
 	}
 
-	err = s.fetchAllMessages(ctx, client, lastSync, chunkChan)
+	err = s.fetchAllMessages(s.context, client, lastSync, chunkChan)
 	if err != nil {
 		errChan <- fmt.Errorf("error fetching messages: %v", err)
 	}
