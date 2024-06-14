@@ -29,7 +29,6 @@ type Syncer struct {
 	staleThreshold    time.Duration
 	posthogClient     posthog.Client
 	posthogDistinctID string
-	syncing           bool
 	credentials       types.BuildCredentials
 }
 
@@ -165,8 +164,12 @@ func chunkAdder(ctx context.Context, chunkChan chan types.ChunkSyncResult, resCh
 		}
 		chunk := res.Chunk
 
-		saneChunk := util.CleanChunk(chunk.Text)
-		saneName := util.CleanChunk(chunk.Name)
+		saneChunk := chunk.Text
+		saneName := chunk.Name
+		if !res.SkipClean {
+			saneChunk = util.CleanChunk(chunk.Text)
+			saneName = util.CleanChunk(chunk.Name)
+		}
 		log.Printf("New chunk, length: %d, sanitized: %d\n", len(chunk.Text), len(saneChunk))
 		if len(saneChunk) < MinChunkSize {
 			log.Printf("Skipping short chunk: %s\n", saneChunk)
@@ -431,37 +434,34 @@ func (s *Syncer) maybeSyncConnector(ctx context.Context, wg *sync.WaitGroup, c t
 		return fmt.Errorf("failed to set connector %s %s to syncing state: %s", c.Type(), c.ID(), err)
 	}
 	log.Printf("Connector %s %s set to syncing", c.Type(), c.ID())
+	unlock := true
 
 	if !state.AuthValid {
 		log.Printf("Auth required for %s %s", c.Type(), c.ID())
+	} else {
+		if time.Since(state.LastSync) > s.staleThreshold {
+			log.Printf("Sync required for %s %s", c.Type(), c.ID())
+			unlock = false
+			wg.Add(1)
+			go func(c types.Connector) {
+				new_err := s.connectorSync(ctx, c, state)
+				if new_err != nil {
+					log.Printf("Error syncing %s %s: %s", c.Type(), c.ID(), new_err)
+				}
+			}(c)
+		} else {
+			log.Printf("Sync not required for %s", c.ID())
+		}
+	}
 
-		// Unlock
+	// Unlock syncing state
+	if unlock {
 		_, err = store.SetConnectorSyncing(ctx, store.GetWeaviateClient(), c.ID(), false)
 		if err != nil {
-			log.Printf("failed to set connector %s %s to not syncing state: %s", c.Type(), c.ID(), err)
+			log.Printf("Failed to set connector %s %s to not syncing state: %s", c.Type(), c.ID(), err)
 		} else {
 			log.Printf("Connector %s %s set to not syncing", c.Type(), c.ID())
 		}
-		return nil
-	}
-
-	if time.Since(state.LastSync) > s.staleThreshold {
-		log.Printf("Sync required for %s %s", c.Type(), c.ID())
-		wg.Add(1)
-		go func(c types.Connector) {
-			new_err := s.connectorSync(ctx, c, state)
-			if new_err != nil {
-				log.Printf("Error syncing %s %s: %s", c.Type(), c.ID(), new_err)
-			}
-		}(c)
-	} else {
-		log.Printf("Sync not required for %s", c.ID())
-	}
-	_, err = store.SetConnectorSyncing(ctx, store.GetWeaviateClient(), c.ID(), false)
-	if err != nil {
-		log.Printf("Failed to set connector %s %s to not syncing state: %s", c.Type(), c.ID(), err)
-	} else {
-		log.Printf("Connector %s %s set to not syncing", c.Type(), c.ID())
 	}
 
 	return nil

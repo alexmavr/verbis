@@ -37,4 +37,10 @@ type Connector interface {
 type ChunkSyncResult struct {
 	Chunk Chunk
 	Err   error
+
+	// if SkipClean is set to true, the chunk will not be cleaned by the syncer
+	// This is used in connectors such as Slack where newlines are needed to
+	// indicate different messages. The connector takes over the responsibility
+	// of sanitizing the content appropriately with util.CleanChunk
+	SkipClean bool
 }

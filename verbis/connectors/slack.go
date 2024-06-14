@@ -307,10 +307,13 @@ func (s *SlackConnector) fetchAndProcessChannelMessages(ctx context.Context, cli
 	}
 
 	if doc == nil {
+		if channel.ID == "" {
+			return fmt.Errorf("channel ID is empty")
+		}
 		doc = &types.Document{
 			UniqueID:      channel.ID,
 			Name:          channel.ID, // TODO: store channel name instead?
-			SourceURL:     "",         // TODO: link to slack channel
+			SourceURL:     "",         // Sent with the first chunk as it needs a timestamp
 			ConnectorID:   s.ID(),
 			ConnectorType: string(s.Type()),
 			// TODO: CreatedAt
@@ -337,7 +340,7 @@ func (s *SlackConnector) fetchAndProcessChannelMessages(ctx context.Context, cli
 		// Slack messages are much shorter than a chunk, so we can batch them to maintain conversation context
 		s.messageBuffer = ""
 		for _, message := range history.Messages {
-			err := s.processMessage(ctx, *doc, message, chunkChan)
+			err := s.processMessage(*doc, client, channel.ID, message, chunkChan)
 			if err != nil {
 				return err
 			}
@@ -359,25 +362,34 @@ func (s *SlackConnector) flushMessageBuffer(document types.Document, chunkChan c
 				Text:     s.messageBuffer,
 				Document: document,
 			},
+			SkipClean: true,
 		}
 		s.messageBuffer = ""
 	}
 }
 
-func (s *SlackConnector) processMessage(ctx context.Context, document types.Document, message slack.Message, chunkChan chan types.ChunkSyncResult) error {
+func (s *SlackConnector) processMessage(document types.Document, client *slack.Client, channelID string, message slack.Message, chunkChan chan types.ChunkSyncResult) error {
+
 	// In the slack connector we do not delete a previous document's chunks as
 	// we are not expecting to re-index the entire document/channel.
-
 	content := util.CleanChunk(message.Text)
-
 	log.Printf("Processing %s message %s: %s", document.UniqueID, message.User, content)
 	if len(content)+len(s.messageBuffer) <= MaxChunkSize {
-		s.messageBuffer += fmt.Sprintf("%s: %s | ", message.User, message.Text)
+		s.messageBuffer += fmt.Sprintf("%s: %s \n", message.User, content)
 		return nil
 	}
 
 	// Buffer about to overflow, flush and start a new one
+	link, err := client.GetPermalink(&slack.PermalinkParameters{
+		Channel: channelID,
+		Ts:      message.Timestamp,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to get permalink: %v", err)
+	}
+
+	document.SourceURL = link
 	s.flushMessageBuffer(document, chunkChan)
-	s.messageBuffer = fmt.Sprintf("%s: %s | ", message.User, message.Text)
+	s.messageBuffer = fmt.Sprintf("%s: %s | \n", message.User, content)
 	return nil
 }

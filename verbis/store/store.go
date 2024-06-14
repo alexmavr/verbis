@@ -225,6 +225,8 @@ func AddVectors(ctx context.Context, client *weaviate.Client, items []types.AddV
 			objects = append(objects, documentObj)
 		}
 
+		// TODO: if the provided document sourceURL is different from the stored one, update it
+
 		// Create a new chunk
 		chunkObj := &models.Object{
 			Class: chunkClassName,
@@ -941,11 +943,11 @@ func DeleteDocumentChunks(ctx context.Context, client *weaviate.Client, uniqueID
 
 func DeleteConnector(ctx context.Context, connector types.Connector) error {
 	// why do we need to get the client in the method signature. It is available within the package already.
-	
+
 	// TODO Mark connector for deletion. Cancel ongoing syncs, and exclude from future ones
 	client := GetWeaviateClient()
 	connectorID := connector.ID()
- 
+
 	where := filters.Where().
 		WithPath([]string{"connectorID"}).
 		WithOperator(filters.Equal).
@@ -958,14 +960,14 @@ func DeleteConnector(ctx context.Context, connector types.Connector) error {
 				Name: "unique_id",
 			},
 			{
-				Name: "_additional", 
+				Name: "_additional",
 				Fields: []graphql.Field{
 					{Name: "id"},
 				},
 			},
 		}...).
 		WithWhere(where).Do(ctx)
-	
+
 	if err != nil {
 		return err
 	}
@@ -1022,7 +1024,7 @@ func DeleteConnector(ctx context.Context, connector types.Connector) error {
 				WithClassName(documentClassName).
 				WithID(document["_additional"].(map[string]interface{})["id"].(string)).
 				Do(ctx)
-			
+
 			if err != nil {
 				log.Printf("Failed to delete document for unique_id %s: %v", uniqueID, err)
 			}
