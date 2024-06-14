@@ -894,6 +894,47 @@ func GetConnectorState(ctx context.Context, client *weaviate.Client, connectorID
 	}, nil
 }
 
+func DeleteDocumentById(ctx context.Context, documentId string) error {
+	client := GetWeaviateClient()
+
+	// Cascade delete children chunks
+	DeleteDocumentChunksById(ctx, documentId)
+
+	// Delete the document
+	docDeleteErr := client.Data().Deleter().
+		WithClassName(documentClassName).
+		WithID(documentId).
+		Do(ctx)
+
+	if docDeleteErr != nil {
+		return fmt.Errorf("unable to delete document: %v", docDeleteErr)
+	}
+	log.Printf("Deleted document %s", documentId)
+
+	return nil
+}
+
+func DeleteDocumentChunksById(ctx context.Context, documentId string) error {
+	client := GetWeaviateClient()
+
+	// Note: By default max objects that can be deleted is 10K
+	// Reference: https://weaviate.io/developers/weaviate/manage-data/delete#delete-multiple-objects
+	response, err := client.Batch().ObjectsBatchDeleter().
+		WithClassName(chunkClassName).
+		WithOutput("verbose").
+		WithWhere(filters.Where().
+			WithPath([]string{"documentid"}).
+			WithOperator(filters.Equal).
+			WithValueText(documentId)).
+		Do(ctx)
+
+	if err != nil {
+		return fmt.Errorf("unable to delete chunks: %v", err)
+	}
+	log.Printf("For Document %s, deleted %v chunks", documentId, response.Results.Successful)
+	return nil
+}
+
 func DeleteDocumentChunks(ctx context.Context, client *weaviate.Client, uniqueID string, connectorID string) error {
 	docid, err := getDocumentIDFromUniqueID(ctx, client, uniqueID)
 	if err != nil {
@@ -942,91 +983,80 @@ func DeleteDocumentChunks(ctx context.Context, client *weaviate.Client, uniqueID
 }
 
 func DeleteConnector(ctx context.Context, connector types.Connector) error {
-	// why do we need to get the client in the method signature. It is available within the package already.
-
 	// TODO Mark connector for deletion. Cancel ongoing syncs, and exclude from future ones
 	client := GetWeaviateClient()
 	connectorID := connector.ID()
-
+ 
+	// Collect documents for connector
 	where := filters.Where().
 		WithPath([]string{"connectorID"}).
 		WithOperator(filters.Equal).
 		WithValueString(connectorID)
+	
+	limit := 100
+	offset := 0
 
-	docs, err := client.GraphQL().Get().
-		WithClassName(documentClassName).
-		WithFields([]graphql.Field{
-			{
-				Name: "unique_id",
-			},
-			{
-				Name: "_additional",
-				Fields: []graphql.Field{
-					{Name: "id"},
+	for {
+		docs, err := client.GraphQL().Get().
+			WithClassName(documentClassName).
+			WithFields([]graphql.Field{
+				{
+					Name: "_additional", 
+					Fields: []graphql.Field{
+						{Name: "id"},
+					},
 				},
-			},
-		}...).
-		WithWhere(where).Do(ctx)
-
-	if err != nil {
-		return err
-	}
-
-	// No documents found
-	if docs.Data["Get"] == nil {
-		fmt.Println("No documents found for connector:", connectorID)
-	} else {
-		// print number of documents found
-		fmt.Println("Number of documents found: ", len(docs.Data["Get"].(map[string]interface{})[documentClassName].([]interface{})))
-
-		// Two options
-		// 1. (Better) Collect chunk IDs for all docs, and delete in batches
-		// 2. Iterate on docs and delete chunks for each, then the document
-		// Ensure docs.Data["Get"] is a map
-		getData, ok := docs.Data["Get"].(map[string]interface{})
-		if !ok {
-			return fmt.Errorf("failed to assert Get data as map[string]interface{}")
+			}...).
+			WithWhere(where).
+			WithLimit(limit).
+			WithOffset(offset).
+			Do(ctx)
+		
+		if err != nil {
+			return err
 		}
 
-		// Ensure getData[documentClassName] is a slice
-		classDocs, ok := getData[documentClassName].([]interface{})
-		if !ok {
-			return fmt.Errorf("failed to assert class documents as []interface{}")
-		}
-
-		// Iterate over the documents
-		for _, doc := range classDocs {
-			// Ensure each doc is a map
-			document, ok := doc.(map[string]interface{})
+		// No documents found
+		if docs.Data["Get"] == nil {
+			log.Println("No documents found for connector:", connectorID)
+			break
+		} else {
+			// Ensure docs.Data["Get"] is a map
+			getData, ok := docs.Data["Get"].(map[string]interface{})
 			if !ok {
-				log.Println("Failed to assert document as map[string]interface{}")
-				continue
+				return fmt.Errorf("failed to assert Get data as map[string]interface{}")
 			}
 
-			// Ensure unique_id is a string
-			uniqueID, ok := document["unique_id"].(string)
+			// Ensure getData[documentClassName] is a slice
+			classDocs, ok := getData[documentClassName].([]interface{})
 			if !ok {
-				log.Println("Failed to assert unique_id as string")
-				continue
+				return fmt.Errorf("failed to assert class documents as []interface{}")
 			}
 
-			// Call your DeleteDocumentChunks method with the unique_id
-			err := DeleteDocumentChunks(ctx, client, uniqueID, connectorID)
-			if err != nil {
-				log.Printf("Failed to delete document chunks for unique_id %s: %v", uniqueID, err)
-				continue
+			// print number of documents found
+			log.Printf("Number of documents found: %v", len(classDocs))
+			if (len(classDocs) == 0) {
+				break
 			}
 
-			fmt.Printf("Successfully deleted document chunks for unique_id %s\n", uniqueID)
+			// Iterate over the documents
+			for _, doc := range classDocs {
+				// Ensure each doc is a map
+				document, ok := doc.(map[string]interface{})
+				if !ok {
+					log.Println("Failed to assert document as map[string]interface{}")
+					continue
+				}
 
-			// Delete the document
-			err = client.Data().Deleter().
-				WithClassName(documentClassName).
-				WithID(document["_additional"].(map[string]interface{})["id"].(string)).
-				Do(ctx)
+				// Ensure unique_id is a string
+				documentId, ok := document["_additional"].(map[string]interface{})["id"].(string)
+				if !ok {
+					log.Println("Failed to assert unique_id as string")
+					continue
+				}
 
-			if err != nil {
-				log.Printf("Failed to delete document for unique_id %s: %v", uniqueID, err)
+				// Delete document
+				DeleteDocumentById(ctx, documentId)
 			}
 		}
 	}
