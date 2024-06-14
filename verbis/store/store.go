@@ -733,7 +733,9 @@ func UpdateConnectorState(ctx context.Context, client *weaviate.Client, state *t
 			"numDocuments": state.NumDocuments,
 			"numChunks":    state.NumChunks,
 			"numErrors":    state.NumErrors,
-		}).Do(ctx)
+		}).
+		WithID(state.ConnectorID).
+		Do(ctx)
 		return err
 	}
 
