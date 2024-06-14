@@ -212,6 +212,8 @@ func BootOnboard(creds types.BuildCredentials) (*BootContext, error) {
 				"LIMIT_RESOURCES=true",
 				"PERSISTENCE_DATA_PATH=" + weaviatePersistDir,
 				"AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true",
+				"ENABLE_MODULES=backup-filesystem",
+				"BACKUP_FILESYSTEM_PATH=" + weaviatePersistDir + "/backup",
 			},
 		},
 	}
