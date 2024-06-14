@@ -369,7 +369,6 @@ func (s *SlackConnector) flushMessageBuffer(document types.Document, chunkChan c
 }
 
 func (s *SlackConnector) processMessage(document types.Document, client *slack.Client, channelID string, message slack.Message, chunkChan chan types.ChunkSyncResult) error {
-
 	// In the slack connector we do not delete a previous document's chunks as
 	// we are not expecting to re-index the entire document/channel.
 	content := util.CleanChunk(message.Text)
@@ -390,6 +389,6 @@ func (s *SlackConnector) processMessage(document types.Document, client *slack.C
 
 	document.SourceURL = link
 	s.flushMessageBuffer(document, chunkChan)
-	s.messageBuffer = fmt.Sprintf("%s: %s | \n", message.User, content)
+	s.messageBuffer = fmt.Sprintf("%s: %s |\n", message.User, content)
 	return nil
 }
