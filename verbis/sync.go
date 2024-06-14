@@ -44,16 +44,13 @@ func NewSyncer(posthogClient posthog.Client, posthogDistinctID string, creds typ
 }
 
 func (s *Syncer) Init(ctx context.Context) error {
-	if len(s.connectors) > 0 {
-		// Connectors already initialized, nothing to do
-		log.Printf("Syncer init called with %d connectors, skipping state restoration", len(s.connectors))
-		return nil
-	}
+	s.connectors = map[string]types.Connector{}
 
 	states, err := store.AllConnectorStates(ctx, store.GetWeaviateClient())
 	if err != nil {
 		return fmt.Errorf("failed to get connector states: %s", err)
 	}
+	count := 0
 	for _, state := range states {
 		constructor, ok := connectors.AllConnectors[state.ConnectorType]
 		if !ok {
@@ -65,10 +62,13 @@ func (s *Syncer) Init(ctx context.Context) error {
 			return fmt.Errorf("failed to init connector %s: %s", state.ConnectorID, err)
 		}
 		err = s.AddConnector(c)
+		count++
 		if err != nil {
 			return fmt.Errorf("failed to add connector %s: %s", state.ConnectorID, err)
 		}
 	}
+
+	log.Printf("Syncer initialized with %d connectors from stored states", count)
 	return nil
 }
 

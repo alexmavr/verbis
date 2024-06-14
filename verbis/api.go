@@ -47,6 +47,7 @@ func (a *API) SetupRouter() *mux.Router {
 
 	r.HandleFunc("/health", a.health).Methods("GET")
 	r.HandleFunc("/sync/force", a.forceSync).Methods("GET")
+	r.HandleFunc("/internal/reinit", a.reInit).Methods("POST")
 
 	return r
 }
@@ -56,6 +57,20 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 	// TODO: return state of syncs and model downloads, to be used during init
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(fmt.Sprintf("{\"boot_state\": \"%s\"}", a.Context.State)))
+}
+
+func (a *API) reInit(w http.ResponseWriter, r *http.Request) {
+	// Re-init the syncer, which reloads all connectors from weaviate. Used
+	// during the restore operation from a weaviate backup.
+	err := a.Syncer.Init(a.Context)
+	if err != nil {
+		log.Printf("Failed to reinit syncer: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to reinit syncer: " + err.Error()))
+		return
+	}
+	log.Printf("Syncer reinitialized")
+	w.WriteHeader(http.StatusOK)
 }
 
 func (a *API) connectorRequest(w http.ResponseWriter, r *http.Request) {
