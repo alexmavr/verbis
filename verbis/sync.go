@@ -30,9 +30,10 @@ type Syncer struct {
 	posthogClient     posthog.Client
 	posthogDistinctID string
 	credentials       types.BuildCredentials
+	version           string
 }
 
-func NewSyncer(posthogClient posthog.Client, posthogDistinctID string, creds types.BuildCredentials) *Syncer {
+func NewSyncer(posthogClient posthog.Client, posthogDistinctID string, creds types.BuildCredentials, version string) *Syncer {
 	return &Syncer{
 		connectors:        map[string]types.Connector{},
 		syncCheckPeriod:   1 * time.Minute,
@@ -40,6 +41,7 @@ func NewSyncer(posthogClient posthog.Client, posthogDistinctID string, creds typ
 		posthogClient:     posthogClient,
 		posthogDistinctID: posthogDistinctID,
 		credentials:       creds,
+		version:           version,
 	}
 }
 
@@ -402,7 +404,8 @@ func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *ty
 			Set("total_num_documents", state.NumDocuments).
 			Set("total_num_errors", state.NumErrors).
 			Set("sync_duration", syncDoneTime.Sub(syncStartTime).String()).
-			Set("sync_error", syncError),
+			Set("sync_error", syncError).
+			Set("version", s.version),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to enqueue sync event: %s", err)

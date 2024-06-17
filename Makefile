@@ -2,6 +2,8 @@
 
 SHELL=/bin/zsh
 
+VERSION := v0.0.0
+TAG := $(shell git describe --tags --always --dirty)
 WEAVIATE_VERSION := v1.25.2
 OLLAMA_VERSION := v0.1.41
 DIST_DIR := ./dist
@@ -18,7 +20,16 @@ PACKAGE := main
 
 include .build.env
 
-LDFLAGS := -X "$(PACKAGE).PosthogAPIKey=$(POSTHOG_PERSONAL_API_KEY)" -X "$(PACKAGE).AzureSecretID=$(AZURE_SECRET_ID)" -X "$(PACKAGE).AzureSecretValue=$(AZURE_SECRET_VALUE)" -X "$(PACKAGE).SlackClientID=$(SLACK_CLIENT_ID)" -X "$(PACKAGE).SlackClientSecret=$(SLACK_CLIENT_SECRET)" -X "$(PACKAGE).SlackSigningSecret=$(SLACK_SIGNING_SECRET)" -X "$(PACKAGE).SlackBotToken=$(SLACK_CLIENT_SECRET)"
+LDFLAGS := \
+    -X "$(PACKAGE).Version=$(VERSION)" \
+    -X "$(PACKAGE).Tag=$(TAG)" \
+    -X "$(PACKAGE).PosthogAPIKey=$(POSTHOG_PERSONAL_API_KEY)" \
+    -X "$(PACKAGE).AzureSecretID=$(AZURE_SECRET_ID)" \
+    -X "$(PACKAGE).AzureSecretValue=$(AZURE_SECRET_VALUE)" \
+    -X "$(PACKAGE).SlackClientID=$(SLACK_CLIENT_ID)" \
+    -X "$(PACKAGE).SlackClientSecret=$(SLACK_CLIENT_SECRET)" \
+    -X "$(PACKAGE).SlackSigningSecret=$(SLACK_SIGNING_SECRET)" \
+    -X "$(PACKAGE).SlackBotToken=$(SLACK_BOT_TOKEN)"
 
 all: macapp
 
@@ -82,6 +93,7 @@ dist/rerank:
 	)
 
 verbis: dist/rerank dist/weaviate dist/ollama dist/pdftotext dist/ms-marco-MiniLM-L-12-v2 dist/certs
+	@echo Building $(VERSION) $(TAG)
 	# Ensure dist directory exists
 	mkdir -p $(DIST_DIR)
 	# Modelfile is needed for any custom model execution
@@ -111,7 +123,7 @@ builder-env:
 		poetry install; \
 	)
 
-release:
+release: verbis
 	pushd macapp && npm run make && popd
 
 clean:

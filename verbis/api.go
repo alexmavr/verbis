@@ -26,6 +26,7 @@ type API struct {
 	Context           *BootContext
 	Posthog           posthog.Client
 	PosthogDistinctID string
+	Version           string
 }
 
 func (a *API) SetupRouter() *mux.Router {
@@ -52,11 +53,18 @@ func (a *API) SetupRouter() *mux.Router {
 	return r
 }
 
+type HealthResponse struct {
+	BootState BootState `json:"boot_state"`
+	Version   string    `json:"version"`
+}
+
 func (a *API) health(w http.ResponseWriter, r *http.Request) {
 	// TODO: check for health of subprocesses
 	// TODO: return state of syncs and model downloads, to be used during init
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(fmt.Sprintf("{\"boot_state\": \"%s\"}", a.Context.State)))
+	json.NewEncoder(w).Encode(HealthResponse{
+		BootState: a.Context.State,
+		Version:   a.Version,
+	})
 }
 
 func (a *API) reInit(w http.ResponseWriter, r *http.Request) {
@@ -86,7 +94,8 @@ func (a *API) connectorRequest(w http.ResponseWriter, r *http.Request) {
 		DistinctId: a.PosthogDistinctID,
 		Event:      "ConnectorRequest",
 		Properties: posthog.NewProperties().
-			Set("connector_type", connectorType),
+			Set("connector_type", connectorType).
+			Set("version", a.Version),
 	})
 	if err != nil {
 		log.Printf("Failed to enqueue connector request: %s\n", err)
@@ -615,7 +624,8 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 			Set("gen_sum_duration", doneTime.Sub(rerankTime).String()).
 			Set("num_search_results", len(searchResults)).
 			Set("num_reranked_results", len(rerankedChunks)).
-			Set("num_streamed_events", streamCount),
+			Set("num_streamed_events", streamCount).
+			Set("version", a.Version),
 	})
 	if err != nil {
 		log.Printf("Failed to enqueue event: %s\n", err)

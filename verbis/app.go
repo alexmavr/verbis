@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"strings"
 
 	"github.com/verbis-ai/verbis/verbis/types"
 )
@@ -19,6 +21,8 @@ var (
 	AzureSecretValue  = "n/a"
 	SlackClientID     = "n/a"
 	SlackClientSecret = "n/a"
+	Version           = "0.0.0"
+	Tag               = "n/a"
 )
 
 func main() {
@@ -30,7 +34,7 @@ func main() {
 		SlackClientSecret: SlackClientSecret,
 	}
 	// Start everything needed to let the user onboard connectors
-	bootCtx, err := BootOnboard(creds)
+	bootCtx, err := BootOnboard(creds, getVersionString())
 	if err != nil {
 		log.Fatalf("Failed to boot until onboarding: %s\n", err)
 	}
@@ -54,4 +58,16 @@ func main() {
 	log.Printf("Boot: Ready to generate")
 
 	<-bootCtx.Done() // Block until the app terminates
+}
+
+func getVersionString() string {
+	if Tag == "n/a/" {
+		log.Fatalf("Tag is not set, application built with missing linker flags")
+	}
+
+	if strings.HasSuffix(Tag, "-dirty") {
+		return fmt.Sprintf("%s-%s", Version, Tag)
+	}
+
+	return Version
 }

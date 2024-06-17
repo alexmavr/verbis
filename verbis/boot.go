@@ -53,6 +53,7 @@ type BootContext struct {
 	PosthogClient     posthog.Client
 	Syncer            *Syncer
 	Logfile           *os.File
+	Version           string
 }
 
 type Timers struct {
@@ -62,7 +63,7 @@ type Timers struct {
 	GenTime     time.Time
 }
 
-func NewBootContext(ctx context.Context) *BootContext {
+func NewBootContext(ctx context.Context, version string) *BootContext {
 	startTime := time.Now()
 	return &BootContext{
 		Context: ctx,
@@ -71,10 +72,11 @@ func NewBootContext(ctx context.Context) *BootContext {
 		},
 		State:             BootStateStarted,
 		PosthogDistinctID: uuid.New().String(),
+		Version:           version,
 	}
 }
 
-func BootOnboard(creds types.BuildCredentials) (*BootContext, error) {
+func BootOnboard(creds types.BuildCredentials, version string) (*BootContext, error) {
 	// Set up logging
 	path, err := GetMasterLogDir()
 	if err != nil {
@@ -110,7 +112,7 @@ func BootOnboard(creds types.BuildCredentials) (*BootContext, error) {
 		}
 	}
 
-	bootCtx := NewBootContext(ctx)
+	bootCtx := NewBootContext(ctx, version)
 	bootCtx.Logfile = logFile
 	bootCtx.Credentials = creds
 
@@ -131,7 +133,7 @@ func BootOnboard(creds types.BuildCredentials) (*BootContext, error) {
 
 	bootCtx.PosthogClient = postHogClient
 
-	syncer := NewSyncer(bootCtx.PosthogClient, bootCtx.PosthogDistinctID, bootCtx.Credentials)
+	syncer := NewSyncer(bootCtx.PosthogClient, bootCtx.PosthogDistinctID, bootCtx.Credentials, bootCtx.Version)
 	if PosthogAPIKey == "n/a" {
 		log.Fatalf("Posthog API key not set\n")
 	}
@@ -141,6 +143,7 @@ func BootOnboard(creds types.BuildCredentials) (*BootContext, error) {
 		Posthog:           postHogClient,
 		PosthogDistinctID: bootCtx.PosthogDistinctID,
 		Context:           bootCtx,
+		Version:           version,
 	}
 	router := api.SetupRouter()
 
@@ -441,8 +444,8 @@ func BootGen(ctx *BootContext) error {
 		Properties: posthog.NewProperties().
 			Set("chipset", systemStats.Chipset).
 			Set("macos", systemStats.MacOS).
-			Set("memsize", systemStats.Memsize),
-		// TODO: version
+			Set("memsize", systemStats.Memsize).
+			Set("version", ctx.Version),
 	})
 	if err != nil {
 		log.Fatalf("Failed to enqueue identify event: %s\n", err)
@@ -457,7 +460,8 @@ func BootGen(ctx *BootContext) error {
 			Set("boot_total_duration", ctx.GenTime.Sub(ctx.StartTime).String()).
 			Set("boot_onboard_duration", ctx.OnboardTime.Sub(ctx.StartTime).String()).
 			Set("boot_syncing_duration", ctx.SyncingTime.Sub(ctx.OnboardTime).String()).
-			Set("boot_gen_duration", ctx.GenTime.Sub(ctx.SyncingTime).String()),
+			Set("boot_gen_duration", ctx.GenTime.Sub(ctx.SyncingTime).String()).
+			Set("version", ctx.Version),
 	})
 	if err != nil {
 		log.Fatalf("Failed to enqueue event: %s\n", err)
