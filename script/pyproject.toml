@@ -12,6 +12,9 @@ onnxruntime = "^1.17.3"
 numpy = "^1.26.4"
 tokenizers = "^0.19.1"
 pyinstaller = "^6.6.0"
+llama-index = "^0.10.46"
+ragas = "^0.1.9"
+langchain = {extras = ["openai"], version = "^0.2.5"}
 
 
 [build-system]

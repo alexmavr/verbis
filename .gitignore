@@ -4,6 +4,8 @@ build/*
 verbis/verbis
 credentials.json
 .build.env
+.eval.env
 *.gguf
 .python-version
 OME
+arxiv_papers/*
