@@ -2,7 +2,7 @@ import pandas as pd
 from datasets import Dataset
 import os
 from ragas import evaluate
-from ragas.metrics import faithfulness, answer_correctness
+from ragas.metrics import faithfulness, answer_correctness, answer_relevancy, context_precision, context_recall, context_relevancy
 
 # Load the resulting eval_run_output file
 input_file = "evals/eval_run_output.csv"
@@ -26,7 +26,12 @@ data_samples = {
 dataset = Dataset.from_dict(data_samples)
 
 # Evaluate the dataset
-score = evaluate(dataset, metrics=[faithfulness, answer_correctness])
+score = evaluate(dataset, metrics=[faithfulness, answer_correctness, answer_relevancy, context_precision, context_recall, context_relevancy])
+
+print(score)
+import json
+with open('evals/scores.json', 'w') as f:
+    f.write(json.dumps(score))
 
 # Convert the score to a pandas DataFrame
 score_df = score.to_pandas()
