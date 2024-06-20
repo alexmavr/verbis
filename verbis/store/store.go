@@ -30,6 +30,7 @@ var (
 
 const (
 	MaxNumSearchResults = 10
+	HybridSearchAlpha   = 0.4
 )
 
 func GetWeaviateClient() *weaviate.Client {
@@ -69,6 +70,7 @@ func GetChunkByHash(ctx context.Context, client *weaviate.Client, hash string) (
 		WithFields([]graphql.Field{
 			{Name: "hash"},
 			{Name: "documentid"},
+			{Name: "document_title"},
 			{Name: "chunk"},
 		}...).
 		WithWhere(where).
@@ -232,9 +234,10 @@ func AddVectors(ctx context.Context, client *weaviate.Client, items []types.AddV
 			Class: chunkClassName,
 			ID:    strfmt.UUID(uuid.NewString()),
 			Properties: map[string]interface{}{
-				"chunk":      item.Chunk.Text,
-				"hash":       item.Chunk.Hash,
-				"documentid": docID,
+				"chunk":          item.Chunk.Text,
+				"hash":           item.Chunk.Hash,
+				"documentid":     docID,
+				"document_title": item.Document.Name, // Stored both here and in document, to facilitate hybrid search
 			},
 			Vector: item.Vector,
 		}
@@ -276,6 +279,7 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 		{Name: "chunk"},
 		{Name: "hash"},
 		{Name: "documentid"},
+		{Name: "document_title"},
 		{Name: "_additional", Fields: []graphql.Field{
 			{Name: "score"},
 			{Name: "explainScore"},
@@ -286,8 +290,8 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 	hybrid := client.GraphQL().HybridArgumentBuilder().
 		WithQuery(query).
 		WithVector(vector).
-		WithProperties([]string{"chunk"}). // TODO: ensure the document title is included
-		WithAlpha(0.7).
+		WithAlpha(HybridSearchAlpha).
+		WithProperties([]string{"chunk", "document_title^2"}).
 		WithFusionType(graphql.RelativeScore)
 
 	resp, err := client.GraphQL().
@@ -356,6 +360,7 @@ func parseChunks(ctx context.Context, client *weaviate.Client, chunks []interfac
 			},
 			Text: c["chunk"].(string),
 			Hash: c["hash"].(string),
+			// Document Title is not exported separately, although it's stored in the chunk
 		}
 		if withScore {
 			chunk.Score = score
@@ -432,6 +437,10 @@ func CreateChunkClass(ctx context.Context, client *weaviate.Client, force bool) 
 			},
 			{
 				Name:     "documentid",
+				DataType: []string{"text"},
+			},
+			{
+				Name:     "document_title", // Stored both here and in document, to facilitate hybrid search
 				DataType: []string{"text"},
 			},
 		},
@@ -736,8 +745,8 @@ func UpdateConnectorState(ctx context.Context, client *weaviate.Client, state *t
 			"numChunks":    state.NumChunks,
 			"numErrors":    state.NumErrors,
 		}).
-		WithID(state.ConnectorID).
-		Do(ctx)
+			WithID(state.ConnectorID).
+			Do(ctx)
 		return err
 	}
 
@@ -986,13 +995,13 @@ func DeleteConnector(ctx context.Context, connector types.Connector) error {
 	// TODO Mark connector for deletion. Cancel ongoing syncs, and exclude from future ones
 	client := GetWeaviateClient()
 	connectorID := connector.ID()
- 
+
 	// Collect documents for connector
 	where := filters.Where().
 		WithPath([]string{"connectorID"}).
 		WithOperator(filters.Equal).
 		WithValueString(connectorID)
-	
+
 	limit := 100
 	offset := 0
 
@@ -1001,7 +1010,7 @@ func DeleteConnector(ctx context.Context, connector types.Connector) error {
 			WithClassName(documentClassName).
 			WithFields([]graphql.Field{
 				{
-					Name: "_additional", 
+					Name: "_additional",
 					Fields: []graphql.Field{
 						{Name: "id"},
 					},
@@ -1011,7 +1020,7 @@ func DeleteConnector(ctx context.Context, connector types.Connector) error {
 			WithLimit(limit).
 			WithOffset(offset).
 			Do(ctx)
-		
+
 		if err != nil {
 			return err
 		}
@@ -1035,7 +1044,7 @@ func DeleteConnector(ctx context.Context, connector types.Connector) error {
 
 			// print number of documents found
 			log.Printf("Number of documents found: %v", len(classDocs))
-			if (len(classDocs) == 0) {
+			if len(classDocs) == 0 {
 				break
 			}
 

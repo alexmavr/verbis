@@ -3,7 +3,7 @@ import requests
 import json
 
 # Load dataset from CSV
-input_file = "evals/testset_output.csv"
+input_file = "evals/testset_output_small.csv"
 data = pd.read_csv(input_file)
 
 # Define the API endpoints

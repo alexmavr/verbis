@@ -2,7 +2,8 @@ import pandas as pd
 from datasets import Dataset
 import os
 from ragas import evaluate
-from ragas.metrics import faithfulness, answer_correctness, answer_relevancy, context_precision, context_recall, context_relevancy
+from ragas.metrics import faithfulness, answer_similarity, answer_correctness, answer_relevancy
+# from ragas.metrics import context_precision, context_recall, context_relevancy
 
 # Load the resulting eval_run_output file
 input_file = "evals/eval_run_output.csv"
@@ -26,7 +27,11 @@ data_samples = {
 dataset = Dataset.from_dict(data_samples)
 
 # Evaluate the dataset
-score = evaluate(dataset, metrics=[faithfulness, answer_correctness, answer_relevancy, context_precision, context_recall, context_relevancy])
+score = evaluate(dataset, metrics=[faithfulness, answer_similarity, answer_correctness, answer_relevancy])
+
+# The remaining metrics do not depend on the answer field, and should only be
+# used to evaluate the ground truth dataset itself.
+#score = evaluate(dataset, metrics=[faithfulness, answer_similarity, answer_correctness, answer_relevancy, context_precision, context_recall, context_relevancy])
 
 print(score)
 import json
