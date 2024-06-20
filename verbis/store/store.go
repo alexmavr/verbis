@@ -460,8 +460,11 @@ func CreateConversation(ctx context.Context, client *weaviate.Client) (string, e
 	conversationID := uuid.NewString()
 	_, err := client.Data().Creator().WithClassName(conversationClassName).WithID(conversationID).
 		WithProperties(map[string]interface{}{
-			"history": []interface{}{},
-			"chunks":  []interface{}{},
+			"history": 		[]interface{}{},
+			"chunks":  		[]interface{}{},
+			"created_at": 	time.Now().Format(time.RFC3339),
+			"updated_at": 	time.Now().Format(time.RFC3339),
+			"title":     	"", // TODO: Dynamically create conversation title based on first prompt
 		}).Do(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to create conversation: %v", err)
@@ -486,6 +489,15 @@ func ListConversations(ctx context.Context, client *weaviate.Client) ([]*types.C
 				},
 				{
 					Name: "chunks",
+				},
+				{
+					Name: "created_at",
+				},
+				{
+					Name: "updated_at",
+				},
+				{
+					Name: "title",
 				},
 				{
 					Name: "_additional",
@@ -570,10 +582,30 @@ func parseConversation(conversationID string, conversationMap map[string]interfa
 		historyItems = append(historyItems, historyItem)
 	}
 
+	createdAtStr := conversationMap["created_at"].(string)
+	createdAt, err := time.Parse(time.RFC3339, createdAtStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse created_at time: %v", err)
+	}
+
+	updatedAtStr := conversationMap["updated_at"].(string)
+	updatedAt, err := time.Parse(time.RFC3339, updatedAtStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse created_at time: %v", err)
+	}
+
+	title := conversationMap["title"]
+	if title == nil {
+		title = ""
+	}
+
 	conversation := &types.Conversation{
 		ID:          conversationID,
 		History:     historyItems,
 		ChunkHashes: chunkHashes,
+		CreatedAt:   createdAt,	
+		UpdatedAt:   updatedAt,
+		Title:       title.(string),
 	}
 	return conversation, nil
 }
@@ -600,12 +632,15 @@ func ConversationAppend(ctx context.Context, client *weaviate.Client, conversati
 		jsonHistory[i] = string(historyItemJSON)
 	}
 
+
 	err = client.Data().Updater(). // replaces the entire object
 					WithID(conversationID).
 					WithClassName(conversationClassName).
 					WithProperties(map[string]interface{}{
 			"history": jsonHistory,
 			"chunks":  conversation.ChunkHashes,
+			"updated_at": time.Now().Format(time.RFC3339),
+			"created_at": conversation.CreatedAt, 
 		}).
 		Do(ctx)
 	if err != nil {
@@ -632,6 +667,19 @@ func CreateConversationClass(ctx context.Context, client *weaviate.Client, force
 				Name:     "chunks",
 				DataType: []string{"text[]"},
 			},
+			{
+				Name:     "created_at",
+				DataType: []string{"date"},
+			},
+			{
+				Name:     "updated_at",
+				DataType: []string{"date"},
+			},
+			{
+				Name:     "title.(string)",
+				DataType: []string{"text"},
+			},
+
 		},
 	}
 

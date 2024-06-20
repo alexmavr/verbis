@@ -8,6 +8,7 @@ import OutlookLogo from "../../assets/connectors/outlook.svg";
 import SlackLogo from "../../assets/connectors/slack.svg";
 import { AppScreen, ResultSource } from "../types";
 import ThemeSwitcher from "./ThemeSwitcher";
+import SidebarComponent from "./SidebarComponent";
 
 interface Props {
   navigate: (screen: AppScreen) => void;
@@ -183,6 +184,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
 
   return (
     <>
+      <SidebarComponent />
       <div className="fixed left-5 top-5 z-50">
         <button onClick={startNewConversation}>
           <PencilSquareIcon className="h-6 w-6" />
@@ -190,7 +192,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
       </div>
       <div
         ref={conversationContainer}
-        className="mt-20 flex h-[calc(100vh-100px)] flex-col overflow-y-auto pb-20"
+        className="ml-64 mt-20 flex h-[calc(100vh-100px)] flex-col overflow-y-auto pb-20"
       >
         {/* Conversation history */}
         {conversation.length > 0 && (
@@ -251,7 +253,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
         )}
 
         {/* Prompt input and button */}
-        <div className="fixed inset-x-0 bottom-0 flex items-center p-4 shadow-lg">
+        <div className="fixed inset-x-0 bottom-0 left-64 flex items-center p-4 shadow-lg">
           <textarea
             ref={promptInputRef}
             value={promptText}
