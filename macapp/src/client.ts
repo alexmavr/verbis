@@ -198,3 +198,16 @@ export async function create_conversation() {
     throw error; // Rethrow or handle as needed
   }
 }
+
+export async function get_conversation(conversation_id: string) {
+  console.log("Getting conversation", conversation_id);
+  try {
+    const response = await axios.get(
+      `http://localhost:8081/conversations/${conversation_id}`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error in Get Conversation:", error);
+    throw error; // Rethrow or handle as needed
+  }
+}

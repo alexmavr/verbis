@@ -27,35 +27,35 @@ const logger = winston.createLogger({
   format: winston.format.printf(info => info.message),
 })
 
-app.on('ready', () => {
-  const gotTheLock = app.requestSingleInstanceLock()
+app.on("ready", () => {
+  const gotTheLock = app.requestSingleInstanceLock();
   if (!gotTheLock) {
-    app.exit(0)
-    return
+    app.exit(0);
+    return;
   }
 
-  app.on('second-instance', () => {
+  app.on("second-instance", () => {
     if (app.hasSingleInstanceLock()) {
-      app.releaseSingleInstanceLock()
+      app.releaseSingleInstanceLock();
     }
 
     if (proc) {
-      proc.off('exit', restart)
-      proc.kill()
+      proc.off("exit", restart);
+      proc.kill();
     }
 
-    app.exit(0)
-  })
+    app.exit(0);
+  });
 
-  app.focus({ steal: true })
+  app.focus({ steal: true });
 
-  init()
-})
+  init();
+});
 
 function firstRunWindow() {
   // Create the browser window.
   welcomeWindow = new BrowserWindow({
-    width: 600,
+    width: 1000,
     height: 800,
     frame: true,
     fullscreenable: false,
