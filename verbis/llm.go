@@ -27,8 +27,8 @@ const (
 	rerankDistPath    = "rerank/rerank"
 
 	MaxNumRerankedChunks      = 3
-	RerankNoResultScoreCutoff = 0.1
-	RerankSoloScoreCliff      = 0.2
+	RerankNoResultScoreCutoff = 0.2
+	RerankSoloScoreCliff      = 0.3
 
 	OllamaHost = "127.0.0.1:11435"
 )
