@@ -1,6 +1,6 @@
 import { PaperAirplaneIcon, PencilSquareIcon } from "@heroicons/react/24/solid";
 import React, { useEffect, useRef, useState } from "react";
-import { create_conversation, generate } from "../client";
+import { create_conversation, generate, get_conversation } from "../client";
 import { CogIcon } from "@heroicons/react/24/solid";
 import GDriveLogo from "../../assets/connectors/gdrive.svg";
 import GMailLogo from "../../assets/connectors/gmail.svg";
@@ -9,6 +9,7 @@ import SlackLogo from "../../assets/connectors/slack.svg";
 import { AppScreen, ResultSource } from "../types";
 import ThemeSwitcher from "./ThemeSwitcher";
 import SidebarComponent from "./SidebarComponent";
+import { Conversation } from "../types";
 
 interface Props {
   navigate: (screen: AppScreen) => void;
@@ -28,8 +29,10 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
   const promptInputRef = useRef<HTMLTextAreaElement>(null);
   const [placeholder, setPlaceholder] = useState("How can I help?");
   const countRef = useRef(0); // To keep track of the ellipsis state
-  const [conversation, setConversation] = useState([]);
+  const [conversationHistory, setConversationHistory] = useState([]);
   const [conversationId, setConversationId] = useState<string | null>(null); // State for conversation ID
+  const [currentConversation, setCurrentConversation] =
+    useState<Conversation | null>(null); // Current Conversation
   const controller = new AbortController(); // For handling cancellation
 
   // Function to truncate string
@@ -70,10 +73,12 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
     }
   };
 
+  // Scroll to bottom when new prompt submitted or response received
   useEffect(() => {
     smoothScrollToBottom();
-  }, [conversation.length]);
+  }, [conversationHistory.length]);
 
+  // Adjust height of textarea while prompt is being typed
   useEffect(() => {
     const textarea = promptInputRef.current;
     if (textarea) {
@@ -82,6 +87,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
     }
   }, [promptText]);
 
+  // Show animated ellipsis when loading in the prompt text area
   useEffect(() => {
     if (loading) {
       setPlaceholder("Processing");
@@ -104,28 +110,29 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
     };
   }, []);
 
-  useEffect(() => {
-    const initializeConversation = async () => {
-      try {
-        const newConversationId = await create_conversation();
-        setConversationId(newConversationId);
-      } catch (error) {
-        console.error("Error creating conversation:", error);
-      }
-    };
-
-    initializeConversation();
-  }, []);
-
   const startNewConversation = async () => {
-    setConversation([]);
+    setConversationHistory([]);
     try {
       const newConversationId = await create_conversation();
+      const newConversation = await get_conversation(newConversationId);
       setConversationId(newConversationId);
+      setCurrentConversation(newConversation);
     } catch (error) {
       console.error("Error creating conversation:", error);
     }
   };
+
+  // Creates a new conversation on each load
+  useEffect(() => {
+    startNewConversation();
+  }, []);
+
+  useEffect(() => {
+    console.log("currentConversation:", currentConversation);
+    // initialize history etc
+    setConversationHistory(currentConversation?.history || []);
+    setConversationId(currentConversation?.id || null);
+  }, [currentConversation]);
 
   const triggerPrompt = async () => {
     setLoading(true); // Show loading state
@@ -134,12 +141,12 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
     const previousPrompt = promptText.trim();
     if (!previousPrompt) return; // Do nothing if the prompt is empty
 
-    const history = conversation.map((item) => ({
+    const history = conversationHistory.map((item) => ({
       role: item.role,
       content: item.content,
     }));
 
-    const assistantResponseIndex = conversation.length + 1; // zero-indexed, user + assistant message from now
+    const assistantResponseIndex = conversationHistory.length + 1; // zero-indexed, user + assistant message from now
 
     try {
       if (conversationId) {
@@ -148,7 +155,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
           conversationId
         );
         // Create an entry for the assistant's response to accumulate content
-        setConversation((conv) => [
+        setConversationHistory((conv) => [
           ...conv,
           { role: "user", content: previousPrompt },
           {
@@ -162,7 +169,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
         // Process each generated chunk as it arrives
         for await (const chunk of generator) {
           accumulatedContent += chunk.content;
-          setConversation((conv) => {
+          setConversationHistory((conv) => {
             const newConv = [...conv];
             newConv[assistantResponseIndex] = {
               ...newConv[assistantResponseIndex],
@@ -184,7 +191,10 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
 
   return (
     <>
-      <SidebarComponent />
+      <SidebarComponent
+        selectedConversation={currentConversation}
+        setSelectedConversation={setCurrentConversation}
+      />
       <div className="fixed left-5 top-5 z-50">
         <button onClick={startNewConversation}>
           <PencilSquareIcon className="h-6 w-6" />
@@ -195,9 +205,9 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
         className="ml-64 mt-20 flex h-[calc(100vh-100px)] flex-col overflow-y-auto pb-20"
       >
         {/* Conversation history */}
-        {conversation.length > 0 && (
+        {conversationHistory.length > 0 && (
           <div className="mr-4 mt-auto flex flex-col">
-            {conversation.map((item, index) => (
+            {conversationHistory.map((item, index) => (
               <div key={index} className={`${item.role}`}>
                 {item.role === "user" ? (
                   // User message

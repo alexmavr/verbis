@@ -43,6 +43,7 @@ func (a *API) SetupRouter() *mux.Router {
 	r.HandleFunc("/connectors/auth_complete", a.authComplete).Methods("GET")
 
 	r.HandleFunc("/conversations", a.listConversations).Methods("GET")
+	r.HandleFunc("/conversations/{conversation_id}", a.getConversations).Methods("GET")
 	r.HandleFunc("/conversations", a.createConversation).Methods("POST")
 	r.HandleFunc("/conversations/{conversation_id}/prompt", a.handlePrompt).Methods("POST")
 
@@ -118,6 +119,27 @@ func (a *API) listConversations(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to marshal conversations: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to marshal conversations: " + err.Error()))
+		return
+	}
+
+	w.Write(b)
+}
+
+func (a *API) getConversations(w http.ResponseWriter, r *http.Request) {
+	conversationID := mux.Vars(r)["conversation_id"]
+	conversation, err := store.GetConversation(r.Context(), store.GetWeaviateClient(), conversationID)
+	if err != nil {
+		log.Printf("Failed to get conversation: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to get conversation: " + err.Error()))
+		return
+	}
+
+	b, err := json.Marshal(conversation)
+	if err != nil {
+		log.Printf("Failed to marshal conversation: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to marshal conversation: " + err.Error()))
 		return
 	}
 

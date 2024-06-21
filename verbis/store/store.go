@@ -480,6 +480,7 @@ func IsErrConversationNotFound(err error) bool {
 }
 
 func ListConversations(ctx context.Context, client *weaviate.Client) ([]*types.Conversation, error) {
+	// TODO: Exclude 'history' and 'chunks' from list response. For long living convos this can really bulk up the response. Clients should be able to retrieve these via GET on individual convos instead. Excluding requires some refactoring since parseConversation method breaks currently.
 	resp, err := client.GraphQL().Get().
 		WithClassName(conversationClassName).
 		WithFields(
