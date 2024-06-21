@@ -43,7 +43,7 @@ func (a *API) SetupRouter() *mux.Router {
 	r.HandleFunc("/connectors/auth_complete", a.authComplete).Methods("GET")
 
 	r.HandleFunc("/conversations", a.listConversations).Methods("GET")
-	r.HandleFunc("/conversations/{conversation_id}", a.getConversations).Methods("GET")
+	r.HandleFunc("/conversations/{conversation_id}", a.getConversation).Methods("GET")
 	r.HandleFunc("/conversations", a.createConversation).Methods("POST")
 	r.HandleFunc("/conversations/{conversation_id}/prompt", a.handlePrompt).Methods("POST")
 
@@ -125,7 +125,7 @@ func (a *API) listConversations(w http.ResponseWriter, r *http.Request) {
 	w.Write(b)
 }
 
-func (a *API) getConversations(w http.ResponseWriter, r *http.Request) {
+func (a *API) getConversation(w http.ResponseWriter, r *http.Request) {
 	conversationID := mux.Vars(r)["conversation_id"]
 	conversation, err := store.GetConversation(r.Context(), store.GetWeaviateClient(), conversationID)
 	if err != nil {
