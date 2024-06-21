@@ -322,11 +322,30 @@ func rerankBERT(ctx context.Context, chunks []*types.Chunk, query string) ([]*ty
 		return nil, fmt.Errorf("error unmarshaling JSON: %v", err)
 	}
 
+	// Log the IDs returned by the model
+	idCount := make(map[int]int)
+	for _, item := range res {
+		idCount[item.ID]++
+		if idCount[item.ID] > 1 {
+			log.Printf("Duplicate ID found: %d", item.ID)
+			panic("Duplicate ID found")
+		}
+	}
+	log.Printf("Rerank IDs: %v", idCount)
+
 	finalItems := RerankPrune(res)
 
-	finalChunks := []*types.Chunk{}
+	// Use a map to ensure unique chunks
+	uniqueChunks := make(map[int]*types.Chunk)
 	for _, item := range finalItems {
-		finalChunks = append(finalChunks, chunks[item.ID])
+		if _, exists := uniqueChunks[item.ID]; !exists {
+			uniqueChunks[item.ID] = chunks[item.ID]
+		}
+	}
+
+	finalChunks := make([]*types.Chunk, 0, len(uniqueChunks))
+	for _, chunk := range uniqueChunks {
+		finalChunks = append(finalChunks, chunk)
 	}
 
 	return finalChunks, nil
@@ -341,22 +360,17 @@ func RerankPrune(items []RerankResponseItem) []RerankResponseItem {
 		return items
 	}
 
-	subset := []RerankResponseItem{} // Start with the highest score item.
+	subset := []RerankResponseItem{}
 	for i := 0; i < len(items); i++ {
 		if len(subset) >= MaxNumRerankedChunks || items[i].Score < RerankNoResultScoreCutoff {
 			break
 		}
 
-		if len(subset) == 0 {
+		if len(subset) == 0 || subset[len(subset)-1].Score-items[i].Score <= RerankSoloScoreCliff {
 			subset = append(subset, items[i])
-		}
-
-		previousItem := subset[len(subset)-1]
-		if previousItem.Score-items[i].Score > RerankSoloScoreCliff {
+		} else {
 			break
 		}
-
-		subset = append(subset, items[i])
 	}
 
 	return subset

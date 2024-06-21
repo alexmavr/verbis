@@ -520,6 +520,19 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 		searchResults = append(searchResults, chunk)
 	}
 
+	hashes := map[string]bool{}
+	for _, chunk := range searchResults {
+		if chunk.Hash == "" {
+			log.Printf("Pre-rerank Chunk has no hash")
+		}
+		_, ok := hashes[chunk.Hash]
+		if ok {
+			log.Printf("Pre-rerank duplicate hash " + chunk.Hash)
+		}
+
+		hashes[chunk.Hash] = true
+	}
+
 	// Rerank the results
 	rerankedChunks, err := Rerank(r.Context(), searchResults, promptReq.Prompt)
 	if err != nil {
@@ -528,6 +541,19 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rerankTime := time.Now()
+
+	hashes = map[string]bool{}
+	for _, chunk := range rerankedChunks {
+		if chunk.Hash == "" {
+			log.Printf("Post-rerank Chunk has no hash")
+		}
+		_, ok := hashes[chunk.Hash]
+		if ok {
+			log.Printf("Post-rerank duplicate hash " + chunk.Hash)
+		}
+
+		hashes[chunk.Hash] = true
+	}
 
 	llmPrompt := MakePrompt(rerankedChunks, promptReq.Prompt)
 	log.Printf("LLM Prompt: %s", llmPrompt)

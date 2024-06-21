@@ -2,7 +2,6 @@ package util
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -42,7 +41,6 @@ func GetDistPath() (string, error) {
 		}
 	}
 
-	log.Printf("Dist directory found on %s", curDir)
 	return curDir, nil
 }
 

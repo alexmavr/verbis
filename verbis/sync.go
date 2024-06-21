@@ -223,8 +223,6 @@ func chunkAdder(ctx context.Context, chunkChan chan types.ChunkSyncResult, resCh
 		}
 		log.Printf("Added %d chunks, %d documents for source URL: %s\n", addResp.NumChunksAdded, addResp.NumDocsAdded, chunk.SourceURL)
 	}
-
-	log.Printf("Chunk channel closed")
 }
 
 func updateState(ctx context.Context, c types.Connector, numChunks, numDocs, numErrors int) {
@@ -355,7 +353,6 @@ func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *ty
 			log.Printf("Unexpected close for errChanSync")
 		}
 	case <-doneChan:
-		log.Printf("Sync for connector %s %s completed successfully", c.Type(), c.ID())
 	}
 
 	state, err = c.Status(ctx)
@@ -437,7 +434,6 @@ func (s *Syncer) maybeSyncConnector(ctx context.Context, wg *sync.WaitGroup, c t
 	if err != nil {
 		return fmt.Errorf("failed to set connector %s %s to syncing state: %s", c.Type(), c.ID(), err)
 	}
-	log.Printf("Connector %s %s set to syncing", c.Type(), c.ID())
 	unlock := true
 
 	if !state.AuthValid {
@@ -464,8 +460,6 @@ func (s *Syncer) maybeSyncConnector(ctx context.Context, wg *sync.WaitGroup, c t
 		_, err = store.SetConnectorSyncing(ctx, store.GetWeaviateClient(), c.ID(), false)
 		if err != nil {
 			log.Printf("Failed to set connector %s %s to not syncing state: %s", c.Type(), c.ID(), err)
-		} else {
-			log.Printf("Connector %s %s set to not syncing", c.Type(), c.ID())
 		}
 	}
 
@@ -473,7 +467,8 @@ func (s *Syncer) maybeSyncConnector(ctx context.Context, wg *sync.WaitGroup, c t
 }
 
 func (s *Syncer) SyncNow(ctx context.Context) error {
-	log.Printf("SyncNow started")
+	// TODO: Debug logging
+	// log.Printf("SyncNow started")
 	wg := sync.WaitGroup{}
 	for _, c := range s.connectors {
 		err := s.maybeSyncConnector(ctx, &wg, c)
@@ -482,6 +477,6 @@ func (s *Syncer) SyncNow(ctx context.Context) error {
 		}
 	}
 	wg.Wait()
-	log.Printf("SyncNow complete")
+	// log.Printf("SyncNow complete")
 	return nil
 }
