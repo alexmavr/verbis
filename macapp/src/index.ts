@@ -47,7 +47,7 @@ app.on("ready", () => {
     app.exit(0);
   });
 
-  app.focus({ steal: false });
+  app.focus({ steal: true });
 
   init();
 });

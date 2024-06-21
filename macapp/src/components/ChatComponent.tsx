@@ -128,8 +128,6 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
   }, []);
 
   useEffect(() => {
-    console.log("currentConversation:", currentConversation);
-    // initialize history etc
     setConversationHistory(currentConversation?.history || []);
     setConversationId(currentConversation?.id || null);
   }, [currentConversation]);

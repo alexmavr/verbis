@@ -205,7 +205,6 @@ export async function get_conversation(conversation_id: string) {
     const response = await axios.get(
       `http://localhost:8081/conversations/${conversation_id}`
     );
-    console.log("Get Conversation Response:", response.data);
     return response.data;
   } catch (error) {
     console.error("Error in Get Conversation:", error);

@@ -633,7 +633,6 @@ func ConversationAppend(ctx context.Context, client *weaviate.Client, conversati
 		jsonHistory[i] = string(historyItemJSON)
 	}
 
-
 	err = client.Data().Updater(). // replaces the entire object
 					WithID(conversationID).
 					WithClassName(conversationClassName).
