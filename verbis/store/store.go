@@ -676,7 +676,7 @@ func CreateConversationClass(ctx context.Context, client *weaviate.Client, force
 				DataType: []string{"date"},
 			},
 			{
-				Name:     "title.(string)",
+				Name:     "title",
 				DataType: []string{"text"},
 			},
 
