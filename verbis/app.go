@@ -11,8 +11,8 @@ import (
 var (
 	//	httpClient          = &http.Client{Timeout: 10 * time.Second}
 	generationModelName = "custom-mistral"
-	embeddingsModelName = "snowflake-arctic-embed:137m"
-	clean               = false
+	embeddingsModelName = "nomic-embed-text:latest"
+	clean               = true
 	KeepAliveTime       = "20m"
 
 	// Will be populated by linker from .builder.env
