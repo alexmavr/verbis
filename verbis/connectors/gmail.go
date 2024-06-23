@@ -18,15 +18,15 @@ import (
 	"google.golang.org/api/option"
 
 	"github.com/verbis-ai/verbis/verbis/keychain"
-	"github.com/verbis-ai/verbis/verbis/store"
 	"github.com/verbis-ai/verbis/verbis/types"
 	"github.com/verbis-ai/verbis/verbis/util"
 )
 
-func NewGmailConnector(creds types.BuildCredentials) types.Connector {
+func NewGmailConnector(creds types.BuildCredentials, st types.Store) types.Connector {
 	return &GmailConnector{
 		BaseConnector: BaseConnector{
 			connectorType: types.ConnectorTypeGmail,
+			store:         st,
 		},
 	}
 }
@@ -196,7 +196,7 @@ func (g *GmailConnector) processEmail(ctx context.Context, srv *gmail.Service, e
 		UpdatedAt:     receivedAt,
 	}
 
-	err := store.DeleteDocumentChunks(ctx, store.GetWeaviateClient(), document.UniqueID, g.ID())
+	err := g.store.DeleteDocumentChunks(ctx, document.UniqueID, g.ID())
 	if err != nil {
 		log.Printf("Unable to delete chunks for document %s: %v", document.UniqueID, err)
 	}

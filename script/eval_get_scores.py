@@ -3,6 +3,7 @@ from datasets import Dataset
 import os
 from ragas import evaluate
 from ragas.metrics import faithfulness, answer_similarity, answer_correctness, answer_relevancy
+import subprocess
 # from ragas.metrics import context_precision, context_recall, context_relevancy
 
 # Load the resulting eval_run_output file
@@ -46,3 +47,35 @@ output_file = "evals/evaluation_metrics_output.csv"
 score_df.to_csv(output_file, index=False)
 
 print(f"Evaluation metrics saved to {output_file}")
+
+
+def get_pid(process_name):
+    try:
+        pid = subprocess.check_output(["pgrep", process_name]).decode().strip()
+        return pid
+    except subprocess.CalledProcessError:
+        print(f"No process named '{process_name}' found.")
+        return None
+
+def get_memory_usage(pid):
+    try:
+        ps_output = subprocess.check_output(["ps", "-p", pid, "-o", "vsz,rss"]).decode().split("\n")
+        if len(ps_output) > 1:
+            vsz, rss = ps_output[1].split()
+            vsz_mb = int(vsz) / 1024
+            rss_mb = int(rss) / 1024
+            return vsz_mb, rss_mb
+        else:
+            print(f"Could not retrieve memory usage for PID {pid}.")
+            return None, None
+    except subprocess.CalledProcessError:
+        print(f"Failed to get memory usage for PID {pid}.")
+        return None, None
+
+process_name = "weaviate"
+pid = get_pid(process_name)
+if pid:
+    vsz_mb, rss_mb = get_memory_usage(pid)
+    if vsz_mb is not None and rss_mb is not None:
+        print(f"Virtual Memory: {vsz_mb:.2f} MB")
+        print(f"Physical Memory: {rss_mb:.2f} MB")

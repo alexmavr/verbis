@@ -130,52 +130,7 @@ func BootOnboard(creds types.BuildCredentials, version string) (*BootContext, er
 	if err != nil {
 		log.Fatalf("Failed to create PostHog client: %s\n", err)
 	}
-
 	bootCtx.PosthogClient = postHogClient
-
-	syncer := NewSyncer(bootCtx.PosthogClient, bootCtx.PosthogDistinctID, bootCtx.Credentials, bootCtx.Version)
-	if PosthogAPIKey == "n/a" {
-		log.Fatalf("Posthog API key not set\n")
-	}
-	bootCtx.Syncer = syncer
-	api := API{
-		Syncer:            syncer,
-		Posthog:           postHogClient,
-		PosthogDistinctID: bootCtx.PosthogDistinctID,
-		Context:           bootCtx,
-		Version:           version,
-	}
-	router := api.SetupRouter()
-
-	corsHeaders := handlers.CORS(
-		handlers.AllowedOrigins([]string{"http://localhost:3000"}),
-		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
-		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),
-	)
-	handler := corsHeaders(router)
-
-	server := http.Server{
-		Addr:    ":8081",
-		Handler: handler,
-	}
-	httpsServer := http.Server{
-		Addr:    ":8082",
-		Handler: handler,
-	}
-
-	go func() {
-		<-sigChan
-		log.Print("Received termination signal")
-		Halt(bootCtx, sigChan, cancel)
-		server.Close()
-		httpsServer.Close()
-	}()
-
-	go func() {
-		<-ctx.Done()
-		server.Close()
-		httpsServer.Close()
-	}()
 
 	path, err = util.GetDistPath()
 	if err != nil {
@@ -213,10 +168,13 @@ func BootOnboard(creds types.BuildCredentials, version string) (*BootContext, er
 			[]string{"--host", "0.0.0.0", "--port", "8088", "--scheme", "http"},
 			[]string{
 				"LIMIT_RESOURCES=true",
+				"DISABLE_TELEMETRY=true",
 				"PERSISTENCE_DATA_PATH=" + weaviatePersistDir,
 				"AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true",
 				"ENABLE_MODULES=backup-filesystem",
 				"BACKUP_FILESYSTEM_PATH=" + weaviatePersistDir + "/backup",
+				"ENABLE_MODULES=text2vec-ollama",
+				"DEFAULT_VECTORIZER_MODULE=text2vec-ollama",
 			},
 		},
 	}
@@ -228,14 +186,62 @@ func BootOnboard(creds types.BuildCredentials, version string) (*BootContext, er
 		log.Fatalf("Failed to wait for Weaviate: %s\n", err)
 	}
 
-	weavClient := store.GetWeaviateClient()
-	store.CreateDocumentClass(ctx, weavClient, clean)
-	store.CreateConnectorStateClass(ctx, weavClient, clean)
-	store.CreateChunkClass(ctx, weavClient, clean)
-	store.CreateConversationClass(ctx, weavClient, clean)
+	weaviateStore := store.NewWeaviateStore(
+		fmt.Sprintf("http://%s", OllamaHost),
+		embeddingsModelName,
+	)
+	weaviateStore.CreateDocumentClass(ctx, clean)
+	weaviateStore.CreateConnectorStateClass(ctx, clean)
+	weaviateStore.CreateChunkClass(ctx, clean)
+	weaviateStore.CreateConversationClass(ctx, clean)
 
 	certPath := filepath.Join(path, "certs/localhost.pem")
 	keyPath := filepath.Join(path, "certs/localhost-key.pem")
+
+	syncer := NewSyncer(bootCtx.PosthogClient, bootCtx.PosthogDistinctID, bootCtx.Credentials, bootCtx.Version, weaviateStore)
+	if PosthogAPIKey == "n/a" {
+		log.Fatalf("Posthog API key not set\n")
+	}
+	bootCtx.Syncer = syncer
+	api := API{
+		Syncer:            syncer,
+		Posthog:           postHogClient,
+		PosthogDistinctID: bootCtx.PosthogDistinctID,
+		Context:           bootCtx,
+		Version:           version,
+		store:             weaviateStore,
+	}
+	router := api.SetupRouter()
+
+	corsHeaders := handlers.CORS(
+		handlers.AllowedOrigins([]string{"http://localhost:3000"}),
+		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
+		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),
+	)
+	handler := corsHeaders(router)
+
+	server := http.Server{
+		Addr:    ":8081",
+		Handler: handler,
+	}
+	httpsServer := http.Server{
+		Addr:    ":8082",
+		Handler: handler,
+	}
+
+	go func() {
+		<-sigChan
+		log.Print("Received termination signal")
+		Halt(bootCtx, sigChan, cancel)
+		server.Close()
+		httpsServer.Close()
+	}()
+
+	go func() {
+		<-ctx.Done()
+		server.Close()
+		httpsServer.Close()
+	}()
 
 	go func() {
 		log.Print("Starting HTTP server on port 8081")

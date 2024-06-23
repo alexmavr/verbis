@@ -14,7 +14,7 @@ const (
 	ConnectorTypeSlack       ConnectorType = "slack"
 )
 
-type ConnectorConstructor func(BuildCredentials) Connector
+type ConnectorConstructor func(BuildCredentials, Store) Connector
 type Connector interface {
 	ID() string
 	Type() ConnectorType

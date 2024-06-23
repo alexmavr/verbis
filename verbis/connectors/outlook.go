@@ -17,14 +17,14 @@ import (
 	"golang.org/x/oauth2/microsoft"
 
 	"github.com/verbis-ai/verbis/verbis/keychain"
-	"github.com/verbis-ai/verbis/verbis/store"
 	"github.com/verbis-ai/verbis/verbis/types"
 )
 
-func NewOutlookConnector(creds types.BuildCredentials) types.Connector {
+func NewOutlookConnector(creds types.BuildCredentials, st types.Store) types.Connector {
 	return &OutlookConnector{
 		BaseConnector: BaseConnector{
 			connectorType: types.ConnectorTypeOutlook,
+			store:         st,
 		},
 		secretValue: creds.AzureSecretValue,
 		secretID:    creds.AzureSecretID,
@@ -243,7 +243,7 @@ func (o *OutlookConnector) processEmail(ctx context.Context, email models.Messag
 		UpdatedAt:     receivedAt,
 	}
 
-	err := store.DeleteDocumentChunks(ctx, store.GetWeaviateClient(), document.UniqueID, o.ID())
+	err := o.store.DeleteDocumentChunks(ctx, document.UniqueID, o.ID())
 	if err != nil {
 		log.Printf("Unable to delete chunks for document %s: %v", document.UniqueID, err)
 	}

@@ -31,9 +31,10 @@ type Syncer struct {
 	posthogDistinctID string
 	credentials       types.BuildCredentials
 	version           string
+	store             types.Store
 }
 
-func NewSyncer(posthogClient posthog.Client, posthogDistinctID string, creds types.BuildCredentials, version string) *Syncer {
+func NewSyncer(posthogClient posthog.Client, posthogDistinctID string, creds types.BuildCredentials, version string, st types.Store) *Syncer {
 	return &Syncer{
 		connectors:        map[string]types.Connector{},
 		syncCheckPeriod:   1 * time.Minute,
@@ -42,13 +43,14 @@ func NewSyncer(posthogClient posthog.Client, posthogDistinctID string, creds typ
 		posthogDistinctID: posthogDistinctID,
 		credentials:       creds,
 		version:           version,
+		store:             st,
 	}
 }
 
 func (s *Syncer) Init(ctx context.Context) error {
 	s.connectors = map[string]types.Connector{}
 
-	states, err := store.AllConnectorStates(ctx, store.GetWeaviateClient())
+	states, err := s.store.AllConnectorStates(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get connector states: %s", err)
 	}
@@ -58,7 +60,7 @@ func (s *Syncer) Init(ctx context.Context) error {
 		if !ok {
 			return fmt.Errorf("unknown connector type %s", state.ConnectorType)
 		}
-		c := constructor(s.credentials)
+		c := constructor(s.credentials, s.store)
 		err = c.Init(ctx, state.ConnectorID)
 		if err != nil {
 			return fmt.Errorf("failed to init connector %s: %s", state.ConnectorID, err)
@@ -92,7 +94,7 @@ func (s *Syncer) DeleteConnector(ctx context.Context, connectorID string) error 
 		return fmt.Errorf("connector %s not found", connectorID)
 	}
 	connector.Cancel()
-	err := store.DeleteConnector(ctx, connector)
+	err := s.store.DeleteConnector(ctx, connector)
 	if err != nil {
 		return fmt.Errorf("failed to delete connector %s: %s", connectorID, err)
 	}
@@ -155,7 +157,7 @@ type chunkAddResult struct {
 	err          error
 }
 
-func chunkAdder(ctx context.Context, chunkChan chan types.ChunkSyncResult, resChan chan chunkAddResult) {
+func (s *Syncer) chunkAdder(ctx context.Context, chunkChan chan types.ChunkSyncResult, resChan chan chunkAddResult) {
 	defer close(resChan)
 	// TODO: hold buffer and add vectors in batches
 	for res := range chunkChan {
@@ -180,7 +182,7 @@ func chunkAdder(ctx context.Context, chunkChan chan types.ChunkSyncResult, resCh
 		}
 
 		chunkHash := hash(saneChunk)
-		exists, err := store.ChunkHashExists(ctx, store.GetWeaviateClient(), chunkHash)
+		exists, err := s.store.ChunkHashExists(ctx, chunkHash)
 		if err != nil && !store.IsErrChunkNotFound(err) {
 			resChan <- chunkAddResult{
 				err: fmt.Errorf("failed to check chunk hash: %s", err),
@@ -192,22 +194,12 @@ func chunkAdder(ctx context.Context, chunkChan chan types.ChunkSyncResult, resCh
 			continue
 		}
 
-		resp, err := EmbedFromModel(saneChunk)
-		if err != nil {
-			resChan <- chunkAddResult{
-				err: fmt.Errorf("failed to get embeddings: %s", err),
-			}
-			continue
-		}
-
-		embedding := resp.Embedding
 		chunk.Text = saneChunk
 		chunk.Name = saneName
 		chunk.Hash = chunkHash
-		addResp, err := store.AddVectors(ctx, store.GetWeaviateClient(), []types.AddVectorItem{
+		addResp, err := s.store.AddVectors(ctx, []types.AddVectorItem{
 			{
-				Chunk:  chunk,
-				Vector: embedding,
+				Chunk: chunk,
 			},
 		})
 		if err != nil {
@@ -225,7 +217,7 @@ func chunkAdder(ctx context.Context, chunkChan chan types.ChunkSyncResult, resCh
 	}
 }
 
-func updateState(ctx context.Context, c types.Connector, numChunks, numDocs, numErrors int) {
+func (s *Syncer) updateState(ctx context.Context, c types.Connector, numChunks, numDocs, numErrors int) {
 	state, err := c.Status(ctx)
 	if err != nil {
 		log.Printf("Failed to get status: %s\n", err)
@@ -241,7 +233,7 @@ func updateState(ctx context.Context, c types.Connector, numChunks, numDocs, num
 	}
 }
 
-func stateUpdater(ctx context.Context, c types.Connector, resChan chan chunkAddResult, doneChan chan struct{}) {
+func (s *Syncer) stateUpdater(ctx context.Context, c types.Connector, resChan chan chunkAddResult, doneChan chan struct{}) {
 	defer close(doneChan)
 
 	// countChan is expected to close before errChunkChan when the sync completes
@@ -269,7 +261,7 @@ func stateUpdater(ctx context.Context, c types.Connector, resChan chan chunkAddR
 			numChunks += prevCount.numChunks
 			numDocs += prevCount.numDocuments
 		}
-		updateState(ctx, c, numChunks, numDocs, numErrors)
+		s.updateState(ctx, c, numChunks, numDocs, numErrors)
 		counts = []chunkAddResult{}
 		numErrors = 0
 	}
@@ -280,7 +272,7 @@ func stateUpdater(ctx context.Context, c types.Connector, resChan chan chunkAddR
 		numChunks += prevCount.numChunks
 		numDocs += prevCount.numDocuments
 	}
-	updateState(ctx, c, numChunks, numDocs, numErrors)
+	s.updateState(ctx, c, numChunks, numDocs, numErrors)
 }
 
 func copyState(state *types.ConnectorState) (*types.ConnectorState, error) {
@@ -327,8 +319,8 @@ func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *ty
 	// - Embeddings generation and addition to weaviate (in chunkAdder)
 	// - Periodic updates to the connector state (in stateUpdater)
 	go c.Sync(state.LastSync, chunkChan, errChanSync)
-	go chunkAdder(ctx, chunkChan, chunkAddResChan)
-	go stateUpdater(ctx, c, chunkAddResChan, doneChan)
+	go s.chunkAdder(ctx, chunkChan, chunkAddResChan)
+	go s.stateUpdater(ctx, c, chunkAddResChan, doneChan)
 
 	syncError := ""
 	select {
@@ -426,7 +418,7 @@ func (s *Syncer) ASyncNow(ctx context.Context) {
 func (s *Syncer) maybeSyncConnector(ctx context.Context, wg *sync.WaitGroup, c types.Connector) error {
 	log.Printf("Checking status for connector %s %s\n", c.Type(), c.ID())
 
-	state, err := store.SetConnectorSyncing(ctx, store.GetWeaviateClient(), c.ID(), true)
+	state, err := s.store.SetConnectorSyncing(ctx, c.ID(), true)
 	if store.IsSyncingAlreadyExpected(err) {
 		log.Printf("Connector %s %s already syncing", c.Type(), c.ID())
 		return nil
@@ -457,7 +449,7 @@ func (s *Syncer) maybeSyncConnector(ctx context.Context, wg *sync.WaitGroup, c t
 
 	// Unlock syncing state
 	if unlock {
-		_, err = store.SetConnectorSyncing(ctx, store.GetWeaviateClient(), c.ID(), false)
+		_, err = s.store.SetConnectorSyncing(ctx, c.ID(), false)
 		if err != nil {
 			log.Printf("Failed to set connector %s %s to not syncing state: %s", c.Type(), c.ID(), err)
 		}

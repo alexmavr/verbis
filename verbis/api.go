@@ -13,7 +13,6 @@ import (
 	"github.com/posthog/posthog-go"
 
 	"github.com/verbis-ai/verbis/verbis/connectors"
-	"github.com/verbis-ai/verbis/verbis/store"
 	"github.com/verbis-ai/verbis/verbis/types"
 )
 
@@ -27,6 +26,7 @@ type API struct {
 	Posthog           posthog.Client
 	PosthogDistinctID string
 	Version           string
+	store             types.Store
 }
 
 func (a *API) SetupRouter() *mux.Router {
@@ -106,7 +106,7 @@ func (a *API) connectorRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) listConversations(w http.ResponseWriter, r *http.Request) {
-	conversations, err := store.ListConversations(r.Context(), store.GetWeaviateClient())
+	conversations, err := a.store.ListConversations(r.Context())
 	if err != nil {
 		log.Printf("Failed to list conversations: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -127,7 +127,7 @@ func (a *API) listConversations(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) getConversation(w http.ResponseWriter, r *http.Request) {
 	conversationID := mux.Vars(r)["conversation_id"]
-	conversation, err := store.GetConversation(r.Context(), store.GetWeaviateClient(), conversationID)
+	conversation, err := a.store.GetConversation(r.Context(), conversationID)
 	if err != nil {
 		log.Printf("Failed to get conversation: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -147,7 +147,7 @@ func (a *API) getConversation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) createConversation(w http.ResponseWriter, r *http.Request) {
-	conversationID, err := store.CreateConversation(r.Context(), store.GetWeaviateClient())
+	conversationID, err := a.store.CreateConversation(r.Context())
 	if err != nil {
 		log.Printf("Failed to create conversation: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -215,7 +215,7 @@ func (a *API) connectorInit(w http.ResponseWriter, r *http.Request) {
 	// Create a new connector object and initialize it
 	// The Init method is responsible for picking up existing configuration from
 	// the store, and discovering credentials
-	conn := constructor(a.Context.Credentials)
+	conn := constructor(a.Context.Credentials, a.store)
 
 	log.Printf("Initializing connector type: %s id: %s", conn.Type(), conn.ID())
 
@@ -475,7 +475,7 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to decode request", http.StatusBadRequest)
 	}
 
-	conversation, err := store.GetConversation(r.Context(), store.GetWeaviateClient(), conversationID)
+	conversation, err := a.store.GetConversation(r.Context(), conversationID)
 	if err != nil {
 		log.Printf("Failed to get conversation: %s", err)
 		http.Error(w, "Failed to get conversation: "+err.Error(), http.StatusInternalServerError)
@@ -497,9 +497,8 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Performing vector search")
 
 	// Perform vector similarity search and get list of most relevant results
-	searchResults, err := store.HybridSearch(
+	searchResults, err := a.store.HybridSearch(
 		r.Context(),
-		store.GetWeaviateClient(),
 		promptReq.Prompt,
 		embeddings,
 	)
@@ -511,7 +510,7 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 
 	// Add all previous conversation chunks for reranking
 	for _, chunkHash := range conversation.ChunkHashes {
-		chunk, err := store.GetChunkByHash(r.Context(), store.GetWeaviateClient(), chunkHash)
+		chunk, err := a.store.GetChunkByHash(r.Context(), chunkHash)
 		if err != nil {
 			log.Printf("Failed to get chunk by hash: %s", err)
 			http.Error(w, "Failed to get chunk by hash", http.StatusInternalServerError)
@@ -642,7 +641,7 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	err = store.ConversationAppend(r.Context(), store.GetWeaviateClient(), conversationID, []types.HistoryItem{
+	err = a.store.ConversationAppend(r.Context(), conversationID, []types.HistoryItem{
 		{
 			Role:    "user",
 			Content: promptReq.Prompt,

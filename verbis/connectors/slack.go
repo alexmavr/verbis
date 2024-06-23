@@ -23,10 +23,11 @@ const (
 	slackRateLimitBackoff = 11 * time.Second
 )
 
-func NewSlackConnector(creds types.BuildCredentials) types.Connector {
+func NewSlackConnector(creds types.BuildCredentials, st types.Store) types.Connector {
 	return &SlackConnector{
 		BaseConnector: BaseConnector{
 			connectorType: types.ConnectorTypeSlack,
+			store:         st,
 		},
 		clientID:     creds.SlackClientID,
 		clientSecret: creds.SlackClientSecret,
@@ -241,7 +242,7 @@ func (s *SlackConnector) fetchAndProcessChannelMessages(ctx context.Context, cli
 
 	// Each channel is stored as a single document
 	var doc *types.Document
-	doc, err := store.GetDocument(ctx, channel.ID)
+	doc, err := s.store.GetDocument(ctx, channel.ID)
 	if err != nil && !store.IsErrDocumentNotFound(err) {
 		return fmt.Errorf("unable to get document: %v", err)
 	}

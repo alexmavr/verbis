@@ -36,6 +36,7 @@ type BaseConnector struct {
 	connectorType types.ConnectorType
 	context       context.Context
 	cancel        context.CancelFunc
+	store         types.Store
 }
 
 func (s *BaseConnector) ID() string {
@@ -50,7 +51,7 @@ func (s *BaseConnector) Type() types.ConnectorType {
 }
 
 func (s *BaseConnector) Status(ctx context.Context) (*types.ConnectorState, error) {
-	state, err := store.GetConnectorState(ctx, store.GetWeaviateClient(), s.ID())
+	state, err := s.store.GetConnectorState(ctx, s.ID())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get connector state: %v", err)
 	}
@@ -79,7 +80,7 @@ func (c *BaseConnector) Init(ctx context.Context, connectorID string) error {
 	// Set up a new context for the connector
 	c.context, c.cancel = context.WithCancel(ctx)
 
-	state, err := store.GetConnectorState(ctx, store.GetWeaviateClient(), c.ID())
+	state, err := c.store.GetConnectorState(ctx, c.ID())
 	if err != nil && !store.IsStateNotFound(err) {
 		return fmt.Errorf("failed to get connector state: %v", err)
 	}
@@ -95,7 +96,7 @@ func (c *BaseConnector) Init(ctx context.Context, connectorID string) error {
 	token, err := keychain.TokenFromKeychain(c.ID(), c.Type())
 	state.AuthValid = (err == nil && token != nil) // TODO: check for expiry of refresh token
 
-	err = store.UpdateConnectorState(ctx, store.GetWeaviateClient(), state)
+	err = c.store.UpdateConnectorState(ctx, state)
 	if err != nil {
 		return fmt.Errorf("failed to set connector state: %v", err)
 	}
@@ -103,5 +104,5 @@ func (c *BaseConnector) Init(ctx context.Context, connectorID string) error {
 }
 
 func (s *BaseConnector) UpdateConnectorState(ctx context.Context, state *types.ConnectorState) error {
-	return store.UpdateConnectorState(ctx, store.GetWeaviateClient(), state)
+	return s.store.UpdateConnectorState(ctx, state)
 }

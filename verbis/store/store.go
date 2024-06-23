@@ -33,6 +33,20 @@ const (
 	HybridSearchAlpha   = 0.4
 )
 
+type WeaviateStore struct {
+	client              *weaviate.Client
+	ollamaURL           string
+	embeddingsModelName string
+}
+
+func NewWeaviateStore(ollamaURL, embeddingsModelName string) types.Store {
+	return &WeaviateStore{
+		client:              GetWeaviateClient(),
+		ollamaURL:           ollamaURL,
+		embeddingsModelName: embeddingsModelName,
+	}
+}
+
 func GetWeaviateClient() *weaviate.Client {
 	// Initialize Weaviate client
 	return weaviate.New(weaviate.Config{
@@ -47,8 +61,8 @@ func IsErrChunkNotFound(err error) bool {
 	return errors.Is(err, ErrChunkNotFound)
 }
 
-func ChunkHashExists(ctx context.Context, client *weaviate.Client, hash string) (bool, error) {
-	chunk, err := GetChunkByHash(ctx, client, hash)
+func (w *WeaviateStore) ChunkHashExists(ctx context.Context, hash string) (bool, error) {
+	chunk, err := w.GetChunkByHash(ctx, hash)
 	if err != nil {
 		return false, err
 	}
@@ -59,13 +73,13 @@ func ChunkHashExists(ctx context.Context, client *weaviate.Client, hash string) 
 	return true, nil
 }
 
-func GetChunkByHash(ctx context.Context, client *weaviate.Client, hash string) (*types.Chunk, error) {
+func (w *WeaviateStore) GetChunkByHash(ctx context.Context, hash string) (*types.Chunk, error) {
 	where := filters.Where().
 		WithPath([]string{"hash"}).
 		WithOperator(filters.Equal).
 		WithValueString(hash)
 
-	resp, err := client.GraphQL().Get().
+	resp, err := w.client.GraphQL().Get().
 		WithClassName(chunkClassName).
 		WithFields([]graphql.Field{
 			{Name: "hash"},
@@ -93,7 +107,7 @@ func GetChunkByHash(ctx context.Context, client *weaviate.Client, hash string) (
 		return nil, fmt.Errorf("found %d chunks instead of 1", len(chunks))
 	}
 
-	parsedChunks, err := parseChunks(ctx, client, chunks, false)
+	parsedChunks, err := parseChunks(ctx, w.client, chunks, false)
 	if err != nil {
 		return nil, err
 	}
@@ -107,9 +121,8 @@ func IsErrDocumentNotFound(err error) bool {
 	return errors.Is(err, ErrDocumentNotFound)
 }
 
-func GetDocument(ctx context.Context, uniqueID string) (*types.Document, error) {
-	client := GetWeaviateClient()
-	docID, err := getDocumentIDFromUniqueID(ctx, client, uniqueID)
+func (w *WeaviateStore) GetDocument(ctx context.Context, uniqueID string) (*types.Document, error) {
+	docID, err := getDocumentIDFromUniqueID(ctx, w.client, uniqueID)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get document ID: %v", err)
 	}
@@ -117,7 +130,7 @@ func GetDocument(ctx context.Context, uniqueID string) (*types.Document, error) 
 		return nil, ErrDocumentNotFound
 	}
 
-	docData, err := getDocument(ctx, client, docID)
+	docData, err := getDocument(ctx, w.client, docID)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get document: %s", err)
 	}
@@ -191,17 +204,12 @@ func getDocumentIDFromUniqueID(ctx context.Context, client *weaviate.Client, uni
 	return "", nil
 }
 
-type AddVectorResponse struct {
-	NumChunksAdded int
-	NumDocsAdded   int
-}
-
-func AddVectors(ctx context.Context, client *weaviate.Client, items []types.AddVectorItem) (*AddVectorResponse, error) {
+func (w *WeaviateStore) AddVectors(ctx context.Context, items []types.AddVectorItem) (*types.AddVectorResponse, error) {
 	objects := []*models.Object{}
 
 	for _, item := range items {
 		// Look if a document with the same ID exists
-		docID, err := getDocumentIDFromUniqueID(ctx, client, item.Document.UniqueID)
+		docID, err := getDocumentIDFromUniqueID(ctx, w.client, item.Document.UniqueID)
 		if err != nil {
 			return nil, fmt.Errorf("unable to get document ID: %v", err)
 		}
@@ -239,17 +247,16 @@ func AddVectors(ctx context.Context, client *weaviate.Client, items []types.AddV
 				"documentid":     docID,
 				"document_title": item.Document.Name, // Stored both here and in document, to facilitate hybrid search
 			},
-			Vector: item.Vector,
 		}
 		objects = append(objects, chunkObj)
 	}
 
-	_, err := client.Batch().ObjectsBatcher().WithObjects(objects...).Do(ctx)
+	_, err := w.client.Batch().ObjectsBatcher().WithObjects(objects...).Do(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to batch objects: %v", err)
 	}
 
-	return &AddVectorResponse{
+	return &types.AddVectorResponse{
 		NumChunksAdded: len(items),
 		NumDocsAdded:   len(objects) - len(items), // Total set of objects created versus the known num of chunks
 	}, nil
@@ -272,7 +279,7 @@ func getDocument(ctx context.Context, client *weaviate.Client, docid string) (ma
 }
 
 // Search for a vector in Weaviate
-func HybridSearch(ctx context.Context, client *weaviate.Client, query string, vector []float32) ([]*types.Chunk, error) {
+func (w *WeaviateStore) HybridSearch(ctx context.Context, query string, vector []float32) ([]*types.Chunk, error) {
 	fmt.Println("Query vector length: ", len(vector))
 
 	_chunk_fields := []graphql.Field{
@@ -287,14 +294,14 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 	}
 
 	log.Printf("Searching for chunks with query: %s\n", query)
-	hybrid := client.GraphQL().HybridArgumentBuilder().
+	hybrid := w.client.GraphQL().HybridArgumentBuilder().
 		WithQuery(query).
 		WithVector(vector).
 		WithAlpha(HybridSearchAlpha).
 		WithProperties([]string{"chunk", "document_title^2"}).
 		WithFusionType(graphql.RelativeScore)
 
-	resp, err := client.GraphQL().
+	resp, err := w.client.GraphQL().
 		Get().
 		WithClassName(chunkClassName).
 		WithHybrid(hybrid).
@@ -315,7 +322,7 @@ func HybridSearch(ctx context.Context, client *weaviate.Client, query string, ve
 		return []*types.Chunk{}, nil
 	}
 
-	return parseChunks(ctx, client, get[chunkClassName].([]interface{}), true)
+	return parseChunks(ctx, w.client, get[chunkClassName].([]interface{}), true)
 }
 
 func parseChunks(ctx context.Context, client *weaviate.Client, chunks []interface{}, withScore bool) ([]*types.Chunk, error) {
@@ -370,10 +377,10 @@ func parseChunks(ctx context.Context, client *weaviate.Client, chunks []interfac
 	return res, nil
 }
 
-func CreateDocumentClass(ctx context.Context, client *weaviate.Client, force bool) error {
+func (w *WeaviateStore) CreateDocumentClass(ctx context.Context, force bool) error {
 	// DEBUG: attempt to delete the class, don't fail if it doesn't exist
 	if force {
-		client.Schema().ClassDeleter().WithClassName(documentClassName).Do(ctx)
+		w.client.Schema().ClassDeleter().WithClassName(documentClassName).Do(ctx)
 	}
 
 	class := &models.Class{
@@ -408,7 +415,7 @@ func CreateDocumentClass(ctx context.Context, client *weaviate.Client, force boo
 	}
 
 	// Create the class in Weaviate
-	err := client.Schema().ClassCreator().WithClass(class).Do(ctx)
+	err := w.client.Schema().ClassCreator().WithClass(class).Do(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create chunk class: %v", err)
 	}
@@ -417,15 +424,21 @@ func CreateDocumentClass(ctx context.Context, client *weaviate.Client, force boo
 	return nil
 }
 
-func CreateChunkClass(ctx context.Context, client *weaviate.Client, force bool) error {
+func (w *WeaviateStore) CreateChunkClass(ctx context.Context, force bool) error {
 	// DEBUG: attempt to delete the class, don't fail if it doesn't exist
 	if force {
-		client.Schema().ClassDeleter().WithClassName(chunkClassName).Do(ctx)
+		w.client.Schema().ClassDeleter().WithClassName(chunkClassName).Do(ctx)
 	}
 
 	class := &models.Class{
 		Class:      chunkClassName,
-		Vectorizer: "none",
+		Vectorizer: "text2vec-ollama",
+		ModuleConfig: map[string]map[string]string{
+			"text2vec-ollama": {
+				"apiEndpoint": w.ollamaURL,
+				"model":       w.embeddingsModelName,
+			},
+		},
 		Properties: []*models.Property{
 			{
 				Name:     "chunk",
@@ -447,7 +460,7 @@ func CreateChunkClass(ctx context.Context, client *weaviate.Client, force bool) 
 	}
 
 	// Create the class in Weaviate
-	err := client.Schema().ClassCreator().WithClass(class).Do(ctx)
+	err := w.client.Schema().ClassCreator().WithClass(class).Do(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create chunk class: %v", err)
 	}
@@ -455,16 +468,16 @@ func CreateChunkClass(ctx context.Context, client *weaviate.Client, force bool) 
 	return nil
 }
 
-func CreateConversation(ctx context.Context, client *weaviate.Client) (string, error) {
+func (w *WeaviateStore) CreateConversation(ctx context.Context) (string, error) {
 	// Create a new conversation object
 	conversationID := uuid.NewString()
-	_, err := client.Data().Creator().WithClassName(conversationClassName).WithID(conversationID).
+	_, err := w.client.Data().Creator().WithClassName(conversationClassName).WithID(conversationID).
 		WithProperties(map[string]interface{}{
-			"history": 		[]interface{}{},
-			"chunks":  		[]interface{}{},
-			"created_at": 	time.Now().Format(time.RFC3339),
-			"updated_at": 	time.Now().Format(time.RFC3339),
-			"title":     	"", // TODO: Dynamically create conversation title based on first prompt
+			"history":    []interface{}{},
+			"chunks":     []interface{}{},
+			"created_at": time.Now().Format(time.RFC3339),
+			"updated_at": time.Now().Format(time.RFC3339),
+			"title":      "", // TODO: Dynamically create conversation title based on first prompt
 		}).Do(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to create conversation: %v", err)
@@ -479,9 +492,9 @@ func IsErrConversationNotFound(err error) bool {
 	return errors.Is(err, ErrConversationNotFound)
 }
 
-func ListConversations(ctx context.Context, client *weaviate.Client) ([]*types.Conversation, error) {
+func (w *WeaviateStore) ListConversations(ctx context.Context) ([]*types.Conversation, error) {
 	// TODO: Exclude 'history' and 'chunks' from list response. For long living convos this can really bulk up the response. Clients should be able to retrieve these via GET on individual convos instead. Excluding requires some refactoring since parseConversation method breaks currently.
-	resp, err := client.GraphQL().Get().
+	resp, err := w.client.GraphQL().Get().
 		WithClassName(conversationClassName).
 		WithFields(
 			[]graphql.Field{
@@ -536,9 +549,9 @@ func ListConversations(ctx context.Context, client *weaviate.Client) ([]*types.C
 	return resConversations, nil
 }
 
-func GetConversation(ctx context.Context, client *weaviate.Client, conversationID string) (*types.Conversation, error) {
+func (w *WeaviateStore) GetConversation(ctx context.Context, conversationID string) (*types.Conversation, error) {
 	log.Printf("Looking for conversation with ID %s\n", conversationID)
-	conversations, err := client.Data().ObjectsGetter().
+	conversations, err := w.client.Data().ObjectsGetter().
 		WithClassName(conversationClassName).
 		WithID(conversationID).
 		Do(ctx)
@@ -604,15 +617,15 @@ func parseConversation(conversationID string, conversationMap map[string]interfa
 		ID:          conversationID,
 		History:     historyItems,
 		ChunkHashes: chunkHashes,
-		CreatedAt:   createdAt,	
+		CreatedAt:   createdAt,
 		UpdatedAt:   updatedAt,
 		Title:       title.(string),
 	}
 	return conversation, nil
 }
 
-func ConversationAppend(ctx context.Context, client *weaviate.Client, conversationID string, items []types.HistoryItem, chunks []*types.Chunk) error {
-	conversation, err := GetConversation(ctx, client, conversationID)
+func (w *WeaviateStore) ConversationAppend(ctx context.Context, conversationID string, items []types.HistoryItem, chunks []*types.Chunk) error {
+	conversation, err := w.GetConversation(ctx, conversationID)
 	if err != nil {
 		return fmt.Errorf("unable to get conversation: %v", err)
 	}
@@ -633,14 +646,14 @@ func ConversationAppend(ctx context.Context, client *weaviate.Client, conversati
 		jsonHistory[i] = string(historyItemJSON)
 	}
 
-	err = client.Data().Updater(). // replaces the entire object
-					WithID(conversationID).
-					WithClassName(conversationClassName).
-					WithProperties(map[string]interface{}{
-			"history": jsonHistory,
-			"chunks":  conversation.ChunkHashes,
+	err = w.client.Data().Updater(). // replaces the entire object
+						WithID(conversationID).
+						WithClassName(conversationClassName).
+						WithProperties(map[string]interface{}{
+			"history":    jsonHistory,
+			"chunks":     conversation.ChunkHashes,
 			"updated_at": time.Now().Format(time.RFC3339),
-			"created_at": conversation.CreatedAt, 
+			"created_at": conversation.CreatedAt,
 		}).
 		Do(ctx)
 	if err != nil {
@@ -650,9 +663,9 @@ func ConversationAppend(ctx context.Context, client *weaviate.Client, conversati
 	return nil
 }
 
-func CreateConversationClass(ctx context.Context, client *weaviate.Client, force bool) error {
+func (w *WeaviateStore) CreateConversationClass(ctx context.Context, force bool) error {
 	if force {
-		client.Schema().ClassDeleter().WithClassName(conversationClassName).Do(ctx)
+		w.client.Schema().ClassDeleter().WithClassName(conversationClassName).Do(ctx)
 	}
 
 	class := &models.Class{
@@ -679,19 +692,18 @@ func CreateConversationClass(ctx context.Context, client *weaviate.Client, force
 				Name:     "title",
 				DataType: []string{"text"},
 			},
-
 		},
 	}
 
 	// Create the class in Weaviate
-	return client.Schema().ClassCreator().WithClass(class).Do(ctx)
+	return w.client.Schema().ClassCreator().WithClass(class).Do(ctx)
 }
 
 // Create a Weaviate class schema for the connector state
-func CreateConnectorStateClass(ctx context.Context, client *weaviate.Client, force bool) error {
+func (w *WeaviateStore) CreateConnectorStateClass(ctx context.Context, force bool) error {
 	// DEBUG: attempt to delete the class, don't fail if it doesn't exist
 	if force {
-		client.Schema().ClassDeleter().WithClassName(stateClassName).Do(ctx)
+		w.client.Schema().ClassDeleter().WithClassName(stateClassName).Do(ctx)
 	}
 
 	class := &models.Class{
@@ -738,7 +750,7 @@ func CreateConnectorStateClass(ctx context.Context, client *weaviate.Client, for
 	}
 
 	// Create the class in Weaviate
-	return client.Schema().ClassCreator().WithClass(class).Do(ctx)
+	return w.client.Schema().ClassCreator().WithClass(class).Do(ctx)
 }
 
 var ErrSyncingAlreadyExpected = errors.New("syncing is already at the expected value")
@@ -747,8 +759,8 @@ func IsSyncingAlreadyExpected(err error) bool {
 	return errors.Is(err, ErrSyncingAlreadyExpected)
 }
 
-func SetConnectorSyncing(ctx context.Context, client *weaviate.Client, connectorID string, syncing bool) (*types.ConnectorState, error) {
-	state, err := GetConnectorState(ctx, client, connectorID)
+func (w *WeaviateStore) SetConnectorSyncing(ctx context.Context, connectorID string, syncing bool) (*types.ConnectorState, error) {
+	state, err := w.GetConnectorState(ctx, connectorID)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get connector state: %s", err)
 	}
@@ -758,18 +770,18 @@ func SetConnectorSyncing(ctx context.Context, client *weaviate.Client, connector
 	}
 
 	state.Syncing = syncing
-	err = UpdateConnectorState(ctx, client, state)
+	err = w.UpdateConnectorState(ctx, state)
 	return state, err
 }
 
 // Add or update the connector state in Weaviate
-func UpdateConnectorState(ctx context.Context, client *weaviate.Client, state *types.ConnectorState) error {
+func (w *WeaviateStore) UpdateConnectorState(ctx context.Context, state *types.ConnectorState) error {
 	where := filters.Where().
 		WithPath([]string{"connector_id"}).
 		WithOperator(filters.Equal).
 		WithValueString(state.ConnectorID)
 
-	resp, err := client.GraphQL().Get().
+	resp, err := w.client.GraphQL().Get().
 		WithClassName(stateClassName).
 		WithFields([]graphql.Field{
 			{Name: "_additional", Fields: []graphql.Field{{Name: "id"}}},
@@ -782,7 +794,7 @@ func UpdateConnectorState(ctx context.Context, client *weaviate.Client, state *t
 
 	if resp.Data["Get"] == nil || len(resp.Data["Get"].(map[string]interface{})[stateClassName].([]interface{})) == 0 {
 		log.Printf("Creating new connector state for %s %s", state.ConnectorType, state.ConnectorID)
-		_, err := client.Data().Creator().WithClassName(stateClassName).WithProperties(map[string]interface{}{
+		_, err := w.client.Data().Creator().WithClassName(stateClassName).WithProperties(map[string]interface{}{
 			"connector_id": state.ConnectorID,
 			"type":         state.ConnectorType,
 			"user":         state.User,
@@ -804,10 +816,10 @@ func UpdateConnectorState(ctx context.Context, client *weaviate.Client, state *t
 	addl := c["_additional"].(map[string]interface{})
 	objID := addl["id"].(string)
 
-	err = client.Data().Updater(). // replaces the entire object
-					WithID(objID).
-					WithClassName(stateClassName).
-					WithProperties(map[string]interface{}{
+	err = w.client.Data().Updater(). // replaces the entire object
+						WithID(objID).
+						WithClassName(stateClassName).
+						WithProperties(map[string]interface{}{
 			"connector_id": state.ConnectorID,
 			"type":         state.ConnectorType,
 			"user":         state.User,
@@ -824,8 +836,8 @@ func UpdateConnectorState(ctx context.Context, client *weaviate.Client, state *t
 }
 
 // Fetches all stored connector states from Weaviate, used to initialize the syncer after restart
-func AllConnectorStates(ctx context.Context, client *weaviate.Client) ([]*types.ConnectorState, error) {
-	resp, err := client.GraphQL().Get().
+func (w *WeaviateStore) AllConnectorStates(ctx context.Context) ([]*types.ConnectorState, error) {
+	resp, err := w.client.GraphQL().Get().
 		WithClassName(stateClassName).
 		WithFields(
 			[]graphql.Field{
@@ -888,13 +900,13 @@ func IsStateNotFound(err error) bool {
 
 // Retrieve the connector state from Weaviate. Does not return AuthValid as it
 // can be inferred from the presence of a token in keychain
-func GetConnectorState(ctx context.Context, client *weaviate.Client, connectorID string) (*types.ConnectorState, error) {
+func (w *WeaviateStore) GetConnectorState(ctx context.Context, connectorID string) (*types.ConnectorState, error) {
 	where := filters.Where().
 		WithPath([]string{"connector_id"}).
 		WithOperator(filters.Equal).
 		WithValueString(connectorID)
 
-	resp, err := client.GraphQL().Get().
+	resp, err := w.client.GraphQL().Get().
 		WithClassName(stateClassName).
 		WithFields(
 			[]graphql.Field{
@@ -951,14 +963,12 @@ func GetConnectorState(ctx context.Context, client *weaviate.Client, connectorID
 	}, nil
 }
 
-func DeleteDocumentById(ctx context.Context, documentId string) error {
-	client := GetWeaviateClient()
-
+func (w *WeaviateStore) DeleteDocumentById(ctx context.Context, documentId string) error {
 	// Cascade delete children chunks
-	DeleteDocumentChunksById(ctx, documentId)
+	w.DeleteDocumentChunksById(ctx, documentId)
 
 	// Delete the document
-	docDeleteErr := client.Data().Deleter().
+	docDeleteErr := w.client.Data().Deleter().
 		WithClassName(documentClassName).
 		WithID(documentId).
 		Do(ctx)
@@ -971,12 +981,10 @@ func DeleteDocumentById(ctx context.Context, documentId string) error {
 	return nil
 }
 
-func DeleteDocumentChunksById(ctx context.Context, documentId string) error {
-	client := GetWeaviateClient()
-
+func (w *WeaviateStore) DeleteDocumentChunksById(ctx context.Context, documentId string) error {
 	// Note: By default max objects that can be deleted is 10K
 	// Reference: https://weaviate.io/developers/weaviate/manage-data/delete#delete-multiple-objects
-	response, err := client.Batch().ObjectsBatchDeleter().
+	response, err := w.client.Batch().ObjectsBatchDeleter().
 		WithClassName(chunkClassName).
 		WithOutput("verbose").
 		WithWhere(filters.Where().
@@ -992,8 +1000,8 @@ func DeleteDocumentChunksById(ctx context.Context, documentId string) error {
 	return nil
 }
 
-func DeleteDocumentChunks(ctx context.Context, client *weaviate.Client, uniqueID string, connectorID string) error {
-	docid, err := getDocumentIDFromUniqueID(ctx, client, uniqueID)
+func (w *WeaviateStore) DeleteDocumentChunks(ctx context.Context, uniqueID string, connectorID string) error {
+	docid, err := getDocumentIDFromUniqueID(ctx, w.client, uniqueID)
 	if err != nil {
 		return err
 	}
@@ -1003,7 +1011,7 @@ func DeleteDocumentChunks(ctx context.Context, client *weaviate.Client, uniqueID
 		return nil
 	}
 
-	resp, err := client.Batch().ObjectsBatchDeleter().
+	resp, err := w.client.Batch().ObjectsBatchDeleter().
 		WithClassName(chunkClassName).
 		WithOutput("verbose").
 		WithWhere(filters.Where().
@@ -1020,8 +1028,7 @@ func DeleteDocumentChunks(ctx context.Context, client *weaviate.Client, uniqueID
 	numDeletedChunks := resp.Results.Successful
 
 	// Reduce the chunk count for the connector
-
-	state, err := GetConnectorState(ctx, client, connectorID)
+	state, err := w.GetConnectorState(ctx, connectorID)
 	if err != nil {
 		return fmt.Errorf("unable to get connector state: %v", err)
 	}
@@ -1031,7 +1038,7 @@ func DeleteDocumentChunks(ctx context.Context, client *weaviate.Client, uniqueID
 	}
 
 	state.NumChunks = state.NumChunks - int(numDeletedChunks)
-	err = UpdateConnectorState(ctx, client, state)
+	err = w.UpdateConnectorState(ctx, state)
 	if err != nil {
 		return fmt.Errorf("unable to update connector state: %v", err)
 	}
@@ -1039,9 +1046,8 @@ func DeleteDocumentChunks(ctx context.Context, client *weaviate.Client, uniqueID
 	return nil
 }
 
-func DeleteConnector(ctx context.Context, connector types.Connector) error {
+func (w *WeaviateStore) DeleteConnector(ctx context.Context, connector types.Connector) error {
 	// TODO Mark connector for deletion. Cancel ongoing syncs, and exclude from future ones
-	client := GetWeaviateClient()
 	connectorID := connector.ID()
 
 	// Collect documents for connector
@@ -1054,7 +1060,7 @@ func DeleteConnector(ctx context.Context, connector types.Connector) error {
 	offset := 0
 
 	for {
-		docs, err := client.GraphQL().Get().
+		docs, err := w.client.GraphQL().Get().
 			WithClassName(documentClassName).
 			WithFields([]graphql.Field{
 				{
@@ -1113,7 +1119,7 @@ func DeleteConnector(ctx context.Context, connector types.Connector) error {
 				}
 
 				// Delete document
-				DeleteDocumentById(ctx, documentId)
+				w.DeleteDocumentById(ctx, documentId)
 			}
 		}
 	}
@@ -1123,7 +1129,7 @@ func DeleteConnector(ctx context.Context, connector types.Connector) error {
 		WithPath([]string{"connector_id"}).
 		WithOperator(filters.Equal).
 		WithValueString(connectorID)
-	_, connectorDeletionErr := client.Batch().ObjectsBatchDeleter().
+	_, connectorDeletionErr := w.client.Batch().ObjectsBatchDeleter().
 		WithClassName(stateClassName).
 		WithOutput("verbose").
 		WithWhere(connectorDeleteWhere).

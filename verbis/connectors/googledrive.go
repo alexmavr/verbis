@@ -23,7 +23,6 @@ import (
 	"google.golang.org/api/option"
 
 	"github.com/verbis-ai/verbis/verbis/keychain"
-	"github.com/verbis-ai/verbis/verbis/store"
 	"github.com/verbis-ai/verbis/verbis/types"
 	"github.com/verbis-ai/verbis/verbis/util"
 )
@@ -37,10 +36,11 @@ const (
 	maxRetries     = 10
 )
 
-func NewGoogleDriveConnector(creds types.BuildCredentials) types.Connector {
+func NewGoogleDriveConnector(creds types.BuildCredentials, st types.Store) types.Connector {
 	return &GoogleDriveConnector{
 		BaseConnector: BaseConnector{
 			connectorType: types.ConnectorTypeGoogleDrive,
+			store:         st,
 		},
 	}
 }
@@ -246,7 +246,7 @@ func (g *GoogleDriveConnector) processFile(ctx context.Context, service *drive.S
 	}
 
 	// TODO: ideally this should live at the top level but we need to refactor the syncer first
-	err = store.DeleteDocumentChunks(ctx, store.GetWeaviateClient(), document.UniqueID, g.ID())
+	err = g.store.DeleteDocumentChunks(ctx, document.UniqueID, g.ID())
 	if err != nil {
 		// Not a fatal error, just log it and leave the old chunks behind
 		log.Printf("Unable to delete chunks for document %s: %v", document.UniqueID, err)
