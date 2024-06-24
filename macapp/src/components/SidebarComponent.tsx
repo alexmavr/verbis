@@ -102,14 +102,9 @@ const SidebarComponent: React.FC<Props> = ({
         defaultChecked
         className="drawer-toggle"
       />
-      <div className="drawer-content">
-        <label htmlFor="my-drawer" className="btn btn-primary drawer-button">
-          Open drawer
-        </label>
-      </div>
-      <div className="drawer-side">
-        <div className="mt-14 min-h-full w-64 bg-base-200 p-4 text-base-content">
-          <ul className="menu">
+      <div className="drawer-side mt-16 w-64">
+        <div className="min-h-full bg-base-200 p-4 text-base-content">
+          <ul className="menu overflow-y-scroll">
             {/* TODO: Uncomment and wire up for title search */}
             {/* <li className="mb-4">
               <label className="input input-bordered flex items-center gap-1 rounded bg-transparent p-2 shadow-sm">

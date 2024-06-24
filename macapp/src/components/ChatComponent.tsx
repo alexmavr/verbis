@@ -200,7 +200,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
       </div>
       <div
         ref={conversationContainer}
-        className="ml-64 mt-20 flex h-[calc(100vh-100px)] flex-col overflow-y-auto pb-20"
+        className="ml-64 mt-20 flex h-[calc(100vh-100px)] flex-col overflow-y-scroll pb-20"
       >
         {/* Conversation history */}
         {conversationHistory.length > 0 && (
