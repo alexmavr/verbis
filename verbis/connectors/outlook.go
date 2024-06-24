@@ -208,7 +208,7 @@ func (o *OutlookConnector) Sync(lastSync time.Time, chunkChan chan types.ChunkSy
 	}
 }
 
-func (o *OutlookConnector) processEmail(ctx context.Context, email models.Messageable, chunkChan chan types.ChunkSyncResult) error {
+func (o *OutlookConnector) processEmail(ctx context.Context, email models.Messageable, chunkChan chan types.ChunkSyncResult) {
 	content := *email.GetBody().GetContent()
 
 	receivedAt := *email.GetReceivedDateTime()
@@ -250,21 +250,7 @@ func (o *OutlookConnector) processEmail(ctx context.Context, email models.Messag
 
 	log.Printf("Processing email of size %d: title: %s", len(content), document.Name)
 
-	const MaxChunkSize = 5000
-	for i := 0; i < len(content); i += MaxChunkSize {
-		end := i + MaxChunkSize
-		if end > len(content) {
-			end = len(content)
-		}
-
-		chunkChan <- types.ChunkSyncResult{
-			Chunk: types.Chunk{
-				Text:     content[i:end],
-				Document: document,
-			},
-		}
-	}
-	return nil
+	emitChunks(email_subject, content, document, chunkChan)
 }
 
 func (o *OutlookConnector) listEmails(ctx context.Context, client *msgraph.GraphServiceClient, lastSync time.Time, chunkChan chan types.ChunkSyncResult) error {
@@ -301,10 +287,7 @@ func (o *OutlookConnector) listEmails(ctx context.Context, client *msgraph.Graph
 		ctx,
 		func(message *models.Message) bool {
 			// TODO: process many in parallel
-			err := o.processEmail(ctx, message, chunkChan)
-			if err != nil {
-				log.Printf("unable to process email: %v", err)
-			}
+			o.processEmail(ctx, message, chunkChan)
 			// Return true to continue the iteration
 			return true
 		})

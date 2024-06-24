@@ -3,11 +3,13 @@ package connectors
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/google/uuid"
 	"github.com/verbis-ai/verbis/verbis/keychain"
 	"github.com/verbis-ai/verbis/verbis/store"
 	"github.com/verbis-ai/verbis/verbis/types"
+	"github.com/verbis-ai/verbis/verbis/util"
 )
 
 var AllConnectors = map[string]types.ConnectorConstructor{
@@ -18,9 +20,13 @@ var AllConnectors = map[string]types.ConnectorConstructor{
 }
 
 const (
-	// MaxChunkSize in number of characters, pre-sanitization
-	// Needs to fit in the embedding context window
-	MaxChunkSize = 2000
+	// The following parameters are only used in connectors that use
+	// content chunking of larger documents.
+
+	// MaxChunkSize in number of words in a chunk
+	MaxChunkSize = 200
+	// ChunkOverlap is the number of words that overlap between chunks
+	ChunkOverlap = 0.2
 )
 
 func IsConnectorType(s string) bool {
@@ -105,4 +111,20 @@ func (c *BaseConnector) Init(ctx context.Context, connectorID string) error {
 
 func (s *BaseConnector) UpdateConnectorState(ctx context.Context, state *types.ConnectorState) error {
 	return s.store.UpdateConnectorState(ctx, state)
+}
+
+func emitChunks(fileName string, content string, document types.Document, chunkChan chan types.ChunkSyncResult) {
+	numChunks := 0
+	content = util.CleanChunk(content)
+	chunkTexts := util.ChunkText(content, MaxChunkSize, ChunkOverlap)
+	for _, text := range chunkTexts {
+		numChunks++
+		log.Printf("Processing chunk %d of document %s", numChunks, fileName)
+		chunkChan <- types.ChunkSyncResult{
+			Chunk: types.Chunk{
+				Text:     text,
+				Document: document,
+			},
+		}
+	}
 }

@@ -155,7 +155,7 @@ func (g *GmailConnector) Sync(lastSync time.Time, chunkChan chan types.ChunkSync
 	}
 }
 
-func (g *GmailConnector) processEmail(ctx context.Context, srv *gmail.Service, email *gmail.Message, chunkChan chan types.ChunkSyncResult) error {
+func (g *GmailConnector) processEmail(ctx context.Context, srv *gmail.Service, email *gmail.Message, chunkChan chan types.ChunkSyncResult) {
 	var content string
 	for _, part := range email.Payload.Parts {
 		if part.MimeType == "text/plain" {
@@ -181,14 +181,13 @@ func (g *GmailConnector) processEmail(ctx context.Context, srv *gmail.Service, e
 		}
 	}
 
-	content = util.CleanChunk(content)
-
 	receivedAt := time.Unix(email.InternalDate/1000, 0)
 	emailURL := fmt.Sprintf("https://mail.google.com/mail/u/0/#inbox/%s", email.Id)
+	subject := getEmailSubject(email.Payload.Headers)
 
 	document := types.Document{
 		UniqueID:      email.Id,
-		Name:          getEmailSubject(email.Payload.Headers),
+		Name:          subject,
 		SourceURL:     emailURL, // Include the URL here
 		ConnectorID:   g.ID(),
 		ConnectorType: string(g.Type()),
@@ -201,20 +200,7 @@ func (g *GmailConnector) processEmail(ctx context.Context, srv *gmail.Service, e
 		log.Printf("Unable to delete chunks for document %s: %v", document.UniqueID, err)
 	}
 
-	for i := 0; i < len(content); i += MaxChunkSize {
-		end := i + MaxChunkSize
-		if end > len(content) {
-			end = len(content)
-		}
-
-		chunkChan <- types.ChunkSyncResult{
-			Chunk: types.Chunk{
-				Text:     content[i:end],
-				Document: document,
-			},
-		}
-	}
-	return nil
+	emitChunks(subject, content, document, chunkChan)
 }
 
 func (g *GmailConnector) listEmails(ctx context.Context, srv *gmail.Service, lastSync time.Time, chunkChan chan types.ChunkSyncResult) error {
@@ -237,10 +223,7 @@ func (g *GmailConnector) listEmails(ctx context.Context, srv *gmail.Service, las
 					log.Printf("Unable to retrieve message %s: %v", messageID, err)
 					return
 				}
-				err = g.processEmail(ctx, srv, email, chunkChan)
-				if err != nil {
-					log.Printf("Error processing email %s: %v", messageID, err)
-				}
+				g.processEmail(ctx, srv, email, chunkChan)
 			}(m.Id)
 		}
 		wg.Wait()

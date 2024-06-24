@@ -88,3 +88,42 @@ func CleanChunk(input string) string {
 
 	return input
 }
+
+// Split the text into units (words, in this case)
+func wordSplitter(sourceText string) []string {
+	// Replace multiple whitespaces
+	re := regexp.MustCompile(`\s+`)
+	sourceText = re.ReplaceAllString(sourceText, " ")
+	// Split by single whitespace
+	return strings.Split(sourceText, " ")
+}
+
+func ChunkText(text string, chunkSize int, overlapFraction float64) []string {
+	textWords := wordSplitter(text)
+	overlapInt := int(float64(chunkSize) * overlapFraction)
+	var chunks []string
+
+	for i := 0; i < len(textWords); i += chunkSize {
+		startIndex := max(i-overlapInt, 0)
+		endIndex := min(i+chunkSize, len(textWords))
+		chunkWords := textWords[startIndex:endIndex]
+		chunk := strings.Join(chunkWords, " ")
+		chunks = append(chunks, chunk)
+	}
+
+	return chunks
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}

@@ -314,7 +314,14 @@ func (s *SlackConnector) processMessage(document types.Document, client *slack.C
 	// we are not expecting to re-index the entire document/channel.
 	content := util.CleanChunk(message.Text)
 	log.Printf("Processing %s message %s: %s", document.UniqueID, message.User, content)
-	if len(content)+len(s.messageBuffer) <= MaxChunkSize {
+	currentWordCount := len(strings.Fields(s.messageBuffer))
+	incomingWordCount := len(strings.Fields(content))
+
+	if incomingWordCount > MaxChunkSize {
+		// TODO: handle large messages
+	}
+
+	if currentWordCount+incomingWordCount <= MaxChunkSize {
 		s.messageBuffer += fmt.Sprintf("%s: %s \n", message.User, content)
 		return nil
 	}

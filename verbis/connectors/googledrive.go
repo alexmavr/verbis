@@ -234,7 +234,6 @@ func (g *GoogleDriveConnector) processFile(ctx context.Context, service *drive.S
 		updatedAt = time.Now()
 	}
 
-	numChunks := 0
 	document := types.Document{
 		UniqueID:      file.Id,
 		Name:          file.Name,
@@ -252,24 +251,7 @@ func (g *GoogleDriveConnector) processFile(ctx context.Context, service *drive.S
 		log.Printf("Unable to delete chunks for document %s: %v", document.UniqueID, err)
 	}
 
-	content = util.CleanChunk(content)
-	// Split contents into chunks of MaxChunkSize characters
-	for i := 0; i < len(content); i += MaxChunkSize {
-		end := i + MaxChunkSize
-		if end > len(content) {
-			end = len(content)
-		}
-
-		// TODO: add chunk overlaps
-		numChunks += 1
-		log.Printf("Processing chunk %d of document %s", numChunks, file.Name)
-		chunkChan <- types.ChunkSyncResult{
-			Chunk: types.Chunk{
-				Text:     content[i:end],
-				Document: document,
-			},
-		}
-	}
+	emitChunks(file.Name, content, document, chunkChan)
 }
 
 func (g *GoogleDriveConnector) listFiles(ctx context.Context, service *drive.Service, lastSync time.Time, chunkChan chan types.ChunkSyncResult) error {
