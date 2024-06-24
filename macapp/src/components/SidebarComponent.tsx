@@ -120,13 +120,17 @@ const SidebarComponent: React.FC<Props> = ({
               <span>Today</span>
             </li>
             {renderConversations(todaysConvos)}
-            <li className="menu-title text-xs">
-              <span>Previous 7 Days</span>
-            </li>
+            {weeksConvos.length > 0 && (
+              <li className="menu-title text-xs">
+                <span>Previous 7 Days</span>
+              </li>
+            )}
             {renderConversations(weeksConvos)}
-            <li className="menu-title text-xs">
-              <span>Previous 30 Days</span>
-            </li>
+            {monthsConvos.length > 0 && (
+              <li className="menu-title text-xs">
+                <span>Previous 30 Days</span>
+              </li>
+            )}
             {renderConversations(monthsConvos)}
           </ul>
         </div>
