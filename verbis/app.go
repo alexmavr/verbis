@@ -12,7 +12,7 @@ var (
 	//	httpClient          = &http.Client{Timeout: 10 * time.Second}
 	generationModelName = "custom-mistral"
 	embeddingsModelName = "nomic-embed-text:latest"
-	clean               = true
+	clean               = false
 	KeepAliveTime       = "20m"
 
 	// Will be populated by linker from .builder.env
