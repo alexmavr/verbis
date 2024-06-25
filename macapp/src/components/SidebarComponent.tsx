@@ -1,7 +1,14 @@
 import React, { useEffect, useState } from "react";
-import { list_conversations } from "../client";
+import {
+  create_conversation,
+  get_conversation,
+  list_conversations,
+} from "../client";
 import { isToday, isThisWeek, isThisMonth, parseISO, format } from "date-fns";
-import { MagnifyingGlassIcon } from "@heroicons/react/24/solid";
+import {
+  MagnifyingGlassIcon,
+  PencilSquareIcon,
+} from "@heroicons/react/24/solid";
 import { Conversation } from "../types";
 
 const addTimePeriod = (conversations: Conversation[]): Conversation[] => {
@@ -42,15 +49,36 @@ const SidebarComponent: React.FC<Props> = ({
   const [weeksConvos, setWeeksConvos] = useState<Conversation[]>([]);
   const [monthsConvos, setMonthsConvos] = useState<Conversation[]>([]);
 
-  useEffect(() => {
-    const fetchConversations = async () => {
-      let conversationList = await list_conversations();
-      const updatedConversations = addTimePeriod(conversationList);
-      setConversations(updatedConversations);
-    };
+  const fetchConversations = async () => {
+    let conversationList = await list_conversations();
+    const updatedConversations = addTimePeriod(conversationList);
+    setConversations(updatedConversations);
+    // If conversations exist, set selected to most recent
+    if (updatedConversations.length > 0) {
+      setSelectedConversation(updatedConversations[0]);
+    } else {
+      // If no conversations exist, create a new one
+      startNewConversation();
+    }
+  };
 
+  const startNewConversation = async () => {
+    try {
+      const newConversationId = await create_conversation();
+      const newConversation = await get_conversation(newConversationId);
+      fetchConversations();
+      // Override fetchConversations' logic of setting current to most recent
+      // by explicitly setting it to the newly created conversation
+      setSelectedConversation(newConversation);
+    } catch (error) {
+      console.error("Failed to create conversation:", error);
+    }
+  };
+
+  // fetch conversations on load
+  useEffect(() => {
     fetchConversations();
-  }, [selectedConversation]);
+  }, []);
 
   useEffect(() => {
     setTodaysConvos(
@@ -104,6 +132,9 @@ const SidebarComponent: React.FC<Props> = ({
       />
       <div className="drawer-side mt-16 w-64">
         <div className="min-h-full bg-base-200 p-4 text-base-content">
+          <button className="btn btn-ghost" onClick={startNewConversation}>
+            <PencilSquareIcon className="h-6 w-6" />
+          </button>
           <ul className="menu overflow-y-scroll">
             {/* TODO: Uncomment and wire up for title search */}
             {/* <li className="mb-4">

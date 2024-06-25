@@ -110,23 +110,6 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
     };
   }, []);
 
-  const startNewConversation = async () => {
-    setConversationHistory([]);
-    try {
-      const newConversationId = await create_conversation();
-      const newConversation = await get_conversation(newConversationId);
-      setConversationId(newConversationId);
-      setCurrentConversation(newConversation);
-    } catch (error) {
-      console.error("Error creating conversation:", error);
-    }
-  };
-
-  // Creates a new conversation on each load
-  useEffect(() => {
-    startNewConversation();
-  }, []);
-
   useEffect(() => {
     setConversationHistory(currentConversation?.history || []);
     setConversationId(currentConversation?.id || null);
@@ -193,11 +176,6 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
         selectedConversation={currentConversation}
         setSelectedConversation={setCurrentConversation}
       />
-      <div className="fixed left-5 top-5 z-50">
-        <button onClick={startNewConversation}>
-          <PencilSquareIcon className="h-6 w-6" />
-        </button>
-      </div>
       <div
         ref={conversationContainer}
         className="ml-64 mt-20 flex h-[calc(100vh-100px)] flex-col overflow-y-scroll pb-20"
