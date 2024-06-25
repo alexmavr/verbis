@@ -10,9 +10,16 @@ type AddVectorItem struct {
 	Vector []float32
 }
 
+type Source struct {
+	Title string `json:"title"`
+	URL   string `json:"url"`
+	Type  string `json:"type"`
+}
+
 type HistoryItem struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
+	Sources []Source `json:"sources"`
 }
 
 type ConnectorState struct {

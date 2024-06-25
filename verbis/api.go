@@ -578,9 +578,24 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	sourcesObj := sourcesFromChunks(rerankedChunks)
+	sourcesObjJSON, marshalSourcesErr := json.Marshal(sourcesObj)
+	if marshalSourcesErr != nil {
+		log.Printf("Failed to marshal sources: %s", marshalSourcesErr)
+		http.Error(w, "Failed to marshal sources", http.StatusInternalServerError)
+		return
+	}
+	var sources []map[string]string
+	unmarshalSourcesErr := json.Unmarshal(sourcesObjJSON, &sources)
+	if unmarshalSourcesErr != nil {
+		log.Printf("Failed to unmarshal sources: %s", unmarshalSourcesErr)
+		http.Error(w, "Failed to unmarshal sources", http.StatusInternalServerError)
+		return
+	}
+
 	// First write the header response
 	err = json.NewEncoder(w).Encode(StreamResponseHeader{
-		Sources: sourcesFromChunks(rerankedChunks),
+		Sources: sources,
 	})
 	if err != nil {
 		http.Error(w, "Failed to write response", http.StatusInternalServerError)
@@ -623,6 +638,7 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	conversation.History = append(conversation.History, types.HistoryItem{
 		Role:    "assistant",
 		Content: responseAcc,
+		Sources: sourcesObj,
 	})
 
 	// Find out which chunks are not already part of the conversation history
@@ -649,6 +665,7 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 		{
 			Role:    "assistant",
 			Content: responseAcc,
+			Sources: sourcesObj,
 		},
 	}, newChunks)
 	if err != nil {

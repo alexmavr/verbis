@@ -242,12 +242,12 @@ func chatWithModel(prompt string, model string, history []types.HistoryItem) (*A
 	return &apiResponse, nil
 }
 
-func sourcesFromChunks(chunks []*types.Chunk) []map[string]string {
-	sources := []map[string]string{}
+func sourcesFromChunks(chunks []*types.Chunk) []types.Source {
+	sources := []types.Source{} 
 	for _, chunk := range chunks {
 		skip := false
 		for _, source := range sources {
-			if source["url"] == chunk.SourceURL {
+			if source.URL == chunk.SourceURL {
 				// Avoid duplicate document links
 				skip = true
 				break
@@ -256,10 +256,10 @@ func sourcesFromChunks(chunks []*types.Chunk) []map[string]string {
 		if skip {
 			continue
 		}
-		sourceObj := map[string]string{
-			"title": chunk.Name,
-			"url":   chunk.SourceURL,
-			"type":  chunk.ConnectorType,
+		sourceObj := types.Source{
+			Title: chunk.Name,
+			URL:   chunk.SourceURL,
+			Type:  chunk.ConnectorType,
 		}
 		sources = append(sources, sourceObj)
 	}
