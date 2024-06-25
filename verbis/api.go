@@ -635,12 +635,6 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	}
 	doneTime := time.Now()
 
-	conversation.History = append(conversation.History, types.HistoryItem{
-		Role:    "assistant",
-		Content: responseAcc,
-		Sources: sourcesObj,
-	})
-
 	// Find out which chunks are not already part of the conversation history
 	newChunks := []*types.Chunk{}
 	for _, chunk := range rerankedChunks {
