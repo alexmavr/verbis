@@ -112,7 +112,7 @@ const SidebarComponent: React.FC<Props> = ({
               : ""
           }
         >
-          <h3 className="text-sm font-medium">
+          <h3 className="text-sm">
             {conversation.title
               ? conversation.title
               : formatDatetime(conversation.created_at)}
@@ -130,23 +130,23 @@ const SidebarComponent: React.FC<Props> = ({
         defaultChecked
         className="drawer-toggle"
       />
-      <div className="drawer-side mt-16 w-64">
-        <div className="min-h-full bg-base-200 p-4 text-base-content">
-          <button className="btn btn-ghost" onClick={startNewConversation}>
-            <PencilSquareIcon className="h-6 w-6" />
-          </button>
+      <div className="drawer-side w-64">
+        <div className="min-h-full w-64 bg-base-200 p-4 text-base-content">
+          <div>
+            <label className="input input-bordered flex items-center gap-1 rounded-full bg-transparent p-2 shadow-sm">
+              <input
+                type="text"
+                className="grow outline-none"
+                placeholder="Search"
+              />
+              <MagnifyingGlassIcon className="h-4 w-4 opacity-70" />
+            </label>
+            <button className="btn btn-ghost" onClick={startNewConversation}>
+              <PencilSquareIcon className="h-6 w-6" />
+            </button>
+          </div>
           <ul className="menu overflow-y-scroll">
             {/* TODO: Uncomment and wire up for title search */}
-            {/* <li className="mb-4">
-              <label className="input input-bordered flex items-center gap-1 rounded bg-transparent p-2 shadow-sm">
-                <input
-                  type="text"
-                  className="grow outline-none"
-                  placeholder="Search"
-                />
-                <MagnifyingGlassIcon className="h-4 w-4 opacity-70" />
-              </label>
-            </li> */}
             <li className="menu-title text-xs">
               <span>Today</span>
             </li>

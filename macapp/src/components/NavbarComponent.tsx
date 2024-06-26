@@ -16,17 +16,19 @@ const NavbarComponent: React.FC<Props> = ({
   currentScreen,
 }) => {
   return (
-    <div className="navbar fixed z-40 bg-base-100 px-2 py-0">
+    <div className="navbar bg-base-100 px-2 py-0">
       <div className="navbar-start"></div>
       <div className="navbar-center">
         <VerbisIcon className="h-6 w-6" />
       </div>
       <div className="navbar-end">
-        <ThemeSwitcher />
         {currentScreen == AppScreen.SETTINGS ? (
-          <button onClick={() => navigateBack()}>
-            <XMarkIcon className="h-6 w-6" />
-          </button>
+          <>
+            <ThemeSwitcher />
+            <button onClick={() => navigateBack()}>
+              <XMarkIcon className="h-6 w-6" />
+            </button>
+          </>
         ) : (
           <button onClick={() => navigate(AppScreen.SETTINGS)}>
             <CogIcon className="h-6 w-6" />

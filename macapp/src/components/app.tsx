@@ -20,22 +20,33 @@ export default function () {
   };
 
   return (
-    <div className="">
-      {currentScreen != AppScreen.WELCOME && (
-        <NavbarComponent
-          navigate={navigateToScreen}
-          navigateBack={navigateBack}
-          currentScreen={currentScreen}
-        />
-      )}
-      <div className="mx-auto flex min-h-screen w-full flex-col justify-between px-4">
+    <div>
+      {/* {currentScreen != AppScreen.WELCOME && (
+      )} */}
+      <div className="mx-auto flex min-h-screen w-full flex-col justify-between">
         {currentScreen == AppScreen.WELCOME && (
           <WelcomeComponent navigate={navigateToScreen} />
         )}
         {currentScreen === AppScreen.CHAT && (
-          <ChatComponent navigate={navigateToScreen} />
+          <div className="pl-64">
+            <NavbarComponent
+              navigate={navigateToScreen}
+              navigateBack={navigateBack}
+              currentScreen={currentScreen}
+            />
+            <ChatComponent navigate={navigateToScreen} />
+          </div>
         )}
-        {currentScreen === AppScreen.SETTINGS && <SettingsComponent />}
+        {currentScreen === AppScreen.SETTINGS && (
+          <div className="">
+            <NavbarComponent
+              navigate={navigateToScreen}
+              navigateBack={navigateBack}
+              currentScreen={currentScreen}
+            />
+            <SettingsComponent />
+          </div>
+        )}
       </div>
     </div>
   );

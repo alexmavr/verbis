@@ -176,70 +176,73 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
         selectedConversation={currentConversation}
         setSelectedConversation={setCurrentConversation}
       />
-      <div
-        ref={conversationContainer}
-        className="ml-64 mt-20 flex h-[calc(100vh-100px)] flex-col overflow-y-scroll pb-20"
-      >
-        {/* Conversation history */}
-        {conversationHistory.length > 0 && (
-          <div className="mr-4 mt-auto flex flex-col">
-            {conversationHistory.map((item, index) => (
-              <div key={index} className={`${item.role}`}>
-                {item.role === "user" ? (
-                  // User message
-                  <div className="flex justify-end">
-                    <div className="card w-96 border-1 bg-base-200">
-                      <div className="card-body !p-4">
-                        <p>{item.content}</p>
-                        <div className="card-actions justify-end">
-                          {/* TODO: Feedback actions */}
+      <div className="flex h-screen flex-col">
+        <div className="max-h-[calc(100vh-160px)] flex-grow overflow-y-auto ">
+          {" "}
+          {/* Adjust paddingBottom to accommodate the prompt area */}
+          <div ref={conversationContainer} className="p-4">
+            {/* Conversation history */}
+            {conversationHistory.length > 0 && (
+              <div className="mr-4 mt-auto flex flex-col">
+                {conversationHistory.map((item, index) => (
+                  <div key={index} className={`${item.role}`}>
+                    {item.role === "user" ? (
+                      // User message
+                      <div className="flex justify-end">
+                        <div className="card w-96 border-1 bg-base-200">
+                          <div className="card-body !p-4">
+                            <p>{item.content}</p>
+                            <div className="card-actions justify-end">
+                              {/* TODO: Feedback actions */}
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    ) : (
+                      // Assistant message
+                      <div className="m-4">
+                        <div className="text-justify">
+                          {item.content}
+                          {item.hasOwnProperty("sources") &&
+                            item.sources.map(
+                              (source: ResultSource, sourceIndex: number) => {
+                                const LogoComponent = Logos[source.type];
+                                return (
+                                  <div
+                                    key={sourceIndex}
+                                    className="flex items-center"
+                                  >
+                                    <LogoComponent className="mr-1 h-4 w-4" />
+                                    <a
+                                      href={source.url}
+                                      target="none"
+                                      className="mr-1 text-blue-600 underline visited:text-purple-600 hover:text-blue-800"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        require("electron").shell.openExternal(
+                                          source.url
+                                        );
+                                      }}
+                                    >
+                                      {truncateString(source.title, 30)}
+                                    </a>
+                                  </div>
+                                );
+                              }
+                            )}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  // Assistant message
-                  <div className="m-4">
-                    <div className="text-justify">
-                      {item.content}
-                      {item.hasOwnProperty("sources") &&
-                        item.sources.map(
-                          (source: ResultSource, sourceIndex: number) => {
-                            const LogoComponent = Logos[source.type];
-                            return (
-                              <div
-                                key={sourceIndex}
-                                className="flex items-center"
-                              >
-                                <LogoComponent className="mr-1 h-4 w-4" />
-                                <a
-                                  href={source.url}
-                                  target="none"
-                                  className="mr-1 text-blue-600 underline visited:text-purple-600 hover:text-blue-800"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    require("electron").shell.openExternal(
-                                      source.url
-                                    );
-                                  }}
-                                >
-                                  {truncateString(source.title, 30)}
-                                </a>
-                              </div>
-                            );
-                          }
-                        )}
-                    </div>
-                  </div>
-                )}
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        )}
+        </div>
 
         {/* Prompt input and button */}
-        <div className="fixed inset-x-0 bottom-0 left-64 flex items-center p-4 shadow-lg">
+        <div className="fixed inset-x-0 bottom-0 left-64 flex items-center bg-white p-4">
           <textarea
             ref={promptInputRef}
             value={promptText}
@@ -253,7 +256,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
                 // setPromptText(promptText + "\n");
               }
             }}
-            className={`flex-grow resize-none overflow-hidden rounded border border-gray-300 p-2 pr-16 ${
+            className={`flex-grow resize-none overflow-hidden rounded-full border border-gray-300 p-2 pr-16 ${
               loading ? "disabled:cursor-not-allowed disabled:opacity-50" : ""
             }`}
             disabled={loading}
