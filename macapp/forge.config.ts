@@ -31,7 +31,6 @@ const config: ForgeConfig = {
     ...(process.env.SIGN
       ? {
           osxSign: {
-            identity: process.env.APPLE_IDENTITY,
           },
           osxNotarize: {
             tool: "notarytool",

@@ -124,7 +124,7 @@ builder-env:
 	)
 
 release: verbis
-	pushd macapp && npm run make && popd
+	pushd macapp && npm run make:sign && popd
 
 clean:
 	rm dist/weaviate dist/ollama dist/verbis || true
