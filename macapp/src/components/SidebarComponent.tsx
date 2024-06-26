@@ -108,7 +108,7 @@ const SidebarComponent: React.FC<Props> = ({
         <div
           className={
             selectedConversation && selectedConversation.id === conversation.id
-              ? "bg-gray-200"
+              ? "bg-base-300"
               : ""
           }
         >
@@ -130,14 +130,14 @@ const SidebarComponent: React.FC<Props> = ({
         defaultChecked
         className="drawer-toggle"
       />
-      <div className="drawer-side w-64">
-        <div className="min-h-full w-64 bg-base-200 p-4 text-base-content">
-          <div>
-            <label className="input flex items-center gap-1 rounded-lg pl-2 shadow-sm">
+      <div className="drawer-side w-64 bg-base-200">
+        <div className="min-h-full">
+          <div className="m-2.5 flex items-center gap-1">
+            <label className="flex h-8 items-center gap-1 rounded-lg bg-base-300 pl-2 shadow-sm">
               <MagnifyingGlassIcon className="h-4 w-4 opacity-70" />
               <input
                 type="text"
-                className="grow outline-none"
+                className="bg-transparent outline-none"
                 placeholder="Search"
               />
             </label>
@@ -145,7 +145,7 @@ const SidebarComponent: React.FC<Props> = ({
               <PencilSquareIcon className="h-6 w-6" />
             </button>
           </div>
-          <ul className="menu overflow-y-scroll">
+          <ul className="menu">
             {/* TODO: Uncomment and wire up for title search */}
             <li className="menu-title text-xs">
               <span>Today</span>

@@ -34,7 +34,7 @@ export default function () {
               navigateBack={navigateBack}
               currentScreen={currentScreen}
             />
-            <ChatComponent navigate={navigateToScreen} />
+            <ChatComponent />
           </div>
         )}
         {currentScreen === AppScreen.SETTINGS && (

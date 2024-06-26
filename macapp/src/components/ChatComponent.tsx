@@ -9,10 +9,6 @@ import { AppScreen, ConversationItem, ResultSource } from "../types";
 import SidebarComponent from "./SidebarComponent";
 import { Conversation } from "../types";
 
-interface Props {
-  navigate: (screen: AppScreen) => void;
-}
-
 const Logos: { [key: string]: React.FC<React.SVGProps<SVGSVGElement>> } = {
   googledrive: GDriveLogo,
   gmail: GMailLogo,
@@ -20,7 +16,7 @@ const Logos: { [key: string]: React.FC<React.SVGProps<SVGSVGElement>> } = {
   slack: SlackLogo,
 };
 
-const ChatComponent: React.FC<Props> = ({ navigate }) => {
+const ChatComponent: React.FC = () => {
   const conversationContainer = useRef<HTMLDivElement>(null);
   const [promptText, setPromptText] = useState(""); // State to store input from the textbox
   const [loading, setLoading] = useState(false); // State for the spinner
@@ -251,7 +247,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
                 // setPromptText(promptText + "\n");
               }
             }}
-            className={`flex-grow resize-none overflow-hidden rounded border border-gray-300 p-1 pr-16 ${
+            className={`flex-grow resize-none overflow-hidden rounded border border-gray-300 p-1 pr-16 outline-none ${
               loading ? "disabled:cursor-not-allowed disabled:opacity-50" : ""
             }`}
             disabled={loading}
