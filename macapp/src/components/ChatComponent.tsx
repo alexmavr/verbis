@@ -227,7 +227,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
       <div className="flex h-screen flex-col">
         <div
           ref={conversationContainer}
-          className="max-h-[calc(100vh-140px)] flex-grow overflow-y-auto text-sm"
+          className="flex max-h-[calc(100vh-140px)] flex-grow flex-col overflow-y-auto text-sm"
         >
           {/* Adjust paddingBottom to accommodate the prompt area */}
           {/* Conversation history */}
