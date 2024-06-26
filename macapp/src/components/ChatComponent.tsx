@@ -188,7 +188,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
                   {item.role === "user" ? (
                     // User message
                     <div className="flex justify-end">
-                      <div className="card w-96 border-1 bg-base-200">
+                      <div className="card w-96 bg-base-200">
                         <div className="card-body !p-4">
                           <p>{item.content}</p>
                           <div className="card-actions justify-end">

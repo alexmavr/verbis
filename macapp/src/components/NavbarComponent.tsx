@@ -24,7 +24,7 @@ const NavbarComponent: React.FC<Props> = ({
       <div className="navbar-end">
         {currentScreen == AppScreen.SETTINGS ? (
           <>
-            <ThemeSwitcher />
+            {/* <ThemeSwitcher /> */}
             <button onClick={() => navigateBack()}>
               <XMarkIcon className="h-6 w-6" />
             </button>
