@@ -10,7 +10,24 @@ module.exports = {
   },
   plugins: [require("daisyui")],
   daisyui: {
-    themes: ["winter", "night"],
+    themes: [
+      {
+        "verbis-light": {
+          primary: "#f3f4f6",
+          secondary: "#e5e7eb",
+          accent: "#4b5563",
+          neutral: "#9ca3af",
+          "base-100": "#ffffff",
+          info: "#3b82f6",
+          success: "#10b981",
+          warning: "#f59e0b",
+          error: "#ef4444",
+        },
+      },
+      ,
+      "winter",
+      "night",
+    ],
     darkTheme: "night",
   },
   variants: {

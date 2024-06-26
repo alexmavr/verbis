@@ -177,7 +177,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
       <div className="flex h-screen flex-col">
         <div
           ref={conversationContainer}
-          className="max-h-[calc(100vh-160px)] flex-grow overflow-y-auto "
+          className="max-h-[calc(100vh-140px)] flex-grow overflow-y-auto "
         >
           {/* Adjust paddingBottom to accommodate the prompt area */}
           {/* Conversation history */}
@@ -240,7 +240,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
         </div>
 
         {/* Prompt input and button */}
-        <div className="fixed inset-x-0 bottom-0 left-64 flex items-center bg-white p-4">
+        <div className="fixed inset-x-0 bottom-0 left-64 flex items-center bg-white px-4 py-2">
           <textarea
             ref={promptInputRef}
             value={promptText}
@@ -254,14 +254,14 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
                 // setPromptText(promptText + "\n");
               }
             }}
-            className={`flex-grow resize-none overflow-hidden rounded border border-gray-300 p-2 pr-16 ${
+            className={`flex-grow resize-none overflow-hidden rounded border border-gray-300 p-1 pr-16 ${
               loading ? "disabled:cursor-not-allowed disabled:opacity-50" : ""
             }`}
             disabled={loading}
           />
           <button
             onClick={triggerPrompt}
-            className={`absolute bottom-4 right-4 mb-2 mr-2 flex h-10 w-10 items-center justify-center rounded-full bg-blue-500 font-bold text-white hover:bg-blue-700 ${
+            className={`absolute bottom-4 right-4 mb-2 mr-2 flex h-8 w-8 items-center justify-center rounded-full bg-blue-500 font-bold text-white hover:bg-blue-700 ${
               loading ? "disabled:cursor-not-allowed disabled:opacity-50" : ""
             }`}
             disabled={loading}
@@ -269,7 +269,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
             {loading ? (
               <p className="loading-spinner"></p>
             ) : (
-              <PaperAirplaneIcon className=" p-2 text-white" />
+              <PaperAirplaneIcon className=" p-1 text-white" />
             )}
           </button>
         </div>
