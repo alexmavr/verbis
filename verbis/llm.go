@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html/template"
 	"io"
 	"log"
 	"net/http"
@@ -16,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/verbis-ai/verbis/verbis/types"
@@ -101,6 +101,24 @@ func createModel(modelName string) error {
 	return nil
 }
 
+type LLMManager struct {
+	llmMutex sync.Mutex
+}
+
+func NewLLMManager() *LLMManager {
+	return &LLMManager{
+		llmMutex: sync.Mutex{},
+	}
+}
+
+func (m *LLMManager) SummarizeLLM(ctx context.Context, content string) (string, error) {
+	resp, err := m.ChatWithModel(ctx, content, summarizationModelName, []types.HistoryItem{})
+	if err != nil {
+		return "", fmt.Errorf("unable to generate summarization response: %s", err)
+	}
+	return resp.Message.Content, nil
+}
+
 type StreamResponse struct {
 	Model     string            `json:"model"`
 	CreatedAt time.Time         `json:"created_at"`
@@ -108,9 +126,11 @@ type StreamResponse struct {
 	Done      bool              `json:"done"`
 }
 
-func chatWithModelStream(ctx context.Context, prompt string, model string, history []types.HistoryItem, resChan chan<- StreamResponse) error {
-	url := fmt.Sprintf("http://%s/api/chat", OllamaHost)
+func (m *LLMManager) ChatWithModelStream(ctx context.Context, prompt string, model string, history []types.HistoryItem, resChan chan<- StreamResponse) error {
+	m.llmMutex.Lock()
+	defer m.llmMutex.Unlock()
 
+	url := fmt.Sprintf("http://%s/api/chat", OllamaHost)
 	messages := history
 	if prompt != "" {
 		messages = append(history, types.HistoryItem{
@@ -183,7 +203,9 @@ func chatWithModelStream(ctx context.Context, prompt string, model string, histo
 }
 
 // Function to call ollama model
-func chatWithModel(prompt string, model string, history []types.HistoryItem) (*ApiResponse, error) {
+func (m *LLMManager) ChatWithModel(ctx context.Context, prompt string, model string, history []types.HistoryItem) (*ApiResponse, error) {
+	m.llmMutex.Lock()
+	defer m.llmMutex.Unlock()
 	// URL of the API endpoint
 	url := fmt.Sprintf("http://%s/api/chat", OllamaHost)
 
@@ -209,7 +231,7 @@ func chatWithModel(prompt string, model string, history []types.HistoryItem) (*A
 	}
 
 	// Create a new HTTP request
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +252,6 @@ func chatWithModel(prompt string, model string, history []types.HistoryItem) (*A
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("Response: %v", string(responseData))
 
 	// Unmarshal JSON data into ApiResponse struct
 	var apiResponse ApiResponse
@@ -328,7 +349,6 @@ func rerankBERT(ctx context.Context, chunks []*types.Chunk, query string) ([]*ty
 		idCount[item.ID]++
 		if idCount[item.ID] > 1 {
 			log.Printf("Duplicate ID found: %d", item.ID)
-			panic("Duplicate ID found")
 		}
 	}
 	log.Printf("Rerank IDs: %v", idCount)
@@ -429,122 +449,6 @@ func ParseStringToIntArray(input string) ([]int, error) {
 	}
 
 	return result, nil
-}
-
-// NOTE: rerankLLM is used for RankGPT style rerankers, which are bundled as
-// GGUF and ran by ollama. Not currently in use since pairwise rerankers are
-// faster and better performing
-const rerankModelName = "custom-zephyr"
-
-// Only used for Llama.cpp rerank models such as rerank-zephyr
-func rerankLLM(chunks []*types.Chunk, query string) ([]*types.Chunk, error) {
-	messages, err := MakeRerankMessages(chunks, query)
-	if err != nil {
-		return nil, fmt.Errorf("unable to create rerank messages: %s", err)
-	}
-	log.Print(messages)
-
-	resp, err := chatWithModel("", rerankModelName, messages)
-	if err != nil {
-		return nil, fmt.Errorf("unable to generate rerank response: %s", err)
-	}
-	log.Print(resp.Message.Content)
-
-	idxs, err := ParseStringToIntArray(resp.Message.Content)
-	if err != nil {
-		return nil, fmt.Errorf("unable to parse rerank response: %s", err)
-	}
-	log.Print(idxs)
-	if len(idxs) == 10 || (len(idxs) == 6 && idxs[0] == 6 && idxs[5] == 1) {
-		// default hallucination value, don't expect num chunks != 10
-		log.Printf("Rerank has hallucinated")
-		return chunks, nil
-	}
-
-	reranked := []*types.Chunk{}
-	for _, idx := range idxs {
-		reranked = append(reranked, chunks[idx-1])
-	}
-
-	return reranked, nil
-}
-
-func MakeRerankMessages(chunks []*types.Chunk, query string) ([]types.HistoryItem, error) {
-	// Define the data structure to hold the variables for the template
-	data := struct {
-		Num   int
-		Query string
-	}{
-		Num:   len(chunks),
-		Query: query,
-	}
-
-	// Define a multiline string literal as the template
-	tmpl := `I will provide you with {{ .Num }} passages, each indicated by number identifier [].	Rank the passages based on their relevance to query: {{.Query}}.`
-
-	// Parse the template string
-	t, err := template.New("passages").Parse(tmpl)
-	if err != nil {
-		return nil, err
-	}
-
-	var buffer bytes.Buffer
-	// Execute the template with the data and output to stdout
-	err = t.Execute(&buffer, data)
-	if err != nil {
-		return nil, err
-	}
-	content2 := buffer.String()
-
-	tmpl_suffix := "Search Query: {{ .Num }}. \nRank the {num} passages above based on their relevance to the search query. The passages should be listed in descending order using identifiers. The most relevant passages should be listed first. The output format should be [] > [], e.g., [1] > [2]. Only response the ranking results, do not say any word or explain."
-
-	// Parse the template string
-	t, err = template.New("passages").Parse(tmpl_suffix)
-	if err != nil {
-		return nil, err
-	}
-
-	var buffer2 bytes.Buffer
-	// Execute the template with the data and output to stdout
-	err = t.Execute(&buffer2, data)
-	if err != nil {
-		return nil, err
-	}
-	suffix := buffer2.String()
-
-	messages := []types.HistoryItem{
-		{
-			Role:    "system",
-			Content: "You are RankGPT, an intelligent assistant that can rank passages based on their relevancy to the query.",
-		},
-		{
-			Role:    "user",
-			Content: content2,
-		},
-		{
-			Role:    "assistant",
-			Content: "Okay, please provide the passages.",
-		},
-	}
-
-	for i, chunk := range chunks {
-		messages = append(messages, []types.HistoryItem{
-			{
-				Role:    "user",
-				Content: fmt.Sprintf("\n[%d] %s: %s\n", i+1, chunk.Name, chunk.Text),
-			},
-			{
-				Role:    "assistant",
-				Content: fmt.Sprintf("Received passage [%d].", i+1),
-			},
-		}...)
-	}
-	messages = append(messages, types.HistoryItem{
-		Role:    "user",
-		Content: suffix,
-	})
-
-	return messages, nil
 }
 
 // TODO: function calling?

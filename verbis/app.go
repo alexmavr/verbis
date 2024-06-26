@@ -10,10 +10,13 @@ import (
 
 var (
 	//	httpClient          = &http.Client{Timeout: 10 * time.Second}
-	generationModelName = "custom-mistral"
-	embeddingsModelName = "nomic-embed-text:latest"
-	clean               = false
-	KeepAliveTime       = "20m"
+	generationModelName        = "custom-mistral"
+	summarizationModelName     = "custom-summarizer"
+	summarizationContextLength = 32768
+	tokensPerWord              = 4 // Assumption for chunking
+	embeddingsModelName        = "nomic-embed-text:latest"
+	clean                      = true
+	KeepAliveTime              = "20m"
 
 	// Will be populated by linker from .builder.env
 	PosthogAPIKey     = "n/a"

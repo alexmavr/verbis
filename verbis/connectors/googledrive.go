@@ -252,6 +252,7 @@ func (g *GoogleDriveConnector) processFile(ctx context.Context, service *drive.S
 	}
 
 	emitChunks(file.Name, content, document, chunkChan)
+	chunkChan <- types.ChunkSyncResult{DocumentDone: document.UniqueID}
 }
 
 func (g *GoogleDriveConnector) listFiles(ctx context.Context, service *drive.Service, lastSync time.Time, chunkChan chan types.ChunkSyncResult) error {

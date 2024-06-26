@@ -6,6 +6,8 @@ type Store interface {
 	ChunkHashExists(ctx context.Context, hash string) (bool, error)
 	GetChunkByHash(ctx context.Context, hash string) (*Chunk, error)
 	GetDocument(ctx context.Context, uniqueID string) (*Document, error)
+	GetDocumentChunkTexts(ctx context.Context, uniqueID string) ([]string, error)
+	SetDocumentSummary(ctx context.Context, uniqueID string, summary string) error
 	AddVectors(ctx context.Context, items []AddVectorItem) (*AddVectorResponse, error)
 	HybridSearch(ctx context.Context, query string, vector []float32) ([]*Chunk, error)
 	CreateDocumentClass(ctx context.Context, force bool) error

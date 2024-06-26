@@ -51,15 +51,16 @@ type Document struct {
 	ConnectorType string    `json:"connector_type"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
+	Summary       string    `json:"summary"`
 }
 
 type Conversation struct {
-	ID			string			`json:"id"`
-	History		[]HistoryItem	`json:"history"`
-	ChunkHashes	[]string		`json:"chunk_hashes"`
-	CreatedAt	time.Time		`json:"created_at"`
-	UpdatedAt	time.Time		`json:"updated_at"`
-	Title		string			`json:"title"`
+	ID          string        `json:"id"`
+	History     []HistoryItem `json:"history"`
+	ChunkHashes []string      `json:"chunk_hashes"`
+	CreatedAt   time.Time     `json:"created_at"`
+	UpdatedAt   time.Time     `json:"updated_at"`
+	Title       string        `json:"title"`
 }
 
 type BuildCredentials struct {

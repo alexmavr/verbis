@@ -54,6 +54,7 @@ type BootContext struct {
 	Syncer            *Syncer
 	Logfile           *os.File
 	Version           string
+	LLMManager        *LLMManager
 }
 
 type Timers struct {
@@ -155,8 +156,8 @@ func BootOnboard(creds types.BuildCredentials, version string) (*BootContext, er
 			[]string{
 				"OLLAMA_HOST=" + OllamaHost,
 				"OLLAMA_KEEP_ALIVE=" + KeepAliveTime,
-				"OLLAMA_MAX_LOADED_MODELS=2",
-				"OLLAMA_NUM_PARALLEL=11",
+				"OLLAMA_MAX_LOADED_MODELS=3",
+				"OLLAMA_NUM_PARALLEL=15",
 				"OLLAMA_FLASH_ATTENTION=1",
 				"OLLAMA_MODELS=" + ollamaModelsPath,
 				"OLLAMA_RUNNERS_DIR=" + ollamaRunnersPath,
@@ -198,7 +199,10 @@ func BootOnboard(creds types.BuildCredentials, version string) (*BootContext, er
 	certPath := filepath.Join(path, "certs/localhost.pem")
 	keyPath := filepath.Join(path, "certs/localhost-key.pem")
 
-	syncer := NewSyncer(bootCtx.PosthogClient, bootCtx.PosthogDistinctID, bootCtx.Credentials, bootCtx.Version, weaviateStore)
+	llmManager := NewLLMManager()
+	bootCtx.LLMManager = llmManager
+
+	syncer := NewSyncer(ctx, bootCtx.PosthogClient, bootCtx.PosthogDistinctID, bootCtx.Credentials, bootCtx.Version, weaviateStore, llmManager)
 	if PosthogAPIKey == "n/a" {
 		log.Fatalf("Posthog API key not set\n")
 	}
@@ -210,6 +214,7 @@ func BootOnboard(creds types.BuildCredentials, version string) (*BootContext, er
 		Context:           bootCtx,
 		Version:           version,
 		store:             weaviateStore,
+		llmManager:        llmManager,
 	}
 	router := api.SetupRouter()
 
@@ -392,7 +397,7 @@ func BootSyncing(ctx *BootContext) error {
 	if err != nil {
 		log.Fatalf("Failed to initialize syncer: %s\n", err)
 	}
-	go ctx.Syncer.Run(ctx)
+	go ctx.Syncer.Run()
 
 	ctx.State = BootStateSyncing
 	ctx.SyncingTime = time.Now()
@@ -405,7 +410,7 @@ func BootGen(ctx *BootContext) error {
 		log.Fatalf("Failed to copy reranker model: %s\n", err)
 	}
 
-	err = initModels([]string{generationModelName})
+	err = initModels([]string{generationModelName, summarizationModelName})
 	if err != nil {
 		log.Fatalf("Failed to initialize models: %s\n", err)
 	}
@@ -413,7 +418,7 @@ func BootGen(ctx *BootContext) error {
 	retries := 0
 	maxRetries := 5
 	for {
-		resp, err := chatWithModel("What is the capital of France? Respond in one word only", generationModelName, []types.HistoryItem{})
+		resp, err := ctx.LLMManager.ChatWithModel(ctx, "What is the capital of France? Respond in one word only", generationModelName, []types.HistoryItem{})
 
 		if err != nil {
 			if retries < maxRetries && strings.Contains(err.Error(), "try pulling it first") {

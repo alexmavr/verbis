@@ -318,7 +318,7 @@ func (s *SlackConnector) processMessage(document types.Document, client *slack.C
 	incomingWordCount := len(strings.Fields(content))
 
 	if incomingWordCount > MaxChunkSize {
-		// TODO: handle large messages
+		// TODO: split large messages to chunks, right now they're in one big chunk
 	}
 
 	if currentWordCount+incomingWordCount <= MaxChunkSize {

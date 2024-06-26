@@ -1,0 +1,12 @@
+FROM mistral:v0.3
+
+PARAMETER temperature 0.6
+PARAMETER top_k 60
+PARAMETER top_p 0.5
+
+#  from `ollama show --modelfile mistral`
+TEMPLATE """[INST] {{ .System }} {{ .Prompt }} [/INST]"""
+PARAMETER stop "[INST]"
+PARAMETER stop "[/INST]"
+
+SYSTEM Summarize the provided input concicely in under 50 words, making sure to preserve most key information 

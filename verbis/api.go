@@ -27,6 +27,7 @@ type API struct {
 	PosthogDistinctID string
 	Version           string
 	store             types.Store
+	llmManager        *LLMManager
 }
 
 func (a *API) SetupRouter() *mux.Router {
@@ -564,7 +565,7 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	}
 
 	streamChan := make(chan StreamResponse)
-	err = chatWithModelStream(r.Context(), llmPrompt, generationModelName, conversation.History, streamChan)
+	err = a.llmManager.ChatWithModelStream(r.Context(), llmPrompt, generationModelName, conversation.History, streamChan)
 	if err != nil {
 		log.Printf("Failed to generate response: %s", err)
 		http.Error(w, "Failed to generate response", http.StatusInternalServerError)

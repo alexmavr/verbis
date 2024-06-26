@@ -201,6 +201,8 @@ func (g *GmailConnector) processEmail(ctx context.Context, srv *gmail.Service, e
 	}
 
 	emitChunks(subject, content, document, chunkChan)
+
+	chunkChan <- types.ChunkSyncResult{DocumentDone: document.UniqueID}
 }
 
 func (g *GmailConnector) listEmails(ctx context.Context, srv *gmail.Service, lastSync time.Time, chunkChan chan types.ChunkSyncResult) error {

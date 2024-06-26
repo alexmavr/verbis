@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,6 +25,7 @@ const (
 )
 
 type Syncer struct {
+	ctx               context.Context
 	connectors        map[string]types.Connector
 	syncCheckPeriod   time.Duration
 	staleThreshold    time.Duration
@@ -32,10 +34,17 @@ type Syncer struct {
 	credentials       types.BuildCredentials
 	version           string
 	store             types.Store
+	llmManager        *LLMManager
+	syncing           sync.WaitGroup
+	docChan           chan string
+	docListMutex      sync.Mutex
+	docsToSummarize   []string
+	summarizing       bool
 }
 
-func NewSyncer(posthogClient posthog.Client, posthogDistinctID string, creds types.BuildCredentials, version string, st types.Store) *Syncer {
+func NewSyncer(ctx context.Context, posthogClient posthog.Client, posthogDistinctID string, creds types.BuildCredentials, version string, st types.Store, llmManager *LLMManager) *Syncer {
 	return &Syncer{
+		ctx:               ctx,
 		connectors:        map[string]types.Connector{},
 		syncCheckPeriod:   1 * time.Minute,
 		staleThreshold:    1 * time.Minute,
@@ -44,6 +53,11 @@ func NewSyncer(posthogClient posthog.Client, posthogDistinctID string, creds typ
 		credentials:       creds,
 		version:           version,
 		store:             st,
+		llmManager:        llmManager,
+		syncing:           sync.WaitGroup{},
+		docChan:           make(chan string),
+		docListMutex:      sync.Mutex{},
+		docsToSummarize:   []string{},
 	}
 }
 
@@ -71,6 +85,8 @@ func (s *Syncer) Init(ctx context.Context) error {
 			return fmt.Errorf("failed to add connector %s: %s", state.ConnectorID, err)
 		}
 	}
+
+	// TODO: find documents that need summarization and add to s.docsToSummarize
 
 	log.Printf("Syncer initialized with %d connectors from stored states", count)
 	return nil
@@ -129,18 +145,25 @@ func (s *Syncer) GetConnectorStates(ctx context.Context, fetch_all bool) ([]*typ
 
 // On launch, and after every sync_period, find all connectors that are not
 // actively syncing
-func (s *Syncer) Run(ctx context.Context) error {
+func (s *Syncer) Run() error {
 	defer log.Printf("Syncer has stopped")
 	for {
 		select {
-		case <-ctx.Done():
+		case <-s.ctx.Done():
 			return nil
 		case <-time.After(s.syncCheckPeriod):
 			// TODO clean stale connectors
-			err := s.SyncNow(ctx)
+			err := s.SyncNow(s.ctx)
 			if err != nil {
 				log.Printf("Failed to sync: %s\n", err)
 			}
+			if !s.summarizing {
+				go s.consumeDocsToSummarize()
+			}
+		case docID := <-s.docChan:
+			s.docListMutex.Lock()
+			s.docsToSummarize = append(s.docsToSummarize, docID)
+			s.docListMutex.Unlock()
 		}
 	}
 }
@@ -167,6 +190,17 @@ func (s *Syncer) chunkAdder(ctx context.Context, chunkChan chan types.ChunkSyncR
 			}
 			continue
 		}
+
+		if res.DocumentDone != "" {
+			// Flag the document for background summarization for after the sync
+			// is complete.
+			s.docChan <- res.DocumentDone
+		}
+
+		if res.Chunk.Text == "" {
+			continue
+		}
+
 		chunk := res.Chunk
 
 		saneChunk := chunk.Text
@@ -290,6 +324,11 @@ func copyState(state *types.ConnectorState) (*types.ConnectorState, error) {
 }
 
 func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *types.ConnectorState) error {
+	// Block summarization and other operations that need to wait for embeddings
+	// sync to complete.
+	s.syncing.Add(1)
+	defer s.syncing.Done()
+
 	// Keep a copy of the current connector state to calculate diffs
 	prevState, err := copyState(state)
 	if err != nil {
@@ -471,4 +510,80 @@ func (s *Syncer) SyncNow(ctx context.Context) error {
 	wg.Wait()
 	// log.Printf("SyncNow complete")
 	return nil
+}
+
+func (s *Syncer) consumeDocsToSummarize() {
+	if len(s.docsToSummarize) == 0 {
+		return
+	}
+
+	// Make sure all embeddings are synced before summarizing
+	s.syncing.Wait()
+
+	// Grab the list to be processed and clear the queue
+	s.docListMutex.Lock()
+	s.summarizing = true
+	docList := make([]string, len(s.docsToSummarize))
+	copy(docList, s.docsToSummarize)
+	s.docsToSummarize = []string{}
+	s.docListMutex.Unlock()
+
+	for _, docID := range docList {
+		err := s.SummarizeDocument(s.ctx, docID)
+		if err != nil {
+			log.Printf("Failed to summarize document %s: %s", docID, err)
+		} else {
+			log.Printf("Summarized document %s", docID)
+		}
+	}
+	s.docListMutex.Lock()
+	s.summarizing = false
+	s.docListMutex.Unlock()
+}
+
+func (s *Syncer) SummarizeDocument(ctx context.Context, uniqueID string) error {
+	texts, err := s.store.GetDocumentChunkTexts(ctx, uniqueID)
+	if err != nil {
+		return fmt.Errorf("failed to get document chunks: %s", err)
+	}
+
+	// Summarize the document with a map-reduce operation
+	summaries := []string{}
+
+	// Group chunks until the context size fits. Assume 1 token = 4 words
+	chunkBuffer := ""
+	for _, text := range texts {
+		if len(chunkBuffer)+len(text) < summarizationContextLength/tokensPerWord {
+			chunkBuffer += text + " "
+			continue
+		}
+
+		s.syncing.Wait() // Make sure we're not syncing before calling the LLM
+		summary, err := s.llmManager.SummarizeLLM(ctx, text)
+		if err != nil {
+			return fmt.Errorf("failed to summarize chunk of length %d: %s", len(text), err)
+		}
+		summaries = append(summaries, summary)
+
+		chunkBuffer = text + " "
+	}
+
+	if chunkBuffer != "" {
+		summary, err := s.llmManager.SummarizeLLM(ctx, chunkBuffer)
+		if err != nil {
+			return fmt.Errorf("failed to summarize chunk of length %d: %s", len(chunkBuffer), err)
+		}
+		summaries = append(summaries, summary)
+	}
+
+	log.Printf("Summarized %d texts to %d summaries\n", len(texts), len(summaries))
+
+	// Reduce to one summary
+	// TODO: recurse if the joined summaries exceed the context length
+	finalSummary, err := s.llmManager.SummarizeLLM(ctx, strings.Join(summaries, "\n"))
+	if err != nil {
+		return fmt.Errorf("failed to reduce %d summaries: %s", len(summaries), err)
+	}
+
+	return s.store.SetDocumentSummary(ctx, uniqueID, finalSummary)
 }

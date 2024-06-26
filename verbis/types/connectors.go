@@ -46,4 +46,9 @@ type ChunkSyncResult struct {
 	// indicate different messages. The connector takes over the responsibility
 	// of sanitizing the content appropriately with util.CleanChunk
 	SkipClean bool
+
+	// When DocumentDone is set to a document's UniqueID, this indicates the
+	// last chunk of the document has been sent in a previous message. This is
+	// used to trigger a document summarization.
+	DocumentDone string
 }

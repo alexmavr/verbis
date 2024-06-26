@@ -30,7 +30,10 @@ var (
 
 const (
 	MaxNumSearchResults = 10
-	HybridSearchAlpha   = 0.4
+	HybridSearchAlpha   = 0.3
+
+	// Max number of chunks per document, will break after that
+	WeaviateMaxResults = 1000
 )
 
 type WeaviateStore struct {
@@ -142,10 +145,104 @@ func (w *WeaviateStore) GetDocument(ctx context.Context, uniqueID string) (*type
 		SourceURL:     docData["sourceURL"].(string),
 		ConnectorID:   docData["connectorID"].(string),
 		ConnectorType: docData["connectorType"].(string),
+		Summary:       docData["summary"].(string),
 		CreatedAt:     createdAt,
 		UpdatedAt:     updatedAt,
 	}
 	return doc, nil
+}
+
+func (w *WeaviateStore) SetDocumentSummary(ctx context.Context, uniqueID string, summary string) error {
+	docID, err := getDocumentIDFromUniqueID(ctx, w.client, uniqueID)
+	if err != nil {
+		return fmt.Errorf("unable to get document ID: %v", err)
+	}
+	if docID == "" {
+		return ErrDocumentNotFound
+	}
+
+	docData, err := getDocument(ctx, w.client, docID)
+	if err != nil {
+		return fmt.Errorf("unable to get document: %s", err)
+	}
+	createdAt, _ := time.Parse(time.RFC3339, docData["createdAt"].(string))
+	updatedAt, _ := time.Parse(time.RFC3339, docData["updatedAt"].(string))
+
+	doc := &types.Document{
+		Name:          docData["name"].(string),
+		SourceURL:     docData["sourceURL"].(string),
+		ConnectorID:   docData["connectorID"].(string),
+		ConnectorType: docData["connectorType"].(string),
+		Summary:       summary,
+		CreatedAt:     createdAt,
+		UpdatedAt:     updatedAt,
+	}
+
+	properties := map[string]interface{}{
+		"unique_id":     doc.UniqueID,
+		"name":          doc.Name,
+		"sourceURL":     doc.SourceURL,
+		"connectorID":   doc.ConnectorID,
+		"connectorType": doc.ConnectorType,
+		"summary":       summary,
+		"createdAt":     doc.CreatedAt.Format(time.RFC3339),
+		"updatedAt":     doc.UpdatedAt.Format(time.RFC3339),
+	}
+	err = w.client.Data().Updater(). // replaces the entire object
+						WithID(docID).
+						WithClassName(documentClassName).
+						WithProperties(properties).
+						Do(ctx)
+	return err
+}
+
+func (w *WeaviateStore) GetDocumentChunkTexts(ctx context.Context, uniqueID string) ([]string, error) {
+	docID, err := getDocumentIDFromUniqueID(ctx, w.client, uniqueID)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get document ID: %v", err)
+	}
+
+	where := filters.Where().
+		WithPath([]string{"documentid"}).
+		WithOperator(filters.Equal).
+		WithValueString(docID)
+
+	resp, err := w.client.GraphQL().
+		Get().
+		WithClassName(chunkClassName).
+		WithWhere(where).
+		WithLimit(WeaviateMaxResults).
+		WithFields([]graphql.Field{
+			{Name: "chunk"},
+		}...).
+		Do(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.Data["Get"] == nil {
+		return nil, fmt.Errorf("no chunks found")
+	}
+	get := resp.Data["Get"].(map[string]interface{})
+	if get[chunkClassName] == nil {
+		// return empty result
+		return nil, nil
+	}
+
+	chunks := get[chunkClassName].([]interface{})
+	texts := []string{}
+	for _, chunkMap := range chunks {
+		c := chunkMap.(map[string]interface{})
+
+		// Retrieve and parse document details from the linked Document
+		text, ok := c["chunk"].(string)
+		if !ok {
+			return nil, fmt.Errorf("unable to assert chunk text as string")
+		}
+		texts = append(texts, text)
+	}
+
+	return texts, nil
 }
 
 func getDocumentIDFromUniqueID(ctx context.Context, client *weaviate.Client, uniqueID string) (string, error) {
@@ -228,6 +325,7 @@ func (w *WeaviateStore) AddVectors(ctx context.Context, items []types.AddVectorI
 					"sourceURL":     item.Document.SourceURL,
 					"connectorID":   item.Document.ConnectorID,
 					"connectorType": item.Document.ConnectorType,
+					"summary":       "", // To be populated when the document is summarized
 					"createdAt":     item.Document.CreatedAt.Format(time.RFC3339),
 					"updatedAt":     item.Document.UpdatedAt.Format(time.RFC3339),
 				},
@@ -362,6 +460,7 @@ func parseChunks(ctx context.Context, client *weaviate.Client, chunks []interfac
 				SourceURL:     docData["sourceURL"].(string),
 				ConnectorID:   docData["connectorID"].(string),
 				ConnectorType: docData["connectorType"].(string),
+				Summary:       docData["summary"].(string),
 				CreatedAt:     createdAt,
 				UpdatedAt:     updatedAt,
 			},
@@ -410,6 +509,10 @@ func (w *WeaviateStore) CreateDocumentClass(ctx context.Context, force bool) err
 			{
 				Name:     "updatedAt",
 				DataType: []string{"date"},
+			},
+			{
+				Name:     "summary",
+				DataType: []string{"text"},
 			},
 		},
 	}

@@ -251,6 +251,7 @@ func (o *OutlookConnector) processEmail(ctx context.Context, email models.Messag
 	log.Printf("Processing email of size %d: title: %s", len(content), document.Name)
 
 	emitChunks(email_subject, content, document, chunkChan)
+	chunkChan <- types.ChunkSyncResult{DocumentDone: document.UniqueID}
 }
 
 func (o *OutlookConnector) listEmails(ctx context.Context, client *msgraph.GraphServiceClient, lastSync time.Time, chunkChan chan types.ChunkSyncResult) error {
