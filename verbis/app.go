@@ -15,7 +15,7 @@ var (
 	summarizationContextLength = 32768
 	tokensPerWord              = 4 // Assumption for chunking
 	embeddingsModelName        = "nomic-embed-text:latest"
-	clean                      = true
+	clean                      = false
 	KeepAliveTime              = "20m"
 
 	// Will be populated by linker from .builder.env
