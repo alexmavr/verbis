@@ -185,7 +185,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
           </div>
         ) : (
           // Assistant message
-          <div className="m-4">
+          <div className="m-4 ml-8">
             <div className="text-justify">
               {item.content}
               {item.hasOwnProperty("sources") &&
@@ -227,7 +227,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
       <div className="flex h-screen flex-col">
         <div
           ref={conversationContainer}
-          className="max-h-[calc(100vh-140px)] flex-grow overflow-y-auto text-base"
+          className="max-h-[calc(100vh-140px)] flex-grow overflow-y-auto text-sm"
         >
           {/* Adjust paddingBottom to accommodate the prompt area */}
           {/* Conversation history */}
