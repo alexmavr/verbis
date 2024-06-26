@@ -5,7 +5,7 @@ import GDriveLogo from "../../assets/connectors/gdrive.svg";
 import GMailLogo from "../../assets/connectors/gmail.svg";
 import OutlookLogo from "../../assets/connectors/outlook.svg";
 import SlackLogo from "../../assets/connectors/slack.svg";
-import { AppScreen, ResultSource } from "../types";
+import { AppScreen, ConversationItem, ResultSource } from "../types";
 import SidebarComponent from "./SidebarComponent";
 import { Conversation } from "../types";
 
@@ -168,6 +168,56 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
     }
   };
 
+  const renderConversation = (conversationHistory: ConversationItem[]) => {
+    return conversationHistory.map((item: ConversationItem, index: number) => (
+      <div key={index} className={`${item.role}`}>
+        {item.role === "user" ? (
+          // User message
+          <div className="flex justify-end">
+            <div className="card w-96 bg-base-200">
+              <div className="card-body !p-4">
+                <p>{item.content}</p>
+                <div className="card-actions justify-end">
+                  {/* TODO: Feedback actions */}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          // Assistant message
+          <div className="m-4">
+            <div className="text-justify">
+              {item.content}
+              {item.hasOwnProperty("sources") &&
+                item.sources.map(
+                  (source: ResultSource, sourceIndex: number) => {
+                    const LogoComponent = Logos[source.type];
+                    return (
+                      <div key={sourceIndex} className="flex items-center">
+                        <LogoComponent className="mr-1 h-4 w-4" />
+                        <a
+                          href={source.url}
+                          target="none"
+                          className="mr-1 text-blue-600 underline visited:text-purple-600 hover:text-blue-800"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            require("electron").shell.openExternal(source.url);
+                          }}
+                        >
+                          {truncateString(source.title, 30)}
+                        </a>
+                      </div>
+                    );
+                  }
+                )}
+            </div>
+          </div>
+        )}
+      </div>
+    ));
+  };
+
   return (
     <>
       <SidebarComponent
@@ -177,66 +227,13 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
       <div className="flex h-screen flex-col">
         <div
           ref={conversationContainer}
-          className="max-h-[calc(100vh-140px)] flex-grow overflow-y-auto "
+          className="max-h-[calc(100vh-140px)] flex-grow overflow-y-auto text-base"
         >
           {/* Adjust paddingBottom to accommodate the prompt area */}
           {/* Conversation history */}
-          {conversationHistory.length > 0 && (
-            <div className="mr-4 mt-auto flex flex-col">
-              {conversationHistory.map((item, index) => (
-                <div key={index} className={`${item.role}`}>
-                  {item.role === "user" ? (
-                    // User message
-                    <div className="flex justify-end">
-                      <div className="card w-96 bg-base-200">
-                        <div className="card-body !p-4">
-                          <p>{item.content}</p>
-                          <div className="card-actions justify-end">
-                            {/* TODO: Feedback actions */}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    // Assistant message
-                    <div className="m-4">
-                      <div className="text-justify">
-                        {item.content}
-                        {item.hasOwnProperty("sources") &&
-                          item.sources.map(
-                            (source: ResultSource, sourceIndex: number) => {
-                              const LogoComponent = Logos[source.type];
-                              return (
-                                <div
-                                  key={sourceIndex}
-                                  className="flex items-center"
-                                >
-                                  <LogoComponent className="mr-1 h-4 w-4" />
-                                  <a
-                                    href={source.url}
-                                    target="none"
-                                    className="mr-1 text-blue-600 underline visited:text-purple-600 hover:text-blue-800"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      require("electron").shell.openExternal(
-                                        source.url
-                                      );
-                                    }}
-                                  >
-                                    {truncateString(source.title, 30)}
-                                  </a>
-                                </div>
-                              );
-                            }
-                          )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="mr-4 mt-auto flex flex-col">
+            {renderConversation(conversationHistory)}
+          </div>
         </div>
 
         {/* Prompt input and button */}

@@ -20,3 +20,9 @@ export interface Conversation {
   chunks?: any[];
   time_period?: string; // Optional initially
 }
+
+export interface ConversationItem {
+  role: string;
+  content: string;
+  sources?: ResultSource[];
+}
