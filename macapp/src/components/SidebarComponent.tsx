@@ -8,7 +8,7 @@ import { isToday, isThisWeek, isThisMonth, parseISO, format } from "date-fns";
 import {
   MagnifyingGlassIcon,
   PencilSquareIcon,
-} from "@heroicons/react/24/solid";
+} from "@heroicons/react/24/outline";
 import { Conversation } from "../types";
 
 const addTimePeriod = (conversations: Conversation[]): Conversation[] => {
@@ -102,7 +102,7 @@ const SidebarComponent: React.FC<Props> = ({
     return conversations.map((conversation, idx) => (
       <li
         key={idx}
-        className="flex justify-between py-1"
+        className="flex justify-between"
         onClick={() => setSelectedConversation(conversation)}
       >
         <div

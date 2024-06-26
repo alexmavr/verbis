@@ -2,7 +2,7 @@ import React from "react";
 import ThemeSwitcher from "./ThemeSwitcher";
 import VerbisIcon from "../verbis.svg";
 import { AppScreen } from "../types";
-import { CogIcon, XMarkIcon } from "@heroicons/react/24/solid";
+import { CogIcon, XMarkIcon } from "@heroicons/react/24/outline";
 
 interface Props {
   navigate: (screen: AppScreen) => void;

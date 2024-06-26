@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import VerbisIcon from "../verbis.svg";
 import { AppScreen } from "../types";
 import axios from "axios";
-import { CogIcon } from "@heroicons/react/24/solid";
 
 interface Props {
   navigate: (screen: AppScreen) => void;

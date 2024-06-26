@@ -1,13 +1,11 @@
-import { PaperAirplaneIcon, PencilSquareIcon } from "@heroicons/react/24/solid";
+import { PaperAirplaneIcon } from "@heroicons/react/24/solid";
 import React, { useEffect, useRef, useState } from "react";
-import { create_conversation, generate, get_conversation } from "../client";
-import { CogIcon } from "@heroicons/react/24/solid";
+import { generate } from "../client";
 import GDriveLogo from "../../assets/connectors/gdrive.svg";
 import GMailLogo from "../../assets/connectors/gmail.svg";
 import OutlookLogo from "../../assets/connectors/outlook.svg";
 import SlackLogo from "../../assets/connectors/slack.svg";
 import { AppScreen, ResultSource } from "../types";
-import ThemeSwitcher from "./ThemeSwitcher";
 import SidebarComponent from "./SidebarComponent";
 import { Conversation } from "../types";
 
@@ -256,7 +254,7 @@ const ChatComponent: React.FC<Props> = ({ navigate }) => {
                 // setPromptText(promptText + "\n");
               }
             }}
-            className={`flex-grow resize-none overflow-hidden rounded-full border border-gray-300 p-2 pr-16 ${
+            className={`flex-grow resize-none overflow-hidden rounded border border-gray-300 p-2 pr-16 ${
               loading ? "disabled:cursor-not-allowed disabled:opacity-50" : ""
             }`}
             disabled={loading}
