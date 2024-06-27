@@ -4,8 +4,8 @@ SHELL=/bin/zsh
 
 VERSION := v0.0.0
 TAG := $(shell git describe --tags --always --dirty)
-WEAVIATE_VERSION := v1.25.2
-OLLAMA_VERSION := v0.1.41
+WEAVIATE_VERSION := v1.25.5
+OLLAMA_VERSION := v0.1.46
 DIST_DIR := ./dist
 TMP_DIR := /tmp/weaviate-installation
 ZIP_FILE := weaviate-$(WEAVIATE_VERSION)-darwin-all.zip
