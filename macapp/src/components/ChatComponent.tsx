@@ -223,7 +223,7 @@ const ChatComponent: React.FC = () => {
       <div className="flex h-screen flex-col">
         <div
           ref={conversationContainer}
-          className="flex max-h-[calc(100vh-140px)] flex-grow flex-col overflow-y-auto text-sm"
+          className="flex max-h-[calc(100vh-130px)] flex-grow flex-col overflow-y-auto bg-base-100 text-sm"
         >
           {/* Adjust paddingBottom to accommodate the prompt area */}
           {/* Conversation history */}
@@ -233,7 +233,7 @@ const ChatComponent: React.FC = () => {
         </div>
 
         {/* Prompt input and button */}
-        <div className="fixed inset-x-0 bottom-0 left-64 flex items-center bg-white px-4 py-2">
+        <div className="fixed inset-x-0 bottom-0 left-64 flex items-center bg-transparent px-4 py-2 text-sm">
           <textarea
             ref={promptInputRef}
             value={promptText}
@@ -254,7 +254,7 @@ const ChatComponent: React.FC = () => {
           />
           <button
             onClick={triggerPrompt}
-            className={`absolute bottom-4 right-4 mb-2 mr-2 flex h-8 w-8 items-center justify-center rounded-full bg-blue-500 font-bold text-white hover:bg-blue-700 ${
+            className={`absolute bottom-2 right-4 mb-2 mr-2 flex h-8 w-8 items-center justify-center rounded-full bg-blue-500 font-bold text-white hover:bg-blue-700 ${
               loading ? "disabled:cursor-not-allowed disabled:opacity-50" : ""
             }`}
             disabled={loading}
