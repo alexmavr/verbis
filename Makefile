@@ -75,11 +75,56 @@ dist/ms-marco-MiniLM-L-12-v2:
 	rm ms-marco-MiniLM-L-12-v2.zip
 
 dist/pdftotext:
-	brew install poppler
+	brew install poppler fontconfig
 	mkdir -p dist/pdftotext
 	mkdir -p dist/lib
-	cp /opt/homebrew/bin/pdftotext dist/pdftotext/pdftotext
 	cp /opt/homebrew/lib/libpoppler.136.dylib dist/lib/libpoppler.136.dylib
+	cp /opt/homebrew/opt/freetype/lib/libfreetype.6.dylib dist/lib/libfreetype.6.dylib
+	cp /opt/homebrew/opt/fontconfig/lib/libfontconfig.1.dylib dist/lib/libfontconfig.1.dylib
+	cp /opt/homebrew/opt/jpeg-turbo/lib/libjpeg.8.dylib dist/lib/libjpeg.8.dylib
+	cp /opt/homebrew/opt/gpgme/lib/libgpgmepp.6.dylib dist/lib/libgpgmepp.6.dylib
+	cp /opt/homebrew/opt/gpgme/lib/libgpgme.11.dylib dist/lib/libgpgme.11.dylib
+	cp /opt/homebrew/opt/openjpeg/lib/libopenjp2.7.dylib dist/lib/libopenjp2.7.dylib
+	cp /opt/homebrew/opt/little-cms2/lib/liblcms2.2.dylib dist/lib/liblcms2.2.dylib
+	cp /opt/homebrew/opt/libpng/lib/libpng16.16.dylib dist/lib/libpng16.16.dylib
+	cp /opt/homebrew/opt/libtiff/lib/libtiff.6.dylib dist/lib/libtiff.6.dylib
+	cp /opt/homebrew/opt/nss/lib/libnss3.dylib dist/lib/libnss3.dylib
+	cp /opt/homebrew/opt/nss/lib/libnssutil3.dylib dist/lib/libnssutil3.dylib
+	cp /opt/homebrew/opt/nss/lib/libsmime3.dylib dist/lib/libsmime3.dylib
+	cp /opt/homebrew/opt/nss/lib/libssl3.dylib dist/lib/libssl3.dylib
+	cp /opt/homebrew/opt/nspr/lib/libplds4.dylib dist/lib/libplds4.dylib
+	cp /opt/homebrew/opt/nspr/lib/libplc4.dylib dist/lib/libplc4.dylib
+	cp /opt/homebrew/opt/nspr/lib/libnspr4.dylib dist/lib/libnspr4.dylib
+	sudo cp -L /opt/homebrew/opt/openjpeg/lib/libopenjp2.7.dylib dist/lib/libopenjp2.7.dylib
+	cp /opt/homebrew/opt/libassuan/lib/libassuan.0.dylib dist/lib/libassuan.0.dylib
+	cp /opt/homebrew/opt/zstd/lib/libzstd.1.dylib dist/lib/lib
+	cp /opt/homebrew/opt/libgpg-error/lib/libgpg-error.0.dylib dist/lib/libgpg-error.0.dylib 
+	cp /opt/homebrew/bin/pdftotext dist/pdftotext/pdftotext
+	install_name_tool -change /opt/homebrew/opt/zstd/lib/libzstd.1.dylib @executable_path/../lib/libzstd.1.dylib dist/lib/libtiff.6.dylib
+	install_name_tool -change /opt/homebrew/opt/freetype/lib/libfreetype.6.dylib @executable_path/../lib/libfreetype.6.dylib dist/lib/libpoppler.136.dylib
+	install_name_tool -change /opt/homebrew/opt/fontconfig/lib/libfontconfig.1.dylib @executable_path/../lib/libfontconfig.1.dylib dist/lib/libpoppler.136.dylib
+	install_name_tool -change /opt/homebrew/opt/jpeg-turbo/lib/libjpeg.8.dylib @executable_path/../lib/libjpeg.8.dylib dist/lib/libpoppler.136.dylib
+	install_name_tool -change /opt/homebrew/opt/gpgme/lib/libgpgmepp.6.dylib @executable_path/../lib/libgpgmepp.6.dylib dist/lib/libpoppler.136.dylib
+	install_name_tool -change /opt/homebrew/opt/gpgme/lib/libgpgme.11.dylib @executable_path/../lib/libgpgme.11.dylib dist/lib/libpoppler.136.dylib
+	install_name_tool -change /opt/homebrew/opt/gpgme/lib/libgpgme.11.dylib @executable_path/../lib/libgpgme.11.dylib dist/lib/libgpgmepp.6.dylib
+	install_name_tool -change /opt/homebrew/opt/openjpeg/lib/libopenjp2.7.dylib @executable_path/../lib/libopenjp2.7.dylib dist/lib/libpoppler.136.dylib
+	install_name_tool -change /opt/homebrew/opt/little-cms2/lib/liblcms2.2.dylib @executable_path/../lib/liblcms2.2.dylib dist/lib/libpoppler.136.dylib
+	install_name_tool -change /opt/homebrew/opt/libpng/lib/libpng16.16.dylib @executable_path/../lib/libpng16.16.dylib dist/lib/libpoppler.136.dylib
+	install_name_tool -change /opt/homebrew/opt/libtiff/lib/libtiff.6.dylib @executable_path/../lib/libtiff.6.dylib dist/lib/libpoppler.136.dylib
+	install_name_tool -change /opt/homebrew/opt/nss/lib/libnss3.dylib @executable_path/../lib/libnss3.dylib dist/lib/libpoppler.136.dylib
+	install_name_tool -change /opt/homebrew/opt/nss/lib/libnss3.dylib @executable_path/../lib/libnss3.dylib dist/lib/libsmime3.dylib
+	install_name_tool -change /opt/homebrew/opt/nss/lib/libnss3.dylib @executable_path/../lib/libnss3.dylib dist/lib/libssl3.dylib
+	install_name_tool -change /opt/homebrew/opt/nss/lib/libnssutil3.dylib @executable_path/../lib/libnssutil3.dylib dist/lib/libpoppler.136.dylib
+	install_name_tool -change /opt/homebrew/opt/nss/lib/libnssutil3.dylib @executable_path/../lib/libnssutil3.dylib dist/lib/libnss3.dylib
+	install_name_tool -change /opt/homebrew/opt/nss/lib/libsmime3.dylib @executable_path/../lib/libsmime3.dylib dist/lib/libpoppler.136.dylib
+	install_name_tool -change /opt/homebrew/opt/nss/lib/libssl3.dylib @executable_path/../lib/libssl3.dylib dist/lib/libpoppler.136.dylib
+	install_name_tool -change /opt/homebrew/opt/nspr/lib/libplds4.dylib @executable_path/../lib/libplds4.dylib dist/lib/libpoppler.136.dylib
+	install_name_tool -change /opt/homebrew/opt/nspr/lib/libplc4.dylib @executable_path/../lib/libplc4.dylib dist/lib/libpoppler.136.dylib
+	install_name_tool -change /opt/homebrew/opt/nspr/lib/libnspr4.dylib @executable_path/../lib/libnspr4.dylib dist/lib/libpoppler.136.dylib
+	install_name_tool -change /opt/homebrew/opt/nspr/lib/libnspr4.dylib @executable_path/../lib/libnspr4.dylib dist/lib/libplds4.dylib
+	install_name_tool -change /opt/homebrew/opt/nspr/lib/libnspr4.dylib @executable_path/../lib/libnspr4.dylib dist/lib/libplc4.dylib
+	install_name_tool -change /opt/homebrew/opt/libassuan/lib/libassuan.0.dylib  @executable_path/../lib/libassuan.0.dylib dist/lib/libpoppler.136.dylib
+	install_name_tool -change /opt/homebrew/opt/libgpg-error/lib/libgpg-error.0.dylib @executable_path/../lib/libgpg-error.0.dylib dist/lib/libgpgme.11.dylib
 
 dist/rerank:
 	( \
