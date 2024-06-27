@@ -9,3 +9,4 @@ credentials.json
 .python-version
 OME
 arxiv_papers/*
+macapp/out/*
