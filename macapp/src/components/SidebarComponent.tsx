@@ -133,15 +133,15 @@ const SidebarComponent: React.FC<Props> = ({
       <div className="drawer-side w-64 bg-base-200">
         <div className="min-h-full">
           <div className="m-2.5 flex items-center gap-1">
-            <label className="flex h-8 items-center gap-1 rounded-lg bg-base-300 pl-2 shadow-sm">
+            {/* <label className="flex h-8 items-center gap-1 rounded-lg bg-base-300 pl-2 shadow-sm">
               <MagnifyingGlassIcon className="h-4 w-4 opacity-70" />
               <input
                 type="text"
                 className="bg-transparent outline-none"
                 placeholder="Search"
               />
-            </label>
-            <button className="" onClick={startNewConversation}>
+            </label> */}
+            <button className="btn btn-ghost" onClick={startNewConversation}>
               <PencilSquareIcon className="h-6 w-6" />
             </button>
           </div>
