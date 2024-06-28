@@ -16,7 +16,7 @@ To create a new release:
 
 
 ### Release process
-5. Update the Makefile VERSION parameter to the new version tag
+5. Update the Makefile VERSION and package.json version parameters to the new version tag
 6. Run `make clean` to remove any previous artifacts which may be stale
 7. Run `make release` to generate the new release artifacts
 8. Commit the updated Makefile to the appropriate branch
