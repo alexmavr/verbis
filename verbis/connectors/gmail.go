@@ -19,7 +19,6 @@ import (
 
 	"github.com/verbis-ai/verbis/verbis/keychain"
 	"github.com/verbis-ai/verbis/verbis/types"
-	"github.com/verbis-ai/verbis/verbis/util"
 )
 
 func NewGmailConnector(creds types.BuildCredentials, st types.Store) types.Connector {
@@ -28,11 +27,13 @@ func NewGmailConnector(creds types.BuildCredentials, st types.Store) types.Conne
 			connectorType: types.ConnectorTypeGmail,
 			store:         st,
 		},
+		GoogleJSONCreds: creds.GoogleJSONCreds,
 	}
 }
 
 type GmailConnector struct {
 	BaseConnector
+	GoogleJSONCreds string
 }
 
 func (g *GmailConnector) getClient(ctx context.Context, config *oauth2.Config) (*http.Client, error) {
@@ -60,7 +61,7 @@ var gmailScopes []string = []string{
 }
 
 func (g *GmailConnector) AuthSetup(ctx context.Context) error {
-	config, err := gmailConfigFromJSON()
+	config, err := gmailConfigFromJSON(g.GoogleJSONCreds)
 	if err != nil {
 		return fmt.Errorf("unable to get google config: %s", err)
 	}
@@ -78,21 +79,13 @@ func (g *GmailConnector) AuthSetup(ctx context.Context) error {
 	return nil
 }
 
-func gmailConfigFromJSON() (*oauth2.Config, error) {
-	path, err := util.GetDistPath()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get dist path: %v", err)
-	}
-	b, err := os.ReadFile(filepath.Join(path, googleCredentialFile))
-	if err != nil {
-		return nil, fmt.Errorf("unable to read client secret file: %v", err)
-	}
-	return google.ConfigFromJSON(b, gmailScopes...)
+func gmailConfigFromJSON(credsBlob string) (*oauth2.Config, error) {
+	return google.ConfigFromJSON([]byte(credsBlob), gmailScopes...)
 }
 
 // TODO: handle token expiries
 func (g *GmailConnector) AuthCallback(ctx context.Context, authCode string) error {
-	config, err := gmailConfigFromJSON()
+	config, err := gmailConfigFromJSON(g.GoogleJSONCreds)
 	if err != nil {
 		return fmt.Errorf("unable to get google config: %s", err)
 	}
@@ -130,7 +123,7 @@ func (g *GmailConnector) Sync(lastSync time.Time, chunkChan chan types.ChunkSync
 	defer close(chunkChan)
 
 	log.Printf("Starting gmail sync")
-	config, err := gmailConfigFromJSON()
+	config, err := gmailConfigFromJSON(g.GoogleJSONCreds)
 	if err != nil {
 		errChan <- fmt.Errorf("unable to get google config: %s", err)
 		return

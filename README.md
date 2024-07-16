@@ -7,6 +7,8 @@ various SaaS applications, Verbis AI indexes all your data securely and locally
 on your system. Verbis provides a single interface to query and manage your
 information with the power of GenAI models.
 
+Powered by Ollama and Weaviate.
+
 ### Installation
 - Download the application [DMG file](https://verbis-releases.s3.amazonaws.com/v0.0.1/Verbis.dmg) from the releases page
 - Drag the downloaded DMG to your Applications folder

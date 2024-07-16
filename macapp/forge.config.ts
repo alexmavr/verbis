@@ -22,7 +22,6 @@ const config: ForgeConfig = {
       "../dist/weaviate",
       "../dist/lib",
       "../dist/pdftotext",
-      "../dist/credentials.json",
       "../dist/Modelfile.custom-mistral",
       "../dist/rerank",
       "../dist/certs",

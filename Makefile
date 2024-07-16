@@ -4,8 +4,8 @@ SHELL=/bin/zsh
 
 VERSION := v0.0.1
 TAG := $(shell git describe --tags --always --dirty)
-WEAVIATE_VERSION := v1.25.5
-OLLAMA_VERSION := v0.1.46
+WEAVIATE_VERSION := v1.25.7
+OLLAMA_VERSION := v0.2.5
 DIST_DIR := ./dist
 TMP_DIR := /tmp/weaviate-installation
 ZIP_FILE := weaviate-$(WEAVIATE_VERSION)-darwin-all.zip
@@ -29,7 +29,8 @@ LDFLAGS := \
     -X "$(PACKAGE).SlackClientID=$(SLACK_CLIENT_ID)" \
     -X "$(PACKAGE).SlackClientSecret=$(SLACK_CLIENT_SECRET)" \
     -X "$(PACKAGE).SlackSigningSecret=$(SLACK_SIGNING_SECRET)" \
-    -X "$(PACKAGE).SlackBotToken=$(SLACK_BOT_TOKEN)"
+    -X "$(PACKAGE).SlackBotToken=$(SLACK_BOT_TOKEN)" \
+    -X "$(PACKAGE).GoogleJSONCreds=$(GOOGLE_JSON_CREDS)"
 
 all: macapp
 

@@ -17,8 +17,8 @@ type Source struct {
 }
 
 type HistoryItem struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string   `json:"role"`
+	Content string   `json:"content"`
 	Sources []Source `json:"sources"`
 }
 
@@ -54,12 +54,12 @@ type Document struct {
 }
 
 type Conversation struct {
-	ID			string			`json:"id"`
-	History		[]HistoryItem	`json:"history"`
-	ChunkHashes	[]string		`json:"chunk_hashes"`
-	CreatedAt	time.Time		`json:"created_at"`
-	UpdatedAt	time.Time		`json:"updated_at"`
-	Title		string			`json:"title"`
+	ID          string        `json:"id"`
+	History     []HistoryItem `json:"history"`
+	ChunkHashes []string      `json:"chunk_hashes"`
+	CreatedAt   time.Time     `json:"created_at"`
+	UpdatedAt   time.Time     `json:"updated_at"`
+	Title       string        `json:"title"`
 }
 
 type BuildCredentials struct {
@@ -68,4 +68,5 @@ type BuildCredentials struct {
 	AzureSecretValue  string
 	SlackClientID     string
 	SlackClientSecret string
+	GoogleJSONCreds   string
 }

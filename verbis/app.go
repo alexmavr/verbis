@@ -21,6 +21,7 @@ var (
 	AzureSecretValue  = "n/a"
 	SlackClientID     = "n/a"
 	SlackClientSecret = "n/a"
+	GoogleJSONCreds   = "n/a"
 	Version           = "0.0.0"
 	Tag               = "n/a"
 )
@@ -32,6 +33,7 @@ func main() {
 		AzureSecretValue:  AzureSecretValue,
 		SlackClientID:     SlackClientID,
 		SlackClientSecret: SlackClientSecret,
+		GoogleJSONCreds:   GoogleJSONCreds,
 	}
 	// Start everything needed to let the user onboard connectors
 	bootCtx, err := BootOnboard(creds, getVersionString())

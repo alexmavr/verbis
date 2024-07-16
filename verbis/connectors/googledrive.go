@@ -24,7 +24,6 @@ import (
 
 	"github.com/verbis-ai/verbis/verbis/keychain"
 	"github.com/verbis-ai/verbis/verbis/types"
-	"github.com/verbis-ai/verbis/verbis/util"
 )
 
 const (
@@ -42,11 +41,13 @@ func NewGoogleDriveConnector(creds types.BuildCredentials, st types.Store) types
 			connectorType: types.ConnectorTypeGoogleDrive,
 			store:         st,
 		},
+		GoogleJSONCreds: creds.GoogleJSONCreds,
 	}
 }
 
 type GoogleDriveConnector struct {
 	BaseConnector
+	GoogleJSONCreds string
 }
 
 func (g *GoogleDriveConnector) getClient(ctx context.Context, config *oauth2.Config) (*http.Client, error) {
@@ -74,23 +75,17 @@ var driveScopes []string = []string{
 	"https://www.googleapis.com/auth/userinfo.email",
 }
 
-func driveConfigFromJSON() (*oauth2.Config, error) {
-	path, err := util.GetDistPath()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get dist path: %v", err)
-	}
-	b, err := os.ReadFile(filepath.Join(path, googleCredentialFile))
-	if err != nil {
-		return nil, fmt.Errorf("unable to read client secret file: %v", err)
-	}
-	return google.ConfigFromJSON(b, driveScopes...)
+func driveConfigFromJSON(googleJSONCreds string) (*oauth2.Config, error) {
+	return google.ConfigFromJSON([]byte(googleJSONCreds), driveScopes...)
 }
 
 func (g *GoogleDriveConnector) AuthSetup(ctx context.Context) error {
-	config, err := driveConfigFromJSON()
+	config, err := driveConfigFromJSON(g.GoogleJSONCreds)
 	if err != nil {
 		return fmt.Errorf("unable to get google config: %s", err)
 	}
+	fmt.Println("Google Drive AuthSetup")
+	fmt.Println(config)
 	_, err = keychain.TokenFromKeychain(g.ID(), g.Type())
 	if err == nil {
 		// TODO: check for expiry of refresh token
@@ -107,7 +102,7 @@ func (g *GoogleDriveConnector) AuthSetup(ctx context.Context) error {
 
 // TODO: handle token expiries
 func (g *GoogleDriveConnector) AuthCallback(ctx context.Context, authCode string) error {
-	config, err := driveConfigFromJSON()
+	config, err := driveConfigFromJSON(g.GoogleJSONCreds)
 	if err != nil {
 		return fmt.Errorf("unable to get google config: %s", err)
 	}
@@ -171,7 +166,7 @@ func (g *GoogleDriveConnector) Sync(lastSync time.Time, chunkChan chan types.Chu
 		return
 	}
 
-	config, err := driveConfigFromJSON()
+	config, err := driveConfigFromJSON(g.GoogleJSONCreds)
 	if err != nil {
 		errChan <- fmt.Errorf("unable to get google config: %s", err)
 		return
