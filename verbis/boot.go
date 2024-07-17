@@ -194,6 +194,10 @@ func BootOnboard(creds types.BuildCredentials, version string) (*BootContext, er
 		if err != nil {
 			log.Fatalf("Failed to create initial config: %s\n", err)
 		}
+		cfg, err = weaviateStore.GetConfig(ctx)
+		if err != nil {
+			log.Fatalf("Failed to get config after update: %s\n", err)
+		}
 	}
 
 	var postHogClient posthog.Client
