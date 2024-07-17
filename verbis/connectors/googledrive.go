@@ -426,10 +426,10 @@ func downloadAndParseBinaryFile(ctx context.Context, service *drive.Service, fil
 	log.Printf("Finished parsing binary file %s", file.Name)
 
 	if err1 != nil {
-		return "", fmt.Errorf("failed to parse binary file: %v", err)
+		return "", fmt.Errorf("failed to parse binary file: %s", err1)
 	}
 	if err2 != nil {
-		log.Printf("Error deleting file %s: %v", tempFilePath, err2)
+		log.Printf("Error deleting file %s: %s", tempFilePath, err2)
 	}
 
 	return content, nil

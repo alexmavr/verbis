@@ -50,7 +50,6 @@ type BootContext struct {
 	Credentials       types.BuildCredentials
 	State             BootState
 	PosthogDistinctID string
-	PosthogClient     posthog.Client
 	Syncer            *Syncer
 	Logfile           *os.File
 	Version           string
@@ -119,19 +118,6 @@ func BootOnboard(creds types.BuildCredentials, version string) (*BootContext, er
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	postHogClient, err := posthog.NewWithConfig(
-		PosthogAPIKey,
-		posthog.Config{
-			PersonalApiKey:                     PosthogAPIKey,
-			Endpoint:                           "https://eu.i.posthog.com",
-			DefaultFeatureFlagsPollingInterval: math.MaxInt64,
-		},
-	)
-	if err != nil {
-		log.Fatalf("Failed to create PostHog client: %s\n", err)
-	}
-	bootCtx.PosthogClient = postHogClient
-
 	path, err = util.GetDistPath()
 	if err != nil {
 		log.Fatalf("Failed to get dist path: %s\n", err)
@@ -193,11 +179,42 @@ func BootOnboard(creds types.BuildCredentials, version string) (*BootContext, er
 	weaviateStore.CreateConnectorStateClass(ctx, clean)
 	weaviateStore.CreateChunkClass(ctx, clean)
 	weaviateStore.CreateConversationClass(ctx, clean)
+	weaviateStore.CreateConfigClass(ctx, clean)
+
+	cfg, err := weaviateStore.GetConfig(ctx)
+	if err != nil {
+		log.Fatalf("Failed to get config: %s\n", err)
+	}
+
+	if cfg == nil {
+		// Set initial config if one doesn't exist
+		err = weaviateStore.UpdateConfig(ctx, &types.Config{
+			EnableTelemetry: true,
+		})
+		if err != nil {
+			log.Fatalf("Failed to create initial config: %s\n", err)
+		}
+	}
+
+	var postHogClient posthog.Client
+	if cfg.EnableTelemetry {
+		postHogClient, err = posthog.NewWithConfig(
+			PosthogAPIKey,
+			posthog.Config{
+				PersonalApiKey:                     PosthogAPIKey,
+				Endpoint:                           "https://eu.i.posthog.com",
+				DefaultFeatureFlagsPollingInterval: math.MaxInt64,
+			},
+		)
+		if err != nil {
+			log.Fatalf("Failed to create PostHog client: %s\n", err)
+		}
+	}
 
 	certPath := filepath.Join(path, "certs/localhost.pem")
 	keyPath := filepath.Join(path, "certs/localhost-key.pem")
 
-	syncer := NewSyncer(bootCtx.PosthogClient, bootCtx.PosthogDistinctID, bootCtx.Credentials, bootCtx.Version, weaviateStore)
+	syncer := NewSyncer(postHogClient, bootCtx.PosthogDistinctID, bootCtx.Credentials, bootCtx.Version, weaviateStore)
 	if PosthogAPIKey == "n/a" {
 		log.Fatalf("Posthog API key not set\n")
 	}
@@ -439,12 +456,17 @@ func BootGen(ctx *BootContext) error {
 	log.Print(string(rerankOutput))
 	log.Print("Rerank model loaded successfully")
 
+	ctx.GenTime = time.Now()
+	ctx.State = BootStateGen
+	if ctx.Syncer.posthogClient == nil {
+		return nil
+	}
 	// Identify user to posthog
 	systemStats, err := getSystemStats()
 	if err != nil {
 		log.Fatalf("Failed to get system stats: %s\n", err)
 	}
-	err = ctx.PosthogClient.Enqueue(posthog.Identify{
+	err = ctx.Syncer.posthogClient.Enqueue(posthog.Identify{
 		DistinctId: ctx.PosthogDistinctID,
 		Properties: posthog.NewProperties().
 			Set("chipset", systemStats.Chipset).
@@ -456,8 +478,7 @@ func BootGen(ctx *BootContext) error {
 		log.Fatalf("Failed to enqueue identify event: %s\n", err)
 	}
 
-	ctx.GenTime = time.Now()
-	err = ctx.PosthogClient.Enqueue(posthog.Capture{
+	err = ctx.Syncer.posthogClient.Enqueue(posthog.Capture{
 		DistinctId: ctx.PosthogDistinctID,
 		Event:      "Started",
 		Properties: posthog.NewProperties().
@@ -472,7 +493,6 @@ func BootGen(ctx *BootContext) error {
 		log.Fatalf("Failed to enqueue event: %s\n", err)
 	}
 
-	ctx.State = BootStateGen
 	return nil
 }
 
@@ -502,7 +522,9 @@ func Halt(bootCtx *BootContext, sigChan chan os.Signal, cancel context.CancelFun
 	signal.Stop(sigChan)
 	cancel()
 	close(sigChan)
-	defer bootCtx.PosthogClient.Close()
+	if bootCtx.Syncer.posthogClient != nil {
+		defer bootCtx.Syncer.posthogClient.Close()
+	}
 	if err := bootCtx.Logfile.Close(); err != nil {
 		log.Printf("Failed to close log file: %s\n", err)
 	}

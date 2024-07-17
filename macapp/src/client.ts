@@ -63,6 +63,31 @@ export async function connector_auth_setup(connector_id: string) {
   }
 }
 
+export async function get_config() {
+  try {
+    const response = await axios.get(
+      `http://localhost:8081/config`
+    );
+    console.log("Get Config Response:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("Error in Get Config:", error);
+    throw error; // Rethrow or handle as needed
+  }
+}
+
+export async function update_config(config: any) {
+  try {
+    const response = await axios.post(
+      `http://localhost:8081/config`,
+      config);
+    console.log("Update Config Response:", response.data);
+  } catch (error) {
+    console.error("Error in Update Config:", error);
+    throw error; // Rethrow or handle as needed
+  }
+}
+
 export async function force_sync() {
   try {
     const response = await axios.get("http://localhost:8081/sync/force");

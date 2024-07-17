@@ -1,9 +1,10 @@
-import React, { useState } from "react";
-import { AppScreen } from "../types";
+import React, { useState, useEffect } from "react";
 import {
   connector_auth_setup,
   connector_init,
   connector_request,
+  get_config,
+  update_config,
 } from "../client";
 import { getCurrentWindow } from "@electron/remote";
 import ActiveConnectorsList from "./ActiveConnectorsList";
@@ -231,9 +232,54 @@ const AppCatalog: React.FC = () => {
   );
 };
 
+const MiscSettings: React.FC = () => {
+  const [telemetryEnabled, setTelemetryEnabled] = useState(false);
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const config = await get_config();
+        setTelemetryEnabled(config.enable_telemetry);
+      } catch (error) {
+        console.error('Error fetching config:', error);
+      }
+    };
+
+    fetchConfig();
+  }, []);
+
+  const handleTelemetryChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const newTelemetryEnabled = event.target.checked;
+    setTelemetryEnabled(newTelemetryEnabled);
+
+    try {
+      await update_config({ enable_telemetry: newTelemetryEnabled });
+    } catch (error) {
+      console.error('Error updating config:', error);
+    }
+  };
+
+  return (
+    <div className="max-w-md mx-auto p-4 bg-white rounded shadow-lg">
+      <div className="flex items-center space-x-3">
+        <input
+          type="checkbox"
+          id="telemetryCheckbox"
+          checked={telemetryEnabled}
+          onChange={handleTelemetryChange}
+          className="form-checkbox h-5 w-5 text-indigo-600 transition duration-150 ease-in-out"
+        />
+        <label htmlFor="telemetryCheckbox" className="text-gray-700">
+          Telemetry enabled
+        </label>
+      </div>
+    </div>
+  );
+};
+
 const SettingsComponent: React.FC = () => {
   return (
-    <div className=" mt-14 flex h-screen flex-col justify-between">
+    <div className="mt-14 flex h-screen flex-col justify-between">
       <h1 className="mt-4 text-center text-xl tracking-tight text-gray-900">
         Connected Apps
       </h1>
@@ -241,8 +287,11 @@ const SettingsComponent: React.FC = () => {
       <h1 className="mt-4 text-center text-xl tracking-tight text-gray-900">
         App Catalog
       </h1>
-
       <AppCatalog />
+      <h1 className="mt-4 text-center text-xl tracking-tight text-gray-900">
+        Miscellaneous Settings
+      </h1>
+      <MiscSettings />
     </div>
   );
 };

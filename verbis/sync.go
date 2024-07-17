@@ -380,6 +380,11 @@ func (s *Syncer) connectorSync(ctx context.Context, c types.Connector, state *ty
 		return nil
 	}
 
+	if s.posthogClient == nil {
+		log.Printf("Syncer: posthog client not set, skipping posthog event")
+		return nil
+	}
+
 	err = s.posthogClient.Enqueue(posthog.Capture{
 		DistinctId: s.posthogDistinctID,
 		Event:      "Sync",

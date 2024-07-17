@@ -1,4 +1,4 @@
-.PHONY: build verbis macapp 
+.PHONY: build verbis macapp pdftotextlink
 
 SHELL=/bin/zsh
 
@@ -79,7 +79,10 @@ dist/pdftotext:
 	brew install poppler fontconfig
 	mkdir -p dist/pdftotext
 	mkdir -p dist/lib
+	cp /opt/homebrew/bin/pdftotext dist/pdftotext/pdftotext
 	cp /opt/homebrew/lib/libpoppler.136.dylib dist/lib/libpoppler.136.dylib
+
+pdftotextlink:
 	cp /opt/homebrew/opt/xz/lib/liblzma.5.dylib dist/lib/liblzma.5.dylib
 	cp /opt/homebrew/opt/freetype/lib/libfreetype.6.dylib dist/lib/libfreetype.6.dylib
 	cp /opt/homebrew/opt/fontconfig/lib/libfontconfig.1.dylib dist/lib/libfontconfig.1.dylib
@@ -102,7 +105,6 @@ dist/pdftotext:
 	cp /opt/homebrew/opt/libassuan/lib/libassuan.0.dylib dist/lib/libassuan.0.dylib
 	cp /opt/homebrew/opt/zstd/lib/libzstd.1.dylib dist/lib/libzstd.1.dylib
 	cp /opt/homebrew/opt/libgpg-error/lib/libgpg-error.0.dylib dist/lib/libgpg-error.0.dylib 
-	cp /opt/homebrew/bin/pdftotext dist/pdftotext/pdftotext
 	install_name_tool -change /opt/homebrew/opt/gettext/lib/libintl.8.dylib @executable_path/../lib/libintl.8.dylib dist/lib/libgpg-error.0.dylib
 	install_name_tool -change /opt/homebrew/opt/xz/lib/liblzma.5.dylib @executable_path/../lib/liblzma.5.dylib dist/lib/libtiff.6.dylib
 	install_name_tool -change /opt/homebrew/opt/zstd/lib/libzstd.1.dylib @executable_path/../lib/libzstd.1.dylib dist/lib/libtiff.6.dylib
@@ -182,7 +184,7 @@ builder-env:
 		poetry install; \
 	)
 
-release: verbis
+release: verbis pdftotextlink
 	pushd macapp && npm run make:sign && popd
 
 clean:

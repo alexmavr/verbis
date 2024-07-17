@@ -70,3 +70,12 @@ type BuildCredentials struct {
 	SlackClientSecret string
 	GoogleJSONCreds   string
 }
+
+type Config struct {
+	ID string `json:"id"`
+	// InitConfigDone  bool   `json:"init_config_done"`
+	// To be used only for boot time user prompting for configs, such as opt-in
+	// (right now we're opt out telemetry)
+
+	EnableTelemetry bool `json:"enable_telemetry"`
+}

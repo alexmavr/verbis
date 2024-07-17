@@ -7,6 +7,8 @@ various SaaS applications, Verbis AI indexes all your data securely and locally
 on your system. Verbis provides a single interface to query and manage your
 information with the power of GenAI models.
 
+[![Verbis AI Demo](http://img.youtube.com/vi/TRmKgoDQy7A/0.jpg)](https://youtu.be/TRmKgoDQy7A "Verbis AI Demo")
+
 Powered by Ollama and Weaviate.
 
 ### Installation
@@ -41,16 +43,22 @@ The Verbis AI team (info@verbis.ai)
 - Alex Mavrogiannis (alex@verbis.ai)
 
 ### Communications with third parties
-Verbis interacts with third party services in the following ways. Our full privacy policy is available [here](https://www.verbis.ai/privacy-policy)
+Verbis receives data from SaaS apps, sends telemetry data to Posthog. Your data
+never leaves your system. Telemetry can be disabled via the settings page. Our
+full privacy policy is available [here](https://www.verbis.ai/privacy-policy)
 
 #### SaaS application data (“connectors”)
 Downloaded to the local host running Verbis AI using OAuth credentials, and never shared with other third parties
 
 #### Model weight storage
-Model weights for the following models are fetched from either the Ollama Library or Huggingface during initialization
+Model weights for the following models are fetched from either the Ollama Library and Huggingface during initialization:
+
+- Mistral 7B v0.3
 
 #### Telemetry
-The following events are reported to eu.posthog.com via an HTTP POST call:
+Telemetry is an opt-out feature, but we encourage users to keep telemetry
+enabled to help the team improve Verbis. When telemetry is enabled, the
+following events will be reported to eu.posthog.com via an HTTP POST call:
 
 - Application started
     - Chipset
@@ -71,7 +79,6 @@ The following events are reported to eu.posthog.com via an HTTP POST call:
     - Duration of each prompt processing phase
     - Number of search results
     - Number of reranked results
-
 
 ### Development
 

@@ -1,6 +1,8 @@
 package types
 
-import "context"
+import (
+	"context"
+)
 
 type Store interface {
 	ChunkHashExists(ctx context.Context, hash string) (bool, error)
@@ -8,6 +10,9 @@ type Store interface {
 	GetDocument(ctx context.Context, uniqueID string) (*Document, error)
 	AddVectors(ctx context.Context, items []AddVectorItem) (*AddVectorResponse, error)
 	HybridSearch(ctx context.Context, query string, vector []float32) ([]*Chunk, error)
+	UpdateConfig(ctx context.Context, cfg *Config) error
+	GetConfig(ctx context.Context) (*Config, error)
+	CreateConfigClass(ctx context.Context, force bool) error
 	CreateDocumentClass(ctx context.Context, force bool) error
 	CreateChunkClass(ctx context.Context, force bool) error
 	CreateConversationClass(ctx context.Context, force bool) error

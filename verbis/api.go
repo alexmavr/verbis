@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"time"
 
@@ -47,6 +48,9 @@ func (a *API) SetupRouter() *mux.Router {
 	r.HandleFunc("/conversations", a.createConversation).Methods("POST")
 	r.HandleFunc("/conversations/{conversation_id}/prompt", a.handlePrompt).Methods("POST")
 
+	r.HandleFunc("/config", a.getConfig).Methods("GET")
+	r.HandleFunc("/config", a.updateConfig).Methods("POST")
+
 	r.HandleFunc("/health", a.health).Methods("GET")
 	r.HandleFunc("/sync/force", a.forceSync).Methods("GET")
 	r.HandleFunc("/internal/reinit", a.reInit).Methods("POST")
@@ -66,6 +70,71 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 		BootState: a.Context.State,
 		Version:   a.Version,
 	})
+}
+
+func (a *API) getConfig(w http.ResponseWriter, r *http.Request) {
+	cfg, err := a.store.GetConfig(r.Context())
+	if err != nil {
+		log.Printf("Failed to get config: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to get config: " + err.Error()))
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(cfg)
+	if err != nil {
+		log.Printf("Failed to encode config: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to encode config: " + err.Error()))
+		return
+	}
+}
+
+func (a *API) updateConfig(w http.ResponseWriter, r *http.Request) {
+	var cfg *types.Config
+	defer r.Body.Close()
+	err := json.NewDecoder(r.Body).Decode(&cfg)
+	if err != nil {
+		// return HTTP 400 bad request
+		http.Error(w, "Failed to decode request", http.StatusBadRequest)
+		return
+	}
+
+	if cfg == nil {
+		http.Error(w, "No config provided", http.StatusBadRequest)
+		return
+	}
+
+	err = a.store.UpdateConfig(r.Context(), cfg)
+	if err != nil {
+		log.Printf("Failed to update config: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to update config: " + err.Error()))
+		return
+	}
+
+	if cfg.EnableTelemetry && a.Posthog == nil {
+		postHogClient, err := posthog.NewWithConfig(
+			PosthogAPIKey,
+			posthog.Config{
+				PersonalApiKey:                     PosthogAPIKey,
+				Endpoint:                           "https://eu.i.posthog.com",
+				DefaultFeatureFlagsPollingInterval: math.MaxInt64,
+			},
+		)
+		if err != nil {
+			log.Printf("Failed to create posthog client: %s", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Failed to create posthog client: " + err.Error()))
+		}
+		a.Posthog = postHogClient
+		a.Syncer.posthogClient = postHogClient
+	}
+
+	if !cfg.EnableTelemetry && a.Posthog != nil {
+		a.Posthog = nil
+		a.Syncer.posthogClient = nil
+	}
 }
 
 func (a *API) reInit(w http.ResponseWriter, r *http.Request) {
@@ -88,6 +157,10 @@ func (a *API) connectorRequest(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("No connector name provided"))
+		return
+	}
+
+	if a.Posthog == nil {
 		return
 	}
 
@@ -258,6 +331,7 @@ func (a *API) connectorAuthSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	err := conn.AuthSetup(r.Context())
 	if err != nil {
+		log.Printf("Failed to perform initial auth with google: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to perform initial auth with google: " + err.Error()))
 		return
@@ -275,6 +349,7 @@ func (a *API) handleConnectorDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	err := a.Syncer.DeleteConnector(a.Context, connectorID)
 	if err != nil {
+		log.Printf("Failed to remove connector: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to remove connector: " + err.Error()))
 		return
@@ -326,6 +401,7 @@ func (a *API) handleConnectorCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	err := conn.AuthCallback(r.Context(), code)
 	if err != nil {
+		log.Printf("Failed to complete auth callback: %s\n", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to complete auth callback : " + err.Error()))
 		return
@@ -333,6 +409,7 @@ func (a *API) handleConnectorCallback(w http.ResponseWriter, r *http.Request) {
 
 	state, err := conn.Status(a.Context)
 	if err != nil {
+		log.Printf("Failed to get connector state: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to get connector state: " + err.Error()))
 		return
@@ -340,6 +417,7 @@ func (a *API) handleConnectorCallback(w http.ResponseWriter, r *http.Request) {
 	state.AuthValid = true // TODO: delegate this logic to the connector implementation
 	err = conn.UpdateConnectorState(a.Context, state)
 	if err != nil {
+		log.Printf("Failed to update connector state: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to update connector state: " + err.Error()))
 		return
@@ -356,6 +434,7 @@ func (a *API) handleConnectorCallback(w http.ResponseWriter, r *http.Request) {
 func (a *API) forceSync(w http.ResponseWriter, r *http.Request) {
 	err := a.Syncer.SyncNow(a.Context)
 	if err != nil {
+		log.Printf("Failed to sync: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Failed to sync: " + err.Error()))
 	}
@@ -665,6 +744,10 @@ func (a *API) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("Failed to append to conversation: %s", err)
 		http.Error(w, "Failed to append to conversation", http.StatusInternalServerError)
+		return
+	}
+
+	if a.Posthog == nil {
 		return
 	}
 

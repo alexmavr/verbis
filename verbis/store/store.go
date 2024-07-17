@@ -26,6 +26,7 @@ var (
 	documentClassName     = "Document"
 	stateClassName        = "ConnectorState"
 	conversationClassName = "Conversation"
+	configClassName       = "Config"
 )
 
 const (
@@ -375,6 +376,110 @@ func parseChunks(ctx context.Context, client *weaviate.Client, chunks []interfac
 		res = append(res, chunk)
 	}
 	return res, nil
+}
+func (w *WeaviateStore) CreateConfigClass(ctx context.Context, force bool) error {
+	if force {
+		w.client.Schema().ClassDeleter().WithClassName(configClassName).Do(ctx)
+	}
+
+	class := &models.Class{
+		Class:      configClassName,
+		Vectorizer: "none",
+		Properties: []*models.Property{
+			{
+				Name:     "initConfigDone",
+				DataType: []string{"boolean"},
+			},
+			{
+				Name:     "enableTelemetry",
+				DataType: []string{"boolean"},
+			},
+		},
+	}
+
+	// Create the class in Weaviate
+	err := w.client.Schema().ClassCreator().WithClass(class).Do(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create chunk class: %v", err)
+	}
+
+	// Create the class in Weaviate
+	return nil
+}
+
+func (w *WeaviateStore) GetConfig(ctx context.Context) (*types.Config, error) {
+	resp, err := w.client.GraphQL().Get().
+		WithClassName(configClassName).
+		WithFields(
+			[]graphql.Field{
+				{
+					Name: "initConfigDone",
+				},
+				{
+					Name: "enableTelemetry",
+				},
+				{
+					Name: "_additional",
+					Fields: []graphql.Field{
+						{Name: "id"},
+					},
+				},
+			}...,
+		).
+		Do(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get config: %v", err)
+	}
+
+	if resp.Data["Get"] == nil {
+		return nil, nil
+	}
+
+	get := resp.Data["Get"].(map[string]interface{})
+	if get[configClassName] == nil {
+		return nil, nil
+	}
+
+	resList := get[configClassName].([]interface{})
+	if len(resList) == 0 {
+		return nil, nil
+	}
+
+	cfgMap := resList[0].(map[string]interface{})
+	return parseConfig(cfgMap), nil
+}
+
+func parseConfig(cfgMap map[string]interface{}) *types.Config {
+	return &types.Config{
+		ID:              cfgMap["_additional"].(map[string]interface{})["id"].(string),
+		EnableTelemetry: cfgMap["enableTelemetry"].(bool),
+	}
+}
+
+func (w *WeaviateStore) UpdateConfig(ctx context.Context, cfg *types.Config) error {
+	prevCfg, err := w.GetConfig(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get previous config: %v", err)
+	}
+
+	// If the config does not exist, create it
+	if prevCfg == nil {
+		log.Printf("Creating new config")
+		_, err := w.client.Data().Creator().WithClassName(configClassName).
+			WithProperties(map[string]interface{}{
+				"enableTelemetry": cfg.EnableTelemetry,
+			}).
+			Do(ctx)
+		return err
+	}
+
+	return w.client.Data().Updater(). // replaces the entire object
+						WithID(prevCfg.ID).
+						WithClassName(configClassName).
+						WithProperties(map[string]interface{}{
+			"enableTelemetry": cfg.EnableTelemetry,
+		}).
+		Do(ctx)
 }
 
 func (w *WeaviateStore) CreateDocumentClass(ctx context.Context, force bool) error {
