@@ -42,6 +42,7 @@ func (g *GmailConnector) getClient(ctx context.Context, config *oauth2.Config) (
 	if err != nil {
 		return nil, err
 	}
+
 	return config.Client(ctx, tok), nil
 }
 
@@ -76,6 +77,7 @@ func (g *GmailConnector) AuthSetup(ctx context.Context) error {
 	if err != nil {
 		log.Printf("Unable to request token from web: %v", err)
 	}
+
 	return nil
 }
 

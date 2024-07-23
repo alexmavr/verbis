@@ -23,9 +23,9 @@ const ActiveConnectorsList: React.FC = () => {
 
   const getConnectorList = async () => {
     console.log("Getting connector list");
-    const response = await list_connectors();
-    setConnectorList(response);
     try {
+      const response = await list_connectors();
+      setConnectorList(response);
     } catch (error) {
       console.error("Failed to retrieve connectors:", error);
     }

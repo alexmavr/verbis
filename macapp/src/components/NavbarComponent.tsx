@@ -2,7 +2,7 @@ import React from "react";
 import ThemeSwitcher from "./ThemeSwitcher";
 import VerbisIcon from "../verbis.svg";
 import { AppScreen } from "../types";
-import { CogIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { CogIcon, ArrowUturnLeftIcon } from "@heroicons/react/24/outline";
 
 interface Props {
   navigate: (screen: AppScreen) => void;
@@ -26,7 +26,7 @@ const NavbarComponent: React.FC<Props> = ({
           <>
             {/* <ThemeSwitcher /> */}
             <button onClick={() => navigateBack()}>
-              <XMarkIcon className="h-6 w-6" />
+              <ArrowUturnLeftIcon className="h-6 w-6" />
             </button>
           </>
         ) : (

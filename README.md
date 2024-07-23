@@ -1,20 +1,44 @@
 # Verbis AI
 
-[![Discord](https://dcbadge.vercel.app/api/server/mBnpPP7f?style=flat&compact=true)](https://discord.gg/mBnpPP7f)
+[![Discord](https://dcbadge.vercel.app/api/server/GDdQ7D3J2E?style=flat&compact=true)](https://discord.gg/GDdQ7D3J2E)
 
-Verbis AI is a secure and fully local AI assistant. By connecting to your
+Verbis AI is a secure and fully local AI assistant for MacOS. By connecting to your
 various SaaS applications, Verbis AI indexes all your data securely and locally
 on your system. Verbis provides a single interface to query and manage your
 information with the power of GenAI models.
 
+### MacOS
+[Download](https://verbis-releases.s3.amazonaws.com/v0.0.2/Verbis.dmg)
+
+### Quickstart
+
+1. [Download](https://verbis-releases.s3.amazonaws.com/v0.0.2/Verbis.dmg) and 
+install Verbis
+2. Connect Verbis to your data sources (Google Drive, Outlook, Gmail, Slack etc)
+3. Use Verbis as a chatbot to search across your data. Your data never leaves
+   your device.
+
+### Demo Video
 [![Verbis AI Demo](http://img.youtube.com/vi/TRmKgoDQy7A/0.jpg)](https://youtu.be/TRmKgoDQy7A "Verbis AI Demo")
 
-Powered by Ollama and Weaviate.
+### Initial Configuration
+Verbis downloads and locally indexes documents from third-party services
+authenticated via OAuth, called “apps”. To manage your apps:
 
-### Installation
-- Download the application [DMG file](https://verbis-releases.s3.amazonaws.com/v0.0.1/Verbis.dmg) from the releases page
-- Drag the downloaded DMG to your Applications folder
-- The first execution will download the weights for the LLM models, requiring approximately 5 GB of on-disk space. Download time will vary depending on network bandwidth
+- Click the gear icon on the top right of the Verbis window.
+- A list of apps will appear, along with information on synchronized
+documents.
+- To add a new app, select the app from the app catalog and click the “Connect”
+button.
+- Your last active browser window should navigate to an OAuth consent screen.
+- After completing the OAuth consent flow, the application will automatically
+begin syncing documents locally.
+- If an application is not supported, you may click the “Request” button to notify
+our team of your request for future support.
+
+## Technical details
+Verbis AI is powered by Ollama and Weaviate, and we use the following models:
+`Mistral 7B`, `ms-marco-MiniLM-L-12-v2`, and `nomic-embed-text`.
 
 ### System Requirements
 - Apple Silicon Mac (m1+): Macbook, Mac mini, Mac Pro, Mac Studio
@@ -26,15 +50,6 @@ Powered by Ollama and Weaviate.
 - Models are unloaded from memory after 20 minutes of inactivity
 - Compute: Depends on chipset. Very low CPU requirements during syncing, sharp spikes in GPU utilization during inference for 1-8 seconds 
 - Network: Up to 10 documents may be downloaded concurrently from each connector at peak network bandwidth during syncing
-
-### Initial Configuration
-- Verbis downloads and locally indexes documents from third-party services authenticated via OAuth on behalf of the user, called “apps”. To manage your apps:
-    - Click the gear icon on the top right of the Verbis window
-    - A list of configured apps will appear, along with information on synchronized documents
-    - To add a new app, select the app from the app catalog and click the “Connect” button
-    - Your last active browser window should navigate to an OAuth consent screen
-    - After completing the OAuth consent flow, the application will automatically begin syncing documents locally
-    - If an application is not supported, you may click the “Request” button to notify our team of your request for future support.
 
 ### Contact Information
 The Verbis AI team (info@verbis.ai)

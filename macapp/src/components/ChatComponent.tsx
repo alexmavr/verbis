@@ -1,6 +1,7 @@
 import { PaperAirplaneIcon } from "@heroicons/react/24/solid";
 import React, { useEffect, useRef, useState } from "react";
-import { generate } from "../client";
+import ReactModal from "react-modal"; // Add this import
+import { generate, list_connectors } from "../client";
 import GDriveLogo from "../../assets/connectors/gdrive.svg";
 import GMailLogo from "../../assets/connectors/gmail.svg";
 import OutlookLogo from "../../assets/connectors/outlook.svg";
@@ -16,7 +17,32 @@ const Logos: { [key: string]: React.FC<React.SVGProps<SVGSVGElement>> } = {
   slack: SlackLogo,
 };
 
-const ChatComponent: React.FC = () => {
+const OnboardModal: React.FC<{ show: boolean; onClose: () => void }> = ({ show, onClose }) => {
+  if (!show) return null;
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-50">
+      <div className="fixed inset-0 bg-black opacity-50"></div>
+      <div className="bg-white p-4 rounded shadow-lg z-50">
+        <h2 className="text-lg font-semibold">Welcome to Verbis AI!</h2>
+        <p>Verbis lets you search through your data. To get started, please connect your first application.</p>
+        <p>All data and credentials always stay on your device.</p>
+        <button className="btn-primary btn mt-4" onClick={onClose}>
+          Acknowledge
+        </button>
+      </div>
+    </div>
+  );
+};
+
+interface Props {
+  navigate: (screen: AppScreen) => void;
+}
+
+const ChatComponent: React.FC<Props> = ({ navigate }) => {
+
+  const [showOnboardModal, setShowOnboardModal] = useState(false); 
+
   const conversationContainer = useRef<HTMLDivElement>(null);
   const [promptText, setPromptText] = useState(""); // State to store input from the textbox
   const [loading, setLoading] = useState(false); // State for the spinner
@@ -28,6 +54,35 @@ const ChatComponent: React.FC = () => {
   const [currentConversation, setCurrentConversation] =
     useState<Conversation | null>(null); // Current Conversation
   const controller = new AbortController(); // For handling cancellation
+
+  const getConnectorList = async () => {
+    try {
+      console.log("Getting connector list");
+      const response = await list_connectors();
+      return response;
+    } catch (error) {
+      console.error("Failed to retrieve connectors:", error);
+    }
+  };
+
+  // Run on load
+  useEffect(() => {
+    const checkConnectors = async () => {
+      const connectors = await getConnectorList();
+      if (connectors.length === 0) {
+        setShowOnboardModal(true);
+      } else {
+        setShowOnboardModal(false);
+      }
+    };
+
+    checkConnectors();
+  }, []);
+
+  const handleAcknowledge = () => {
+    setShowOnboardModal(false);
+    navigate(AppScreen.SETTINGS); 
+  };
 
   // Function to truncate string
   const truncateString = (str: string, maxLength: number) => {
@@ -216,6 +271,7 @@ const ChatComponent: React.FC = () => {
 
   return (
     <>
+      <OnboardModal show={showOnboardModal} onClose={handleAcknowledge} />
       <SidebarComponent
         selectedConversation={currentConversation}
         setSelectedConversation={setCurrentConversation}
@@ -247,16 +303,14 @@ const ChatComponent: React.FC = () => {
                 // setPromptText(promptText + "\n");
               }
             }}
-            className={`flex-grow resize-none overflow-hidden rounded border border-gray-300 p-1 pr-16 outline-none ${
-              loading ? "disabled:cursor-not-allowed disabled:opacity-50" : ""
-            }`}
+            className={`flex-grow resize-none overflow-hidden rounded border border-gray-300 p-1 pr-16 outline-none ${loading ? "disabled:cursor-not-allowed disabled:opacity-50" : ""
+              }`}
             disabled={loading}
           />
           <button
             onClick={triggerPrompt}
-            className={`absolute bottom-2 right-4 mb-2 mr-2 flex h-8 w-8 items-center justify-center rounded-full bg-blue-500 font-bold text-white hover:bg-blue-700 ${
-              loading ? "disabled:cursor-not-allowed disabled:opacity-50" : ""
-            }`}
+            className={`absolute bottom-2 right-4 mb-2 mr-2 flex h-8 w-8 items-center justify-center rounded-full bg-blue-500 font-bold text-white hover:bg-blue-700 ${loading ? "disabled:cursor-not-allowed disabled:opacity-50" : ""
+              }`}
             disabled={loading}
           >
             {loading ? (
