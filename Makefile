@@ -2,7 +2,7 @@
 
 SHELL=/bin/zsh
 
-VERSION := v0.0.2
+VERSION := v0.0.3
 TAG := $(shell git describe --tags --always --dirty)
 WEAVIATE_VERSION := v1.25.7
 OLLAMA_VERSION := v0.2.5

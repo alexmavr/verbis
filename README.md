@@ -8,11 +8,11 @@ on your system. Verbis provides a single interface to query and manage your
 information with the power of GenAI models.
 
 ### MacOS
-[Download](https://verbis-releases.s3.amazonaws.com/v0.0.2/Verbis.dmg)
+[Download](https://verbis-releases.s3.amazonaws.com/v0.0.3/Verbis.dmg)
 
 ### Quickstart
 
-1. [Download](https://verbis-releases.s3.amazonaws.com/v0.0.2/Verbis.dmg) and 
+1. [Download](https://verbis-releases.s3.amazonaws.com/v0.0.3/Verbis.dmg) and 
 install Verbis
 2. Connect Verbis to your data sources (Google Drive, Outlook, Gmail, Slack etc)
 3. Use Verbis as a chatbot to search across your data. Your data never leaves
